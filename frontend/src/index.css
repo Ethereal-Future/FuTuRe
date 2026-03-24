@@ -8,28 +8,109 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   line-height: 1.6;
   color: #333;
+  font-size: 15px;
 }
 
+/* Layout */
+.app {
+  padding: 16px;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.app h1 { font-size: 1.4rem; margin-bottom: 20px; }
+.app h3 { font-size: 1rem; margin-bottom: 10px; }
+
+.section { margin-bottom: 20px; }
+
+/* Buttons */
 button {
   background: #0066cc;
   color: white;
   border: none;
-  padding: 10px 20px;
+  padding: 12px 20px;
   border-radius: 4px;
   cursor: pointer;
-  font-size: 14px;
+  font-size: 15px;
+  min-height: 44px;
+  min-width: 44px;
+  width: 100%;
 }
 
-button:hover {
-  background: #0052a3;
-}
+button:hover { background: #0052a3; }
+button:disabled { background: #99c2e8; cursor: not-allowed; }
 
+/* Inputs */
 input {
   border: 1px solid #ddd;
   border-radius: 4px;
+  width: 100%;
+  padding: 10px;
+  font-size: 15px;
+  min-height: 44px;
+  margin-bottom: 10px;
 }
 
 input:focus {
   outline: none;
   border-color: #0066cc;
+}
+
+/* Account info box */
+.account-info {
+  margin-top: 10px;
+  padding: 10px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  word-break: break-all;
+  font-size: 13px;
+}
+
+/* Validated input wrapper */
+.input-wrap { position: relative; margin-bottom: 4px; }
+.input-wrap input { margin-bottom: 0; }
+.input-icon {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+
+.field-error { color: #ef4444; font-size: 13px; margin: 4px 0 8px; }
+
+/* Status banner */
+.status-banner {
+  padding: 10px 14px;
+  margin-top: 20px;
+  border-radius: 4px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 14px;
+}
+.status-banner.success { background: #f0fdf4; border: 1px solid #86efac; color: #15803d; }
+.status-banner.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #b91c1c; }
+.status-banner span.msg { flex: 1; word-break: break-all; }
+.status-banner button {
+  width: auto;
+  min-width: unset;
+  padding: 4px 10px;
+  font-size: 12px;
+  min-height: unset;
+  flex-shrink: 0;
+}
+
+/* Tablet+ */
+@media (min-width: 480px) {
+  .app { padding: 24px; }
+  .app h1 { font-size: 1.7rem; }
+  button { width: auto; }
+}
+
+/* Desktop */
+@media (min-width: 768px) {
+  .app { padding: 32px; }
+  body { font-size: 16px; }
 }

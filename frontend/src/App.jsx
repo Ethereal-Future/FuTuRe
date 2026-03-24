@@ -59,13 +59,13 @@ function App() {
   };
 
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto' }}>
+    <div className="app">
       <h1>Stellar Remittance Platform</h1>
-      
-      <div style={{ marginBottom: '20px' }}>
+
+      <div className="section">
         <button onClick={createAccount}>Create Account</button>
         {account && (
-          <div style={{ marginTop: '10px', padding: '10px', background: '#f0f0f0' }}>
+          <div className="account-info">
             <p><strong>Public Key:</strong> {account.publicKey}</p>
             <p><strong>Secret Key:</strong> {account.secretKey}</p>
           </div>
@@ -74,7 +74,7 @@ function App() {
 
       {account && (
         <>
-          <div style={{ marginBottom: '20px' }}>
+          <div className="section">
             <button onClick={checkBalance}>Check Balance</button>
             {balance && (
               <div style={{ marginTop: '10px' }}>
@@ -85,85 +85,42 @@ function App() {
             )}
           </div>
 
-          <div style={{ marginBottom: '20px' }}>
+          <div className="section">
             <h3>Send Payment</h3>
-            <div style={{ position: 'relative', marginBottom: '4px' }}>
+            <div className="input-wrap">
               <input
                 type="text"
                 placeholder="Recipient Public Key"
                 value={recipient}
                 onChange={(e) => setRecipient(e.target.value)}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  boxSizing: 'border-box',
-                  border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
-                  borderRadius: '4px',
-                  outline: 'none',
-                }}
+                style={{ border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
               />
-              {recipientTouched && (
-                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
-                  {recipientValid ? '✅' : '❌'}
-                </span>
-              )}
+              {recipientTouched && <span className="input-icon">{recipientValid ? '✅' : '❌'}</span>}
             </div>
             {recipientTouched && !recipientValid && (
-              <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 10px' }}>
-                Invalid Stellar address format (must start with G and be 56 characters)
-              </p>
+              <p className="field-error">Invalid Stellar address format (must start with G and be 56 characters)</p>
             )}
-            <div style={{ position: 'relative', marginBottom: '4px' }}>
+            <div className="input-wrap">
               <input
                 type="text"
                 placeholder="Amount (XLM)"
                 value={amount}
                 onChange={(e) => setAmount(formatAmount(e.target.value))}
-                style={{
-                  width: '100%',
-                  padding: '8px',
-                  boxSizing: 'border-box',
-                  border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
-                  borderRadius: '4px',
-                  outline: 'none',
-                }}
+                style={{ border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
               />
-              {amountTouched && (
-                <span style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)' }}>
-                  {amountValid ? '✅' : '❌'}
-                </span>
-              )}
+              {amountTouched && <span className="input-icon">{amountValid ? '✅' : '❌'}</span>}
             </div>
-            {amountTouched && amountError && (
-              <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 10px' }}>{amountError}</p>
-            )}
+            {amountTouched && amountError && <p className="field-error">{amountError}</p>}
             <button onClick={sendPayment} disabled={!recipientValid || !amountValid}>Send</button>
           </div>
         </>
       )}
 
       {status && (
-        <div style={{
-          padding: '10px 14px',
-          marginTop: '20px',
-          borderRadius: '4px',
-          background: status.type === 'error' ? '#fef2f2' : '#f0fdf4',
-          border: `1px solid ${status.type === 'error' ? '#fca5a5' : '#86efac'}`,
-          color: status.type === 'error' ? '#b91c1c' : '#15803d',
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px',
-        }}>
+        <div className={`status-banner ${status.type}`}>
           <span>{status.type === 'error' ? '⚠️' : '✅'}</span>
-          <span style={{ flex: 1 }}>{status.message}</span>
-          {status.retry && (
-            <button
-              onClick={status.retry}
-              style={{ marginLeft: '8px', fontSize: '12px', cursor: 'pointer' }}
-            >
-              Retry
-            </button>
-          )}
+          <span className="msg">{status.message}</span>
+          {status.retry && <button onClick={status.retry}>Retry</button>}
         </div>
       )}
     </div>
