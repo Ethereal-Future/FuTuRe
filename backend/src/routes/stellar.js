@@ -170,5 +170,14 @@ router.get('/exchange-rate/:from/:to', async (req, res) => {
   }
 });
 
+router.get('/network/status', async (req, res) => {
+  try {
+    const status = await StellarService.getNetworkStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;
 

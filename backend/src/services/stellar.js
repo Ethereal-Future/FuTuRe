@@ -93,3 +93,23 @@ export async function getExchangeRate(from, to) {
   // Placeholder - integrate with price oracle or DEX
   return 1.0;
 }
+
+export async function getNetworkStatus() {
+  try {
+    const root = await server.root();
+    return {
+      network: isTestnet ? 'testnet' : 'mainnet',
+      horizonUrl: process.env.HORIZON_URL,
+      online: true,
+      horizonVersion: root.horizon_version,
+      networkPassphrase: root.network_passphrase,
+      currentProtocolVersion: root.current_protocol_version,
+    };
+  } catch {
+    return {
+      network: isTestnet ? 'testnet' : 'mainnet',
+      horizonUrl: process.env.HORIZON_URL,
+      online: false,
+    };
+  }
+}

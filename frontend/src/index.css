@@ -114,3 +114,155 @@ input:focus {
   .app { padding: 32px; }
   body { font-size: 16px; }
 }
+
+/* QR Code Modal */
+.qr-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 16px;
+}
+
+.qr-modal {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  width: 100%;
+  max-width: 300px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+
+.qr-header {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.qr-header h3 { font-size: 1rem; margin: 0; }
+
+.qr-close {
+  background: none;
+  border: none;
+  color: #666;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  min-height: unset;
+  min-width: unset;
+  width: auto;
+}
+.qr-close:hover { background: #f0f0f0; border-radius: 4px; }
+
+.qr-canvas-wrap canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+.qr-pubkey {
+  font-size: 10px;
+  color: #666;
+  word-break: break-all;
+  text-align: center;
+  max-width: 220px;
+}
+
+.qr-amount-row { width: 100%; }
+
+.qr-amount-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  min-height: 40px;
+  margin-bottom: 0;
+}
+
+.qr-hint {
+  font-size: 12px;
+  color: #0066cc;
+  text-align: center;
+}
+
+.qr-download {
+  width: 100%;
+  padding: 10px;
+  font-size: 14px;
+  min-height: 40px;
+}
+
+/* QR trigger button in account info */
+.qr-trigger {
+  margin-top: 8px;
+  font-size: 13px;
+  padding: 6px 12px;
+  min-height: unset;
+  width: auto;
+  background: #0066cc;
+}
+
+/* Network Badge */
+.net-badge-wrap { position: relative; }
+
+.net-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 12px;
+  border: 1px solid #ddd;
+  background: #f8f8f8;
+  color: #333;
+  cursor: pointer;
+  width: auto;
+  min-height: unset;
+  min-width: unset;
+  white-space: nowrap;
+}
+.net-badge:hover { background: #eee; }
+.net-badge.offline { border-color: #fca5a5; color: #b91c1c; background: #fef2f2; }
+
+.net-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.net-dot.online  { background: #22c55e; }
+.net-dot.offline { background: #ef4444; }
+
+.net-panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 12px;
+  min-width: 220px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.net-warning {
+  margin-top: 4px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  padding: 4px 8px;
+}

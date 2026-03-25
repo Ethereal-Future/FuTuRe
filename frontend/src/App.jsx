@@ -5,8 +5,11 @@ import { isValidStellarAddress } from './utils/validateStellarAddress';
 import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { makeVariants, tapScale } from './utils/animations';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { QRCodeModal } from './components/QRCodeModal';
+import { NetworkBadge } from './components/NetworkBadge';
 import { logError } from './utils/errorLogger';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
@@ -30,6 +33,7 @@ function App() {
   const [status, setStatus] = useState(null);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState('');
+  const [showQR, setShowQR] = useState(false);
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
@@ -56,6 +60,7 @@ function App() {
   };
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
+  const { status: networkStatus } = useNetworkStatus();
 
   const createAccount = async () => {
     setLoading('create');
@@ -110,14 +115,17 @@ function App() {
     <div className="app">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Stellar Remittance Platform</h1>
-        <motion.span
-          animate={{ opacity: [0.6, 1, 0.6] }}
-          transition={{ repeat: Infinity, duration: 2 }}
-          style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
-        >
-          <span style={{ width: 10, height: 10, borderRadius: '50%', background: STATUS_COLORS[wsStatus], display: 'inline-block' }} />
-          {wsStatus}
-        </motion.span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <NetworkBadge status={networkStatus} />
+          <motion.span
+            animate={{ opacity: [0.6, 1, 0.6] }}
+            transition={{ repeat: Infinity, duration: 2 }}
+            style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
+          >
+            <span style={{ width: 10, height: 10, borderRadius: '50%', background: STATUS_COLORS[wsStatus], display: 'inline-block' }} />
+            {wsStatus}
+          </motion.span>
+        </div>
       </div>
 
       {/* Create Account */}
@@ -134,6 +142,9 @@ function App() {
             >
               <p><strong>Public Key:</strong> {account.publicKey}</p>
               <p><strong>Secret Key:</strong> {account.secretKey}</p>
+              <motion.button className="qr-trigger" onClick={() => setShowQR(true)} {...tap}>
+                🔲 Show QR Code
+              </motion.button>
             </motion.div>
           )}
         </AnimatePresence>
@@ -247,6 +258,13 @@ function App() {
             <span className="msg">{status.message}</span>
             {status.retry && <motion.button onClick={status.retry} {...tap}>Retry</motion.button>}
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* QR Code Modal */}
+      <AnimatePresence>
+        {showQR && account && (
+          <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
         )}
       </AnimatePresence>
     </div>
