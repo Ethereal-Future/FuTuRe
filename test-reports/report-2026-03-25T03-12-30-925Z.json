@@ -1,0 +1,25 @@
+{
+  "timestamp": "2026-03-25T03:12:30.925Z",
+  "duration": 0,
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "passRate": "100.00%"
+  },
+  "suites": [
+    {
+      "name": "Suite 1",
+      "tests": [
+        {
+          "name": "test-1",
+          "passed": true,
+          "duration": 100
+        }
+      ],
+      "passed": 1,
+      "failed": 0,
+      "duration": 100
+    }
+  ]
+}
