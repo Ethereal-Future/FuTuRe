@@ -12,6 +12,8 @@ import chaosRoutes from './routes/chaos.js';
 import mobileRoutes from './routes/mobile.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
+import jobsRoutes from './routes/jobs.js';
+import { startWorkers, startSystemSchedules } from './jobs/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 
@@ -40,6 +42,10 @@ app.use(createRateLimiter());
 await eventMonitor.initialize();
 await auditLogger.initialize();
 
+// Initialize job processing
+startWorkers();
+startSystemSchedules();
+
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/stellar', stellarRoutes);
@@ -47,6 +53,7 @@ app.use('/api/events', eventsRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/load-testing', loadTestingRoutes);
 app.use('/api/chaos', chaosRoutes);
+app.use('/api/jobs', jobsRoutes);
 app.use('/api/mobile', mobileRoutes);
 
 app.get('/health', (req, res) => {
