@@ -5,13 +5,19 @@
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:performance": "vitest run tests/performance.benchmark.test.js",
+    "load-test:regression": "k6 run load-tests/k6/scenarios/performance-regression.js",
+    "load-test:endpoints": "k6 run load-tests/k6/scenarios/api-endpoints.js",
+    "load-test:concurrent": "k6 run load-tests/k6/scenarios/concurrent-users.js"
+    "test:integration": "vitest run tests/stellar.integration.test.js"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^12.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^7.5.0",
     "express-validator": "^7.3.1",
     "jsonwebtoken": "^9.0.0",
     "qrcode": "^1.5.3",

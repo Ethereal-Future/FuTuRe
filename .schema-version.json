@@ -1,12 +1,15 @@
 {
-  "version": 0,
-  "timestamp": "2026-03-25T03:31:58.626Z",
-  "timestamp": "2026-03-25T03:23:57.372Z",
-  "timestamp": "2026-03-25T03:12:30.051Z",
+  "currentVersion": 0,
   "migrations": [
     {
-      "name": "test_migration",
-      "version": 1
+      "name": "migration_1",
+      "version": 1,
+      "description": "",
+      "timestamp": "2026-03-26T01:41:04.448Z",
+      "status": "rolled_back",
+      "appliedAt": "2026-03-26T01:41:04.449Z",
+      "rolledBackAt": "2026-03-26T01:41:04.451Z"
     }
-  ]
+  ],
+  "lastUpdated": "2026-03-26T01:41:04.451Z"
 }
