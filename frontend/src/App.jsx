@@ -10,6 +10,7 @@ import { useMessages } from './hooks/useMessages';
 import { makeVariants, tapScale } from './utils/animations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
+import { PaymentConfirmationModal } from './components/PaymentConfirmationModal';
 import { NetworkBadge } from './components/NetworkBadge';
 import { StatusMessage } from './components/StatusMessage';
 import { logError } from './utils/errorLogger';
@@ -33,6 +34,7 @@ function App() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState('');
   const [showQR, setShowQR] = useState(false);
+  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
 
   const msg = useMessages();
 
@@ -86,6 +88,11 @@ function App() {
 
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
+    setShowPaymentConfirmation(true);
+  };
+
+  const confirmPayment = async () => {
+    if (!account || !recipientValid || !amountValid) return;
     setLoading('send');
     try {
       const { data } = await axios.post('/api/stellar/payment/send', {
@@ -96,9 +103,12 @@ function App() {
       });
       msg.success(`Payment sent! Hash: ${data.hash}`);
       checkBalance();
+      setShowPaymentConfirmation(false);
+      setAmount('');
+      setRecipient('');
     } catch (error) {
       logError(error, { context: 'sendPayment' });
-      msg.error(getFriendlyError(error), { retry: sendPayment });
+      msg.error(getFriendlyError(error), { retry: confirmPayment });
     } finally { setLoading(''); }
   };
 
@@ -217,10 +227,18 @@ function App() {
         showHistory={true}
       />
 
-      {/* QR Code Modal */}
+      {/* Payment Confirmation Modal */}
       <AnimatePresence>
-        {showQR && account && (
-          <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
+        {showPaymentConfirmation && (
+          <PaymentConfirmationModal
+            isOpen={showPaymentConfirmation}
+            onClose={() => setShowPaymentConfirmation(false)}
+            onConfirm={confirmPayment}
+            recipient={recipient}
+            amount={amount}
+            estimatedFee="0.00001"
+            loading={loading === 'send'}
+          />
         )}
       </AnimatePresence>
 
