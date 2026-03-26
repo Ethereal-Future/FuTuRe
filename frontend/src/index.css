@@ -328,4 +328,250 @@ input:focus {
   margin-top: 4px;
   opacity: 0.75;
 }
+
+/* Payment Confirmation Modal */
+.payment-confirmation-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.payment-confirmation-modal {
+  background: white;
+  border-radius: 8px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+}
+
+.payment-confirmation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 20px 0;
+  border-bottom: 1px solid #e5e7eb;
+  margin-bottom: 20px;
+}
+
+.payment-confirmation-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.payment-confirmation-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  color: #6b7280;
+  padding: 4px;
+  border-radius: 4px;
+  min-height: unset;
+  min-width: unset;
+  width: auto;
+  line-height: 1;
+}
+
+.payment-confirmation-close:hover:not(:disabled) {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.payment-confirmation-close:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.payment-confirmation-content {
+  padding: 0 20px 20px;
+}
+
+.transaction-summary {
+  background: #f9fafb;
+  border-radius: 6px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.transaction-summary h4 {
+  margin: 0 0 16px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.summary-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 12px;
+  gap: 12px;
+}
+
+.summary-row:last-child {
+  margin-bottom: 0;
+}
+
+.summary-row label {
+  font-weight: 500;
+  color: #6b7280;
+  min-width: 100px;
+}
+
+.recipient-address code {
+  background: #f3f4f6;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 0.875rem;
+  color: #1f2937;
+  word-break: break-all;
+  max-width: 280px;
+  display: block;
+}
+
+.amount, .fee {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.summary-divider {
+  height: 1px;
+  background: #e5e7eb;
+  margin: 16px 0;
+}
+
+.summary-row.total {
+  margin-top: 4px;
+}
+
+.summary-row.total label {
+  font-weight: 600;
+  color: #1f2937;
+}
+
+.total-amount {
+  font-weight: 700;
+  color: #059669;
+  font-size: 1.1rem;
+}
+
+.large-amount-warning {
+  display: flex;
+  gap: 12px;
+  background: #fef3c7;
+  border: 1px solid #f59e0b;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.warning-icon {
+  font-size: 1.25rem;
+  flex-shrink: 0;
+}
+
+.large-amount-warning div {
+  flex: 1;
+}
+
+.large-amount-warning strong {
+  display: block;
+  color: #92400e;
+  margin-bottom: 4px;
+}
+
+.large-amount-warning p {
+  margin: 0;
+  color: #78350f;
+  font-size: 0.875rem;
+}
+
+.payment-confirmation-actions {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.cancel-button {
+  background: #f3f4f6;
+  color: #374151;
+  border: 1px solid #d1d5db;
+}
+
+.cancel-button:hover:not(:disabled) {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+}
+
+.confirm-button {
+  background: #dc2626;
+  color: white;
+  border: 1px solid #dc2626;
+  font-weight: 600;
+}
+
+.confirm-button:hover:not(:disabled) {
+  background: #b91c1c;
+  border-color: #b91c1c;
+}
+
+.confirm-button:disabled {
+  background: #fca5a5;
+  border-color: #fca5a5;
+  cursor: not-allowed;
+}
+
+.keyboard-hints {
+  text-align: center;
+  padding: 12px 20px 20px;
+  color: #6b7280;
+}
+
+.keyboard-hints kbd {
+  background: #f3f4f6;
+  border: 1px solid #d1d5db;
+  border-radius: 3px;
+  padding: 2px 6px;
+  font-family: monospace;
+  font-size: 0.75rem;
+  color: #374151;
+}
+
+@media (max-width: 640px) {
+  .payment-confirmation-overlay {
+    padding: 16px;
+  }
+  
+  .payment-confirmation-modal {
+    max-width: 100%;
+  }
+  
+  .summary-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .recipient-address code {
+    max-width: 100%;
+  }
+  
+  .payment-confirmation-actions {
+    flex-direction: column;
+  }
+}
 .sm-time { margin-left: auto; color: #999; white-space: nowrap; font-size: 11px; }
