@@ -11,10 +11,12 @@ import securityRoutes from './routes/security.js';
 import loadTestingRoutes from './routes/loadTesting.js';
 import chaosRoutes from './routes/chaos.js';
 import mobileRoutes from './routes/mobile.js';
+import metricsRoutes from './routes/metrics.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
+import { performanceMiddleware } from './monitoring/middleware.js';
 
 dotenv.config();
 
@@ -37,6 +39,9 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 // Rate limiting
 app.use(createRateLimiter());
 
+// Performance monitoring
+app.use(performanceMiddleware);
+
 // Initialize event sourcing
 await eventMonitor.initialize();
 await auditLogger.initialize();
@@ -50,6 +55,7 @@ app.use('/api/security', securityRoutes);
 app.use('/api/load-testing', loadTestingRoutes);
 app.use('/api/chaos', chaosRoutes);
 app.use('/api/mobile', mobileRoutes);
+app.use('/api/metrics', metricsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', network: getConfig().stellar.network });
