@@ -10,6 +10,7 @@ import eventsRoutes from './routes/events.js';
 import securityRoutes from './routes/security.js';
 import loadTestingRoutes from './routes/loadTesting.js';
 import chaosRoutes from './routes/chaos.js';
+import healthRoutes from './routes/health.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
 
@@ -45,10 +46,7 @@ app.use('/api/events', eventsRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/load-testing', loadTestingRoutes);
 app.use('/api/chaos', chaosRoutes);
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'ok', network: process.env.STELLAR_NETWORK });
-});
+app.use('/', healthRoutes);
 
 const httpServer = createServer(app);
 initWebSocket(httpServer);
