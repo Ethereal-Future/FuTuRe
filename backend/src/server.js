@@ -12,6 +12,8 @@ import loadTestingRoutes from './routes/loadTesting.js';
 import chaosRoutes from './routes/chaos.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
+import jobsRoutes from './routes/jobs.js';
+import { startWorkers, startSystemSchedules } from './jobs/index.js';
 
 dotenv.config();
 
@@ -38,6 +40,10 @@ app.use(express.urlencoded({ extended: false, limit: '10kb' }));
 await eventMonitor.initialize();
 await auditLogger.initialize();
 
+// Initialize job processing
+startWorkers();
+startSystemSchedules();
+
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 app.use('/api/stellar', stellarRoutes);
@@ -45,6 +51,7 @@ app.use('/api/events', eventsRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/load-testing', loadTestingRoutes);
 app.use('/api/chaos', chaosRoutes);
+app.use('/api/jobs', jobsRoutes);
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', network: process.env.STELLAR_NETWORK });
