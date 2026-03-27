@@ -1,17 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { isValidStellarAddress } from './utils/validateStellarAddress';
 import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
+import { formatBalanceWithAsset } from './utils/formatBalance';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useMessages } from './hooks/useMessages';
+import { usePWA } from './hooks/usePWA';
+import { useOfflineQueue } from './hooks/useOfflineQueue';
 import { makeVariants, tapScale } from './utils/animations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
 import { NetworkBadge } from './components/NetworkBadge';
 import { StatusMessage } from './components/StatusMessage';
+import { CopyButton } from './components/CopyButton';
 import { logError } from './utils/errorLogger';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
@@ -33,8 +37,11 @@ function App() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState('');
   const [showQR, setShowQR] = useState(false);
+  const [showShortcuts, setShowShortcuts] = useState(false);
 
   const msg = useMessages();
+  const { canInstall, install, updateAvailable, applyUpdate } = usePWA();
+  const { queue: queueOffline, pendingCount } = useOfflineQueue();
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
@@ -52,6 +59,30 @@ function App() {
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatus();
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      // Ctrl+N: create new account
+      if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+        e.preventDefault();
+        if (loading !== 'create') createAccount();
+      }
+      // Escape: close modals
+      if (e.key === 'Escape') {
+        setShowQR(false);
+        setShowShortcuts(false);
+      }
+      // ?: show shortcuts help
+      if (e.key === '?' && !e.ctrlKey && !e.metaKey) {
+        const tag = document.activeElement?.tagName;
+        if (tag !== 'INPUT' && tag !== 'TEXTAREA') setShowShortcuts((s) => !s);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading]);
 
   const createAccount = async () => {
     setLoading('create');
@@ -87,26 +118,61 @@ function App() {
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     setLoading('send');
+    const payload = { sourceSecret: account.secretKey, destination: recipient, amount, assetCode: 'XLM' };
     try {
-      const { data } = await axios.post('/api/stellar/payment/send', {
-        sourceSecret: account.secretKey,
-        destination: recipient,
-        amount,
-        assetCode: 'XLM'
-      });
+      const { data } = await axios.post('/api/stellar/payment/send', payload);
       msg.success(`Payment sent! Hash: ${data.hash}`);
       checkBalance();
     } catch (error) {
-      logError(error, { context: 'sendPayment' });
-      msg.error(getFriendlyError(error), { retry: sendPayment });
+      // If offline, queue for background sync
+      if (!navigator.onLine) {
+        await queueOffline(payload);
+        msg.info('You are offline. Payment queued and will sync automatically.');
+      } else {
+        logError(error, { context: 'sendPayment' });
+        msg.error(getFriendlyError(error), { retry: sendPayment });
+      }
     } finally { setLoading(''); }
   };
 
   return (
     <div className="app">
+      {/* PWA: update available banner */}
+      <AnimatePresence>
+        {updateAvailable && (
+          <motion.div className="pwa-banner pwa-banner--update" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+            <span>A new version is available.</span>
+            <button type="button" className="pwa-banner__btn" onClick={applyUpdate}>Update now</button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* PWA: offline queue indicator */}
+      <AnimatePresence>
+        {pendingCount > 0 && (
+          <motion.div className="pwa-banner pwa-banner--queue" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+            {pendingCount} payment{pendingCount > 1 ? 's' : ''} queued offline — will sync when back online.
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h1>Stellar Remittance Platform</h1>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {canInstall && (
+            <button type="button" className="pwa-install-btn" onClick={install} title="Install app">
+              ⬇ Install
+            </button>
+          )}
+          <button
+            type="button"
+            className="shortcuts-help-btn"
+            onClick={() => setShowShortcuts((s) => !s)}
+            title="Keyboard shortcuts (?)"
+            aria-label="Show keyboard shortcuts"
+          >
+            ⌨
+          </button>
           <NetworkBadge status={networkStatus} />
           <motion.span
             animate={{ opacity: [0.6, 1, 0.6] }}
@@ -119,9 +185,29 @@ function App() {
         </div>
       </div>
 
+      {/* Keyboard shortcuts panel */}
+      <AnimatePresence>
+        {showShortcuts && (
+          <motion.div className="shortcuts-panel" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" variants={v.pop} initial="hidden" animate="visible" exit="exit">
+            <div className="shortcuts-panel__header">
+              <strong>Keyboard Shortcuts</strong>
+              <button type="button" className="qr-close" onClick={() => setShowShortcuts(false)} aria-label="Close">✕</button>
+            </div>
+            <ul className="shortcuts-list">
+              <li><kbd>Ctrl+N</kbd> Create new account</li>
+              <li><kbd>Ctrl+C</kbd> Copy key (when copy button focused)</li>
+              <li><kbd>Escape</kbd> Close modals</li>
+              <li><kbd>?</kbd> Toggle this help</li>
+              <li><kbd>Tab</kbd> Navigate between fields</li>
+              <li><kbd>Enter</kbd> Submit focused form</li>
+            </ul>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Create Account */}
       <motion.div className="section" variants={v.fadeSlide} initial="hidden" animate="visible">
-        <motion.button onClick={createAccount} {...tap} disabled={loading === 'create'}>
+        <motion.button onClick={createAccount} {...tap} disabled={loading === 'create'} title="Create account (Ctrl+N)">
           Create Account {loading === 'create' && <Spinner />}
         </motion.button>
         <AnimatePresence>
@@ -131,8 +217,16 @@ function App() {
               variants={v.pop}
               initial="hidden" animate="visible" exit="exit"
             >
-              <p><strong>Public Key:</strong> {account.publicKey}</p>
-              <p><strong>Secret Key:</strong> {account.secretKey}</p>
+              <div className="key-row">
+                <span className="key-label">Public Key:</span>
+                <span className="key-value">{account.publicKey}</span>
+                <CopyButton text={account.publicKey} label="Copy public key" />
+              </div>
+              <div className="key-row">
+                <span className="key-label">Secret Key:</span>
+                <span className="key-value">{account.secretKey}</span>
+                <CopyButton text={account.secretKey} label="Copy secret key" />
+              </div>
               <motion.button className="qr-trigger" onClick={() => setShowQR(true)} {...tap}>
                 🔲 Show QR Code
               </motion.button>
@@ -154,7 +248,10 @@ function App() {
                 {balance && (
                   <motion.div variants={v.pop} initial="hidden" animate="visible" exit="exit" style={{ marginTop: 10 }}>
                     {balance.balances.map((b, i) => (
-                      <motion.p key={i} variants={v.fadeSlide}>{b.asset}: {b.balance}</motion.p>
+                      <motion.p key={i} variants={v.fadeSlide} className="balance-row">
+                        <span className="balance-asset">{b.asset}</span>
+                        <span className="balance-amount">{formatBalanceWithAsset(b.balance, b.asset)}</span>
+                      </motion.p>
                     ))}
                   </motion.div>
                 )}
@@ -171,7 +268,9 @@ function App() {
                   placeholder="Recipient Public Key"
                   value={recipient}
                   onChange={(e) => setRecipient(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
                   style={{ border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
+                  aria-label="Recipient public key"
                 />
                 {recipientTouched && <span className="input-icon">{recipientValid ? '✅' : '❌'}</span>}
               </div>
@@ -188,7 +287,9 @@ function App() {
                   placeholder="Amount (XLM)"
                   value={amount}
                   onChange={(e) => setAmount(formatAmount(e.target.value))}
+                  onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
                   style={{ border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
+                  aria-label="Payment amount in XLM"
                 />
                 {amountTouched && <span className="input-icon">{amountValid ? '✅' : '❌'}</span>}
               </div>
@@ -216,13 +317,6 @@ function App() {
         onRemove={msg.remove}
         showHistory={true}
       />
-
-      {/* QR Code Modal */}
-      <AnimatePresence>
-        {showQR && account && (
-          <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
-        )}
-      </AnimatePresence>
 
       {/* QR Code Modal */}
       <AnimatePresence>
