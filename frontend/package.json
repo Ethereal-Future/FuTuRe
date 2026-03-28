@@ -7,7 +7,9 @@
     "build": "vite build",
     "analyze": "vite build && open stats.html",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^12.3.0",
@@ -23,6 +25,10 @@
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
-    "vite": "^5.3.3"
+    "vite": "^5.3.3",
+    "@storybook/react-vite": "^8.0.0",
+    "@storybook/addon-essentials": "^8.0.0",
+    "@storybook/addon-a11y": "^8.0.0",
+    "storybook": "^8.0.0"
   }
 }
