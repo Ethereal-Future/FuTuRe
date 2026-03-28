@@ -3,6 +3,7 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import * as StellarService from '../services/stellar.js';
 import { broadcastToAccount } from '../services/websocket.js';
 import { validate, rules } from '../middleware/validate.js';
+import { SUPPORTED_ASSETS, getIssuer } from '../config/assets.js';
 import { dispatchEvent } from '../webhooks/dispatcher.js';
 
 const router = express.Router();
@@ -214,6 +215,27 @@ router.get('/network/status', async (req, res) => {
   try {
     const status = await StellarService.getNetworkStatus();
     res.json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Returns supported assets and their issuers
+router.get('/assets', (req, res) => {
+  const assets = SUPPORTED_ASSETS.map(code => ({
+    code,
+    issuer: code === 'XLM' ? null : getIssuer(code),
+    native: code === 'XLM',
+  }));
+  res.json({ assets });
+});
+
+// Create a trustline for a non-native asset (e.g. USDC)
+router.post('/trustline', rules.createTrustline, validate, async (req, res) => {
+  try {
+    const { sourceSecret, assetCode } = req.body;
+    const result = await StellarService.createTrustline(sourceSecret, assetCode);
+    res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

@@ -88,7 +88,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
 
   const asset = assetCode === 'XLM' 
     ? StellarSDK.Asset.native() 
-    : new StellarSDK.Asset(assetCode, assetIssuer);
+    : new StellarSDK.Asset(assetCode, getIssuer(assetCode));
   
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
@@ -154,6 +154,46 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     ledger: result.ledger,
     success: result.successful
   };
+}
+
+export async function createTrustline(sourceSecret, assetCode) {
+  const issuer = getIssuer(assetCode);
+  if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
+
+  const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  const sourcePublicKey = sourceKeypair.publicKey();
+  logger.info('stellar.createTrustline', { publicKey: sourcePublicKey, assetCode });
+
+  const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
+  const asset = new StellarSDK.Asset(assetCode, issuer);
+
+  const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+  })
+    .addOperation(StellarSDK.Operation.changeTrust({ asset }))
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  let result;
+  try {
+    result = await getHorizonServer().submitTransaction(transaction);
+  } catch (err) {
+    logger.error('stellar.createTrustline.failed', { publicKey: sourcePublicKey, assetCode, error: err.message });
+    throw err;
+  }
+
+  logger.info('stellar.createTrustline.success', { publicKey: sourcePublicKey, assetCode, hash: result.hash });
+
+  await eventMonitor.publishEvent(sourcePublicKey, {
+    type: 'TrustlineCreated',
+    data: { assetCode, issuer, hash: result.hash },
+    version: 1,
+  });
+
+  return { hash: result.hash, assetCode, issuer };
 }
 
 export async function getTransactions(publicKey, { cursor, limit = 10, type, dateFrom, dateTo } = {}) {
@@ -228,7 +268,7 @@ export async function getFeeStats() {
     // Traditional wire transfer benchmark for comparison
     traditionalFeeUsd: 25,
 export async function getTransactionHistory(publicKey, { limit = 10, cursor } = {}) {
-  let call = server.transactions().forAccount(publicKey).limit(limit).order('desc');
+  let call = getHorizonServer().transactions().forAccount(publicKey).limit(limit).order('desc');
   if (cursor) call = call.cursor(cursor);
   const result = await call.call();
   return {
@@ -246,8 +286,17 @@ export async function getTransactionHistory(publicKey, { limit = 10, cursor } = 
 }
 
 export async function getExchangeRate(from, to) {
-  // Placeholder - integrate with price oracle or DEX
-  return 1.0;
+  if (from === to) return 1.0;
+  try {
+    const fromAsset = from === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(from, getIssuer(from));
+    const toAsset   = to   === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(to,   getIssuer(to));
+    const orderbook = await server.orderbook(fromAsset, toAsset).call();
+    const bestAsk = orderbook.asks?.[0]?.price;
+    return bestAsk ? parseFloat(bestAsk) : null;
+  } catch (err) {
+    logger.warn('stellar.getExchangeRate.failed', { from, to, error: err.message });
+    return null;
+  }
 }
 
 export async function getNetworkStatus() {

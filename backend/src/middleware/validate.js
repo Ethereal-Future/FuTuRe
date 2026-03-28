@@ -1,4 +1,5 @@
 import { body, param, validationResult } from 'express-validator';
+import { SUPPORTED_ASSETS } from '../config/assets.js';
 
 // Stellar public key: starts with G, 56 chars, base32
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
@@ -53,7 +54,24 @@ export const rules = {
       .optional()
       .trim()
       .matches(ASSET_CODE)
-      .withMessage('Invalid asset code'),
+      .withMessage('Invalid asset code')
+      .isIn(SUPPORTED_ASSETS)
+      .withMessage(`Unsupported asset. Supported: ${SUPPORTED_ASSETS.join(', ')}`),
+  ],
+
+  createTrustline: [
+    body('sourceSecret')
+      .trim()
+      .matches(STELLAR_SECRET_KEY)
+      .withMessage('Invalid Stellar secret key'),
+    body('assetCode')
+      .trim()
+      .matches(ASSET_CODE)
+      .withMessage('Invalid asset code')
+      .custom(v => v !== 'XLM')
+      .withMessage('Cannot create trustline for native XLM asset')
+      .isIn(SUPPORTED_ASSETS.filter(a => a !== 'XLM'))
+      .withMessage(`Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter(a => a !== 'XLM').join(', ')}`),
   ],
 
   assetCodeParams: [
