@@ -1,0 +1,13 @@
+{
+  "app": { "title": "Plateforme de Transfert Stellar", "loading": "Chargement…" },
+  "nav": { "switchToLight": "Passer en mode clair", "switchToDark": "Passer en mode sombre", "light": "☀️ Clair", "dark": "🌙 Sombre", "install": "⬇ Installer", "shortcuts": "Raccourcis clavier (?)" },
+  "account": { "create": "Créer un compte", "creating": "Création du compte...", "import": "Importer un compte", "cancelImport": "Annuler l'importation", "publicKey": "Clé publique :", "secretKey": "Clé secrète :", "copyPublicKey": "Copier la clé publique", "copySecretKey": "Copier la clé secrète", "showQR": "🔲 Afficher le QR Code", "created": "Compte créé ! Sauvegardez votre clé secrète en lieu sûr.", "imported": "Compte importé avec succès !" },
+  "balance": { "check": "Vérifier le solde", "checking": "Vérification du solde..." },
+  "payment": { "title": "Envoyer un paiement", "recipientPlaceholder": "Clé publique du destinataire", "recipientLabel": "Clé publique du destinataire", "amountPlaceholder": "Montant (XLM)", "amountLabel": "Montant du paiement en XLM", "send": "Envoyer", "sending": "Envoi du paiement...", "clear": "Effacer", "clearConfirm": "Effacer le formulaire de paiement ?", "sent": "Paiement envoyé ! Hash : {{hash}}", "queued": "Vous êtes hors ligne. Paiement mis en file d'attente.", "largeWarning": "⚠️ Veuillez examiner et confirmer l'avertissement de grande transaction ci-dessous." },
+  "validation": { "invalidAddress": "Format d'adresse Stellar invalide (doit commencer par G et comporter 56 caractères)" },
+  "pwa": { "updateAvailable": "Une nouvelle version est disponible.", "updateNow": "Mettre à jour", "queued_one": "{{count}} paiement en attente — sera synchronisé en ligne.", "queued_other": "{{count}} paiements en attente — seront synchronisés en ligne." },
+  "shortcuts": { "title": "Raccourcis clavier", "close": "Fermer", "createAccount": "Créer un nouveau compte", "copyKey": "Copier la clé", "escape": "Fermer les modales", "help": "Afficher/masquer cette aide", "tab": "Naviguer entre les champs", "enter": "Soumettre le formulaire" },
+  "network": { "connected": "connecté", "disconnected": "déconnecté", "reconnecting": "reconnexion" },
+  "errors": { "timeout": "La requête a expiré. Veuillez réessayer." },
+  "language": { "select": "Langue", "en": "English", "ar": "العربية", "he": "עברית", "fr": "Français", "es": "Español", "zh": "中文", "pt": "Português" }
+}

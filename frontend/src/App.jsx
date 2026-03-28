@@ -22,6 +22,8 @@ import { FeeDisplay } from './components/FeeDisplay';
 import { logError } from './utils/errorLogger';
 import { ImportAccountForm } from './components/ImportAccountForm';
 import { useTheme } from './contexts/ThemeContext';
+import { useRTL } from './hooks/useRTL';
+import { LanguageSelector } from './components/LanguageSelector';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
 const TIMEOUT_MS = 30000;
@@ -50,6 +52,7 @@ function App() {
   const [showImportForm, setShowImportForm] = useState(false);
 
   const { theme, isDark, toggleTheme } = useTheme();
+  useRTL();
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
@@ -229,6 +232,7 @@ function App() {
           >
             {isDark ? '☀️ Light' : '🌙 Dark'}
           </button>
+          <LanguageSelector />
           {canInstall && (
             <button type="button" className="pwa-install-btn" onClick={install} title="Install app">
               ⬇ Install

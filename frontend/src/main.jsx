@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { initWebVitals } from './utils/webVitals';
 import { ThemeProvider } from './contexts/ThemeContext';
+import './i18n/index.js';
 import './index.css';
 
 // Lazy-load App for code splitting

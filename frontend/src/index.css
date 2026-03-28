@@ -696,3 +696,34 @@ kbd {
   line-height: 1.5;
   margin: 2px 0;
 }
+
+/* ============================================================
+   I18N / RTL SUPPORT
+   ============================================================ */
+
+/* RTL layout flips */
+[dir="rtl"] .app           { direction: rtl; text-align: right; }
+[dir="rtl"] .key-row       { flex-direction: row-reverse; }
+[dir="rtl"] .input-wrap    { text-align: right; }
+[dir="rtl"] .sm-item       { flex-direction: row-reverse; }
+[dir="rtl"] .balance-row   { flex-direction: row-reverse; }
+[dir="rtl"] .card-header   { text-align: right; }
+[dir="rtl"] .modal-header  { flex-direction: row-reverse; }
+[dir="rtl"] .btn            { direction: rtl; }
+
+/* Language selector */
+.lang-selector {
+  padding: 5px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease;
+}
+.lang-selector:focus {
+  outline: none;
+  border-color: var(--primary);
+}

@@ -12,7 +12,6 @@
     "load-test:concurrent": "k6 run load-tests/k6/scenarios/concurrent-users.js",
     "test:integration": "vitest run tests/stellar.integration.test.js",
     "test:db": "vitest run tests/database.framework.test.js"
-    "test:integration": "vitest run tests/stellar.integration.test.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.5.0",
