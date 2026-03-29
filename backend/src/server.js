@@ -26,6 +26,7 @@ import analyticsRoutes from './routes/analytics.js';
 import backupRoutes from './routes/backup.js';
 import { startScheduler } from './backup/manager.js';
 import cacheRoutes from './routes/cache.js';
+import recoveryRoutes from './routes/recovery.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
@@ -97,6 +98,7 @@ app.use('/api/path-payment', pathPaymentRoutes);
 app.use('/api/analytics', analyticsRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/cache', cacheRoutes);
+app.use('/api/recovery', recoveryRoutes);
 
 // 404 handler for undefined routes
 app.use(notFoundHandler);
