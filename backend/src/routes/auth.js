@@ -1,9 +1,10 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { hashPassword, verifyPassword } from '../auth/password.js';
-import { createUser, findUser, getUserById } from '../auth/userStore.js';
+import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
 import { requireAuth } from '../middleware/auth.js';
+import { consumePendingCredentials } from '../recovery/recoveryStore.js';
 
 const router = express.Router();
 
@@ -34,7 +35,24 @@ router.post('/register', userRules, validateBody, async (req, res) => {
 router.post('/login', userRules, validateBody, async (req, res) => {
   const { username, password } = req.body;
   const user = findUser(username);
-  if (!user || !(await verifyPassword(password, user.passwordHash))) {
+  if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+
+  // Check for pending recovered credentials first
+  const recovered = consumePendingCredentials(user.id);
+  if (recovered) {
+    const valid = await verifyPassword(password, recovered.passwordHash);
+    if (valid) {
+      updateUserPassword(user.id, recovered.passwordHash);
+      const payload = { sub: user.id, username: user.username };
+      return res.json({
+        accessToken: signAccessToken(payload),
+        refreshToken: signRefreshToken(payload),
+        recovered: true,
+      });
+    }
+  }
+
+  if (!(await verifyPassword(password, user.passwordHash))) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   const payload = { sub: user.id, username: user.username };

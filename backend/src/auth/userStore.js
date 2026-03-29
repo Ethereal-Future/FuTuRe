@@ -18,3 +18,10 @@ export function getUserById(id) {
   }
   return null;
 }
+
+export function updateUserPassword(id, passwordHash) {
+  for (const user of users.values()) {
+    if (user.id === id) { user.passwordHash = passwordHash; return true; }
+  }
+  return false;
+}

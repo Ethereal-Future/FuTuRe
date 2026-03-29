@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 vi.mock('@stellar/stellar-sdk', async () => {
   const mockKeypair = {
     publicKey: () => 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H',
-    secret: () => 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+    secret: () => 'S_TEST_SECRET_KEY',
     sign: vi.fn(),
     verify: vi.fn(() => true),
   };
@@ -84,7 +84,7 @@ const {
   getPendingTransaction,
 } = await import('../src/services/multiSig.js');
 
-const MOCK_SECRET = 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH';
+const MOCK_SECRET = 'S_TEST_SECRET_KEY';
 const MOCK_PUBLIC = 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H';
 const MOCK_DEST = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQ';
 

@@ -19,17 +19,35 @@ import mobileRoutes from './routes/mobile.js';
 import webhookRoutes from './routes/webhooks.js';
 import metricsRoutes from './routes/metrics.js';
 import transactionRoutes from './routes/transactions.js';
+import notificationRoutes from './routes/notifications.js';
+import complianceRoutes from './routes/compliance.js';
+import pathPaymentRoutes from './routes/pathPayment.js';
+import analyticsRoutes from './routes/analytics.js';
+import backupRoutes from './routes/backup.js';
+import { startScheduler } from './backup/manager.js';
 import cacheRoutes from './routes/cache.js';
+import recoveryRoutes from './routes/recovery.js';
 import { eventMonitor } from './eventSourcing/index.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { performanceMiddleware } from './monitoring/middleware.js';
+import {
+  requestIdMiddleware,
+  errorLogger,
+  errorHandler,
+  notFoundHandler
+} from './middleware/errorHandler.js';
+import { securityMiddleware } from './middleware/securityHeaders.js';
+import { sanitizeInputs } from './middleware/sanitize.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = getConfig().server.port;
+
+// Security middleware
+app.use(securityMiddleware());
 
 app.use(cors({
   origin: (origin, cb) => {
@@ -39,10 +57,11 @@ app.use(cors({
     cb(new Error(`CORS: origin ${origin} not allowed`));
   },
   methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+app.use(requestIdMiddleware);
 app.use(requestLogger);
 
 // Rate limiting
@@ -50,6 +69,9 @@ app.use(createRateLimiter());
 
 // Performance monitoring
 app.use(performanceMiddleware);
+
+// Input sanitization (runs before all route handlers)
+app.use(sanitizeInputs);
 
 // Initialize event sourcing
 await runMigrations();
@@ -70,7 +92,20 @@ app.use('/api/mobile', mobileRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/transactions', transactionRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/compliance', complianceRoutes);
+app.use('/api/path-payment', pathPaymentRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/backup', backupRoutes);
 app.use('/api/cache', cacheRoutes);
+app.use('/api/recovery', recoveryRoutes);
+
+// 404 handler for undefined routes
+app.use(notFoundHandler);
+
+// Error handling middleware (must be after all routes)
+app.use(errorLogger);
+app.use(errorHandler);
 
 app.get('/health', async (req, res) => {
   const db = await checkDBHealth();
@@ -92,4 +127,5 @@ httpServer.listen(PORT, () => {
     logger.info('server.envFiles', { files: meta.loadedEnvFiles.map(p => p.split('/').pop()).join(', ') });
   }
   logger.info('server.started', { port: PORT, network: process.env.STELLAR_NETWORK });
+  startScheduler();
 });

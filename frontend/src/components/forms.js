@@ -6,6 +6,16 @@ export { DatePicker } from './DatePicker.jsx';
 export { SearchableSelect } from './SearchableSelect.jsx';
 export { FormWizard } from './FormWizard.jsx';
 
+// Enhanced validation components
+export {
+  FormField as FormFieldEnhanced,
+  ValidationIcon,
+  FormProgress,
+  ValidationSummary,
+  FormSubmitButton,
+  useFormValidation
+} from './FormValidation.jsx';
+
 // Security components
 export { SecurityKeyWarning, SecretKeyDisplay } from './SecurityKeyWarning.jsx';
 export { LargeTransactionWarning, TransactionReviewCard } from './LargeTransactionWarning.jsx';
