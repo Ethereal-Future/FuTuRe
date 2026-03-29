@@ -1,0 +1,183 @@
+name: Test Automation Pipeline
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      run_full_suite:
+        description: 'Run full test suite including slow tests'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  # ── Stage 1: Fast checks (lint, type-check, unit tests) — run in parallel ──
+  fast-checks:
+    name: Fast Checks (Parallel)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run pipeline orchestration tests
+        run: npx vitest run backend/tests/test-pipeline.test.js --reporter=verbose
+        env:
+          NODE_ENV: test
+
+      - name: Run unit tests (parallel workers)
+        run: npm run test:parallel
+        env:
+          NODE_ENV: test
+
+      - name: Upload unit test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results-${{ github.sha }}
+          path: coverage/
+          retention-days: 7
+
+  # ── Stage 2: Integration tests ────────────────────────────────────────────
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: fast-checks
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: future_admin
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: future_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5433:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration:all
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://future_admin:test_password@localhost:5433/future_test
+
+      - name: Upload integration results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-results-${{ github.sha }}
+          path: test-reports/
+          retention-days: 7
+
+  # ── Stage 3: Aggregate results and analyze failures ───────────────────────
+  aggregate-and-analyze:
+    name: Aggregate Results & Failure Analysis
+    runs-on: ubuntu-latest
+    needs: [fast-checks, integration-tests]
+    if: always()
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download unit test results
+        uses: actions/download-artifact@v4
+        with:
+          name: unit-test-results-${{ github.sha }}
+          path: coverage/
+        continue-on-error: true
+
+      - name: Download integration results
+        uses: actions/download-artifact@v4
+        with:
+          name: integration-results-${{ github.sha }}
+          path: test-reports/integration/
+        continue-on-error: true
+
+      - name: Generate aggregated coverage report
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "## Test Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+            echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Fast Checks | ${{ needs.fast-checks.result }} |" >> $GITHUB_STEP_SUMMARY
+            echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const s = require('./coverage/coverage-summary.json').total;
+              console.log('### Coverage');
+              console.log('| Metric | Coverage |');
+              console.log('|--------|----------|');
+              ['lines','statements','functions','branches'].forEach(k =>
+                console.log(\`| \${k} | \${s[k].pct}% |\`)
+              );
+            " >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload aggregated report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pipeline-aggregated-report-${{ github.sha }}
+          path: |
+            coverage/
+            test-reports/
+          retention-days: 30
+
+  # ── Stage 4: Pipeline dashboard comment on PR ─────────────────────────────
+  pipeline-dashboard:
+    name: Pipeline Dashboard
+    runs-on: ubuntu-latest
+    needs: [fast-checks, integration-tests, aggregate-and-analyze]
+    if: always() && github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const fast = '${{ needs.fast-checks.result }}';
+            const integration = '${{ needs.integration-tests.result }}';
+            const aggregate = '${{ needs.aggregate-and-analyze.result }}';
+            const icon = (s) => s === 'success' ? '✅' : s === 'skipped' ? '⏭️' : '❌';
+            const allPassed = [fast, integration].every(s => s === 'success');
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Test Automation Pipeline Report\n\n**Overall: ${allPassed ? '✅ PASS' : '❌ FAIL'}**\n\n| Stage | Status |\n|-------|--------|\n| Fast Checks (Parallel) | ${icon(fast)} ${fast} |\n| Integration Tests | ${icon(integration)} ${integration} |\n| Result Aggregation | ${icon(aggregate)} ${aggregate} |\n\nSee \`pipeline-aggregated-report\` artifact for full details.`
+            });

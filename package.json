@@ -24,18 +24,14 @@
     "test:mobile": "cd mobile-tests && node run-tests.js",
     "test:mutation": "stryker run",
     "test:mutation:track": "node mutation-reports/tracker.js",
-    "test:mutation:ci": "npm run test:mutation && npm run test:mutation:track"
-  },
-  "devDependencies": {
-    "@stryker-mutator/core": "^9.6.0",
-    "@stryker-mutator/vitest-runner": "^9.6.0",
+    "test:mutation:ci": "npm run test:mutation && npm run test:mutation:track",
     "test:environments": "vitest run --config vitest.environments.config.js",
     "env:provision": "node test-environments/cli.js provision",
     "env:status": "node test-environments/cli.js status",
     "env:cleanup": "node test-environments/cli.js cleanup",
-    "env:list": "node test-environments/cli.js list"
+    "env:list": "node test-environments/cli.js list",
     "test:property": "vitest run --config vitest.property.config.js",
-    "test:property:watch": "vitest --config vitest.property.config.js"
+    "test:property:watch": "vitest --config vitest.property.config.js",
     "test:contracts:consumer": "vitest run --config vitest.contracts.config.js contracts/consumer",
     "test:contracts:provider": "vitest run --config vitest.contracts.config.js contracts/provider",
     "test:contracts:registry": "vitest run --config vitest.contracts.config.js contracts/registry.test.js",
@@ -43,6 +39,8 @@
   },
   "devDependencies": {
     "@pact-foundation/pact": "^16.3.0",
+    "@stryker-mutator/core": "^9.6.0",
+    "@stryker-mutator/vitest-runner": "^9.6.0",
     "@testing-library/jest-dom": "6.9.1",
     "@testing-library/react": "14.3.1",
     "@vitejs/plugin-react": "^6.0.1",
