@@ -12,6 +12,7 @@ model User {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   settings     Setting?
+  kycRecord    KYCRecord?
   sentTxs      Transaction[] @relation("sender")
   receivedTxs  Transaction[] @relation("recipient")
 }
@@ -51,4 +52,35 @@ model Setting {
   defaultAsset      String   @default("XLM")
   notificationsOn   Boolean  @default(true)
   updatedAt         DateTime @updatedAt
+}
+
+model KYCRecord {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String   @default("PENDING")  // PENDING | APPROVED | REJECTED | UNDER_REVIEW
+  fullName       String
+  dateOfBirth    String
+  nationality    String
+  documentType   String
+  documentNumber String
+  address        String
+  phoneNumber    String?
+  email          String?
+  riskScore      Int?
+  riskLevel      String?
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AMLAlert {
+  id            String   @id @default(uuid())
+  transactionId String
+  userId        String
+  ruleId        String
+  severity      String
+  description   String
+  riskScore     Int
+  riskLevel     String
+  createdAt     DateTime @default(now())
 }
