@@ -20,6 +20,7 @@ import webhookRoutes from './routes/webhooks.js';
 import metricsRoutes from './routes/metrics.js';
 import transactionRoutes from './routes/transactions.js';
 import complianceRoutes from './routes/compliance.js';
+import pathPaymentRoutes from './routes/pathPayment.js';
 import backupRoutes from './routes/backup.js';
 import { startScheduler } from './backup/manager.js';
 import cacheRoutes from './routes/cache.js';
@@ -74,6 +75,7 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/metrics', metricsRoutes);
 app.use('/api/transactions', transactionRoutes);
 app.use('/api/compliance', complianceRoutes);
+app.use('/api/path-payment', pathPaymentRoutes);
 app.use('/api/backup', backupRoutes);
 app.use('/api/cache', cacheRoutes);
 
