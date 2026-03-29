@@ -696,3 +696,69 @@ kbd {
   line-height: 1.5;
   margin: 2px 0;
 }
+
+/* FileUpload component */
+.fu-container { display: flex; flex-direction: column; gap: 10px; }
+
+.fu-dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 8px;
+  padding: 28px 16px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--surface);
+  transition: border-color 0.2s, background 0.2s;
+  outline: none;
+}
+.fu-dropzone:hover, .fu-dropzone:focus { border-color: var(--primary); }
+.fu-dropzone--active { border-color: var(--primary); background: var(--card); }
+
+.fu-dropzone-icon { font-size: 2rem; display: block; margin-bottom: 8px; }
+.fu-dropzone-text { font-size: 0.95rem; color: var(--text); margin-bottom: 4px; }
+.fu-dropzone-hint { font-size: 0.8rem; color: var(--muted); }
+
+.fu-error { color: var(--danger); font-size: 0.85rem; }
+
+.fu-file-list { display: flex; flex-direction: column; gap: 8px; }
+
+.fu-file-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--card);
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.fu-thumb { width: 44px; height: 44px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
+.fu-file-icon { font-size: 1.8rem; flex-shrink: 0; }
+
+.fu-file-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fu-file-name { font-size: 0.85rem; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fu-file-size { font-size: 0.75rem; color: var(--muted); }
+.fu-file-error { font-size: 0.75rem; color: var(--danger); }
+
+.fu-progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; }
+.fu-progress-fill { height: 100%; background: var(--primary); transition: width 0.2s; }
+
+.fu-status-icon { font-size: 1rem; flex-shrink: 0; }
+
+.fu-remove-btn {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.85rem;
+  padding: 4px 6px;
+  min-height: unset;
+  min-width: unset;
+  width: auto;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.fu-remove-btn:hover { color: var(--danger); background: none; }
+.fu-remove-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.fu-actions { display: flex; gap: 8px; }
+.fu-actions button { flex: 1; }

@@ -21,6 +21,7 @@ import { TransactionHistory } from './components/TransactionHistory';
 import { FeeDisplay } from './components/FeeDisplay';
 import { logError } from './utils/errorLogger';
 import { ImportAccountForm } from './components/ImportAccountForm';
+import { FileUpload } from './components/FileUpload';
 import { useTheme } from './contexts/ThemeContext';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
@@ -411,6 +412,12 @@ function App() {
             {/* Transaction History */}
             <motion.div variants={v.fadeSlide}>
               <TransactionHistory publicKey={account.publicKey} />
+            </motion.div>
+
+            {/* File Upload */}
+            <motion.div className="section" variants={v.fadeSlide}>
+              <h3>File Upload</h3>
+              <FileUpload />
             </motion.div>
 
           </motion.div>
