@@ -1,5 +1,6 @@
 import { body, param, validationResult } from 'express-validator';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
+import { sanitizeText, MAX_LENGTHS } from '../utils/sanitize.js';
 
 // Stellar public key: starts with G, 56 chars, base32
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
@@ -18,6 +19,23 @@ export function validate(req, res, next) {
 }
 
 export const rules = {
+  // Reusable sanitized free-text field rule
+  textField: (field, maxLength = MAX_LENGTHS.text) =>
+    body(field)
+      .optional()
+      .trim()
+      .isLength({ max: maxLength })
+      .withMessage(`${field} exceeds max length of ${maxLength}`)
+      .customSanitizer(v => sanitizeText(v, maxLength)),
+
+  memoField: () =>
+    body('memo')
+      .optional()
+      .trim()
+      .isLength({ max: MAX_LENGTHS.memo })
+      .withMessage(`Memo exceeds ${MAX_LENGTHS.memo} characters`)
+      .customSanitizer(v => sanitizeText(v, MAX_LENGTHS.memo)),
+
   publicKeyParam: param('publicKey')
     .trim()
     .matches(STELLAR_PUBLIC_KEY)

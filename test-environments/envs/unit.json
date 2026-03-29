@@ -1,0 +1,15 @@
+{
+  "name": "unit",
+  "version": "1.0.0",
+  "description": "Unit tests — no external dependencies",
+  "vars": {
+    "NODE_ENV": "test",
+    "STELLAR_NETWORK": "mock",
+    "PORT": "3100",
+    "LOG_LEVEL": "silent",
+    "JWT_SECRET": "test-secret-unit",
+    "DATABASE_URL": ""
+  },
+  "isolation": "process",
+  "cleanup": ["env"]
+}

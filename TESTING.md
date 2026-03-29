@@ -64,6 +64,7 @@ describe('formatAmount', () => {
 - **Mocks**: Use the `vi.mock()` function from Vitest to simulate Stellar SDK responses.
 - **Fixtures**: Store common test data (e.g., sample public keys) in a dedicated `tests/fixtures` directory if they are used across multiple tests.
 - **Environment**: Use a `.env.test` file for test-specific configurations.
+- **Privacy**: Use synthetic data only. Run `npm run test:privacy` (already part of `npm test`) and use helpers in `testing/privacy.js` to generate and redact sensitive values.
 
 ## 6. Troubleshooting Guide
 

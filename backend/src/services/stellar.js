@@ -3,7 +3,6 @@ import { eventMonitor } from '../eventSourcing/index.js';
 import { getConfig } from '../config/env.js';
 import logger from '../config/logger.js';
 import prisma from '../db/client.js';
-import { getConfig } from '../config/env.js';
 
 let horizonServerUrl;
 let horizonServer;
@@ -57,7 +56,6 @@ export async function createAccount() {
 export async function getBalance(publicKey) {
   logger.debug('stellar.getBalance', { publicKey });
   const account = await getHorizonServer().loadAccount(publicKey);
-  const account = await server.loadAccount(publicKey);
   const balances = account.balances.map(b => ({
     asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
     balance: b.balance
@@ -80,7 +78,6 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
   logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode });
 
   const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
-  const sourceAccount = await server.loadAccount(sourcePublicKey);
   
   if (assetCode !== 'XLM' && !assetIssuer) {
     throw new Error('ASSET_ISSUER is required for non-XLM payments');
@@ -267,6 +264,9 @@ export async function getFeeStats() {
     xlmUsd: xlmUsd ? xlmUsd.toFixed(4) : null,
     // Traditional wire transfer benchmark for comparison
     traditionalFeeUsd: 25,
+  };
+}
+
 export async function getTransactionHistory(publicKey, { limit = 10, cursor } = {}) {
   let call = getHorizonServer().transactions().forAccount(publicKey).limit(limit).order('desc');
   if (cursor) call = call.cursor(cursor);
@@ -306,10 +306,6 @@ export async function getNetworkStatus() {
     const status = {
       network: isTestnet() ? 'testnet' : 'mainnet',
       horizonUrl,
-    const root = await server.root();
-    const status = {
-      network: isTestnet ? 'testnet' : 'mainnet',
-      horizonUrl: process.env.HORIZON_URL,
       online: true,
       horizonVersion: root.horizon_version,
       networkPassphrase: root.network_passphrase,

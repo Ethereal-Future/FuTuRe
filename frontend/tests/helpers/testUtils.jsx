@@ -4,6 +4,7 @@
  */
 
 import { render } from '@testing-library/react';
+import { fakeStellarKeypair, fakeStellarPublicKey } from '../../../testing/privacy.js';
 
 /**
  * Thin render wrapper — returns all RTL queries plus the container.
@@ -28,10 +29,7 @@ export function createAxiosMock(overrides = {}) {
 }
 
 /** Stub account returned by POST /api/stellar/account/create */
-export const mockAccount = {
-  publicKey: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H',
-  secretKey: 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
-};
+export const mockAccount = fakeStellarKeypair();
 
 /** Stub balance returned by GET /api/stellar/account/:publicKey */
 export const mockBalance = {
@@ -47,7 +45,7 @@ export const mockPaymentResult = {
 };
 
 /** A valid Stellar public key for a recipient */
-export const mockRecipient = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOO';
+export const mockRecipient = fakeStellarPublicKey();
 
 /** Network status stub */
 export const mockNetworkStatus = {

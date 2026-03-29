@@ -6,7 +6,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./frontend/src/setupTests.js'],
+    setupFiles: ['./testing/vitest.privacy.setup.js', './frontend/src/setupTests.js'],
     include: ['**/*.{test,spec}.{js,jsx}'],
     coverage: {
       provider: 'v8',

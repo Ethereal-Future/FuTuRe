@@ -7,27 +7,51 @@ datasource db {
 }
 
 model User {
+  id                      String                   @id @default(uuid())
+  publicKey               String                   @unique
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  settings                Setting?
+  sentTxs                 Transaction[]            @relation("sender")
+  receivedTxs             Transaction[]            @relation("recipient")
+  notifications           Notification[]
+  notificationPreference  NotificationPreference?
   id           String        @id @default(uuid())
   publicKey    String        @unique
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   settings     Setting?
+  kycRecord    KYCRecord?
   sentTxs      Transaction[] @relation("sender")
   receivedTxs  Transaction[] @relation("recipient")
 }
 
 model Transaction {
-  id          String   @id @default(uuid())
-  hash        String   @unique
-  assetCode   String   @default("XLM")
-  amount      Decimal
-  ledger      Int?
-  successful  Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  senderId    String
-  sender      User     @relation("sender",    fields: [senderId],    references: [id])
-  recipientId String
-  recipient   User     @relation("recipient", fields: [recipientId], references: [id])
+  id            String          @id @default(uuid())
+  hash          String          @unique
+  assetCode     String          @default("XLM")
+  amount        Decimal
+  ledger        Int?
+  successful    Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  senderId      String
+  sender        User            @relation("sender",    fields: [senderId],    references: [id])
+  recipientId   String
+  recipient     User            @relation("recipient", fields: [recipientId], references: [id])
+  retryAttempts Int             @default(0)
+  retryStatus   String?
+  lastRetryAt   DateTime?
+  retryHistory  RetryAttempt[]
+}
+
+model RetryAttempt {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  errorType     String
+  errorMessage  String
+  timestamp     DateTime    @default(now())
 }
 
 model Setting {
@@ -37,4 +61,64 @@ model Setting {
   defaultAsset      String   @default("XLM")
   notificationsOn   Boolean  @default(true)
   updatedAt         DateTime @updatedAt
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  channel   String
+  status    String   @default("sent")
+  title     String?
+  body      String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+}
+
+model NotificationPreference {
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled     Boolean  @default(true)
+  pushEnabled      Boolean  @default(true)
+  smsEnabled       Boolean  @default(false)
+  inAppEnabled     Boolean  @default(true)
+  quietHoursStart  Int      @default(22)
+  quietHoursEnd    Int      @default(7)
+  typeOverrides    Json?
+  updatedAt        DateTime @updatedAt
+model KYCRecord {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String   @default("PENDING")  // PENDING | APPROVED | REJECTED | UNDER_REVIEW
+  fullName       String
+  dateOfBirth    String
+  nationality    String
+  documentType   String
+  documentNumber String
+  address        String
+  phoneNumber    String?
+  email          String?
+  riskScore      Int?
+  riskLevel      String?
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AMLAlert {
+  id            String   @id @default(uuid())
+  transactionId String
+  userId        String
+  ruleId        String
+  severity      String
+  description   String
+  riskScore     Int
+  riskLevel     String
+  createdAt     DateTime @default(now())
 }
