@@ -53,6 +53,7 @@ function App() {
   const { canInstall, install, updateAvailable, applyUpdate } = usePWA();
   const { queue: queueOffline, pendingCount } = useOfflineQueue();
   const { theme, isDark, toggleTheme } = useTheme();
+  useRTL();
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
@@ -212,6 +213,7 @@ function App() {
           >
             {isDark ? '☀️ Light' : '🌙 Dark'}
           </button>
+          <LanguageSelector />
           {canInstall && (
             <button type="button" className="pwa-install-btn" onClick={install} title="Install app">
               ⬇ Install
