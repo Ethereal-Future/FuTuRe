@@ -57,7 +57,12 @@ export async function createAccount() {
   logger.info('stellar.createAccount', { publicKey });
   
   if (isTestnet()) {
-    await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+    const response = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+    if (!response.ok) {
+      const errorBody = typeof response.text === 'function' ? await response.text() : '';
+      const details = errorBody || response.statusText || 'Unknown Friendbot error';
+      throw new Error(`Friendbot funding failed (${response.status}): ${details}`);
+    }
     logger.debug('stellar.friendbotFunded', { publicKey });
     await eventMonitor.publishEvent(publicKey, {
       type: 'AccountFunded',

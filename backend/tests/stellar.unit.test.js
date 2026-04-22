@@ -232,11 +232,10 @@ describe('Stellar Service Unit Tests', () => {
       );
     });
 
-    it('should handle friendbot failure gracefully', async () => {
+    it('should throw when friendbot funding fails', async () => {
       global.fetch = vi.fn(() => Promise.resolve({ ok: false, statusText: 'Bad Request' }));
       
-      // Should not throw, just log warning
-      await expect(stellarService.createAccount()).resolves.toBeDefined();
+      await expect(stellarService.createAccount()).rejects.toThrow(/Friendbot funding failed/);
     });
 
     it('should publish AccountCreated event', async () => {
