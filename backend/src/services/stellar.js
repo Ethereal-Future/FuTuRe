@@ -4,14 +4,51 @@ import { getConfig } from '../config/env.js';
 import logger from '../config/logger.js';
 import prisma from '../db/client.js';
 
-// In-memory fee bump usage stats for admin dashboard
-const feeBumpStats = { total: 0, totalFeeStroops: 0, accounts: new Set() };
+let feeBumpTableReady = false;
 
-export function getFeeBumpStats() {
+async function ensureFeeBumpUsageTable() {
+  if (feeBumpTableReady) return;
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS fee_bump_usage (
+      id BIGSERIAL PRIMARY KEY,
+      account_public_key TEXT NOT NULL,
+      fee_stroops INTEGER NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  feeBumpTableReady = true;
+}
+
+async function recordFeeBumpUsage(accountPublicKey, feeStroops) {
+  try {
+    await ensureFeeBumpUsageTable();
+    await prisma.$executeRawUnsafe(
+      `
+        INSERT INTO fee_bump_usage (account_public_key, fee_stroops)
+        VALUES ($1, $2)
+      `,
+      accountPublicKey,
+      feeStroops
+    );
+  } catch (error) {
+    logger.warn('stellar.feeBump.stats.persist.failed', { error: error.message });
+  }
+}
+
+export async function getFeeBumpStats() {
+  await ensureFeeBumpUsageTable();
+  const rows = await prisma.$queryRawUnsafe(`
+    SELECT
+      COUNT(*)::BIGINT AS total,
+      COALESCE(SUM(fee_stroops), 0)::BIGINT AS total_fee_stroops,
+      COUNT(DISTINCT account_public_key)::BIGINT AS unique_accounts
+    FROM fee_bump_usage
+  `);
+  const stats = rows?.[0] ?? {};
   return {
-    total: feeBumpStats.total,
-    totalFeeStroops: feeBumpStats.totalFeeStroops,
-    uniqueAccounts: feeBumpStats.accounts.size,
+    total: Number(stats.total ?? 0),
+    totalFeeStroops: Number(stats.total_fee_stroops ?? 0),
+    uniqueAccounts: Number(stats.unique_accounts ?? 0),
   };
 }
 
@@ -151,10 +188,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
         xlmBalance: xlmAmount,
         threshold: feeBumpThreshold,
       });
-      // Track stats for cost monitoring
-      feeBumpStats.total += 1;
-      feeBumpStats.totalFeeStroops += StellarSDK.BASE_FEE * 10;
-      feeBumpStats.accounts.add(sourcePublicKey);
+      await recordFeeBumpUsage(sourcePublicKey, StellarSDK.BASE_FEE * 10);
     }
   }
 
