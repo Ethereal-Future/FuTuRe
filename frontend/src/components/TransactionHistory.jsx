@@ -57,7 +57,6 @@ function TxModal({ tx, onClose }) {
       className="tx-overlay"
       onClick={onClose}
       initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-      aria-hidden="true"
     >
       <motion.div
         ref={modalRef}
