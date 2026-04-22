@@ -25,6 +25,9 @@ vi.mock('@stellar/stellar-sdk', () => ({
     payment: vi.fn(),
     changeTrust: vi.fn(),
   },
+  Memo: {
+    text: vi.fn((value) => ({ type: 'text', value })),
+  },
   Networks: {
     TESTNET: 'Test SDF Network ; September 2015',
     PUBLIC: 'Public Global Stellar Network ; September 2015',
@@ -119,6 +122,7 @@ describe('Stellar Service Unit Tests', () => {
     
     mockTransactionBuilder = {
       addOperation: vi.fn().mockReturnThis(),
+      addMemo: vi.fn().mockReturnThis(),
       setTimeout: vi.fn().mockReturnThis(),
       build: vi.fn(() => mockTransaction),
     };
@@ -186,6 +190,7 @@ describe('Stellar Service Unit Tests', () => {
     StellarSDK.TransactionBuilder.mockReturnValue(mockTransactionBuilder);
     StellarSDK.Operation.payment.mockReturnValue({});
     StellarSDK.Operation.changeTrust.mockReturnValue({});
+    StellarSDK.Memo.text.mockImplementation((value) => ({ type: 'text', value }));
     
     // Import the service
     stellarService = await import('../src/services/stellar.js');
@@ -340,6 +345,18 @@ describe('Stellar Service Unit Tests', () => {
       
       expect(result).toHaveProperty('hash');
       expect(result.success).toBe(true);
+    });
+
+    it('should include memo when sending payment', async () => {
+      const sourceSecret = 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH';
+      const destination = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6';
+      const amount = '10';
+      const memo = 'Invoice 123';
+
+      await stellarService.sendPayment(sourceSecret, destination, amount, 'XLM', memo);
+
+      expect(StellarSDK.Memo.text).toHaveBeenCalledWith(memo);
+      expect(mockTransactionBuilder.addMemo).toHaveBeenCalled();
     });
 
     it('should throw error for non-XLM without asset issuer', async () => {

@@ -102,7 +102,7 @@ export async function getBalance(publicKey) {
   return { publicKey, balances };
 }
 
-export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM') {
+export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = '') {
   const { assetIssuer } = getConfig().stellar;
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
@@ -129,6 +129,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
       asset,
       amount: amount.toString()
     }))
+    .addMemo(StellarSDK.Memo.text(memo || ''))
     .setTimeout(30)
     .build();
   
@@ -172,6 +173,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     destination,
     amount,
     assetCode,
+    memo: memo || null,
     hash: result.hash,
     ledger: result.ledger,
     feeBump: usedFeeBump,
@@ -179,7 +181,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
 
   await eventMonitor.publishEvent(sourcePublicKey, {
     type: 'PaymentSent',
-    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump },
+    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump, memo: memo || null },
     version: 1
   });
 

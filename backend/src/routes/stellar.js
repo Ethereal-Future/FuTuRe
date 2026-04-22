@@ -127,8 +127,8 @@ router.get('/account/:publicKey', rules.publicKeyParam, validate,
  */
 router.post('/payment/send', rules.sendPayment, validate, async (req, res) => {
   try {
-    const { sourceSecret, destination, amount, assetCode } = req.body;
-    const result = await StellarService.sendPayment(sourceSecret, destination, amount, assetCode);
+    const { sourceSecret, destination, amount, assetCode, memo } = req.body;
+    const result = await StellarService.sendPayment(sourceSecret, destination, amount, assetCode, memo);
 
     const notification = { type: 'transaction', hash: result.hash, amount, assetCode: assetCode || 'XLM', timestamp: Date.now() };
 
