@@ -58,6 +58,12 @@ describe('KYC Testing', () => {
     ).rejects.toThrow(/Missing required KYC fields/);
   });
 
+  it('rejects KYC submission with invalid date of birth', async () => {
+    await expect(
+      kycCollector.submitKYC('user-2b', { ...validKYC, dateOfBirth: 'yesterday' })
+    ).rejects.toThrow(/dateOfBirth must be a valid date/);
+  });
+
   it('retrieves an existing KYC record', async () => {
     await kycCollector.submitKYC('user-3', validKYC);
     const record = await kycCollector.getKYCRecord('user-3');
