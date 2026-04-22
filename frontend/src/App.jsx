@@ -10,6 +10,7 @@ import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
+import { useRTL } from './hooks/useRTL';
 import { makeVariants, tapScale } from './utils/animations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
