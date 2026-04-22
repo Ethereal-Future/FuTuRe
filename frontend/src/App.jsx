@@ -19,6 +19,7 @@ import { CopyButton } from './components/CopyButton';
 import { Spinner } from './components/Spinner';
 import { TransactionHistory } from './components/TransactionHistory';
 import { FeeDisplay } from './components/FeeDisplay';
+import { getOptimisticXlmBalance } from './utils/stellarFee';
 import { logError } from './utils/errorLogger';
 import { ImportAccountForm } from './components/ImportAccountForm';
 import { FileUpload } from './components/FileUpload';
@@ -158,7 +159,7 @@ function App() {
     const numAmount = parseFloat(amount);
     if (xlmBalance !== null) {
       const optimisticBalances = balance.balances.map(b =>
-        b.asset === 'XLM' ? { ...b, balance: String((parseFloat(b.balance) - numAmount).toFixed(7)) } : b
+        b.asset === 'XLM' ? { ...b, balance: getOptimisticXlmBalance(b.balance, numAmount) } : b
       );
       dispatch({ type: A.SET_BALANCE_OPTIMISTIC, payload: { balances: optimisticBalances } });
     }
