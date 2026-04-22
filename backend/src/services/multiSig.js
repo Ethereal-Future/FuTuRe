@@ -1,12 +1,16 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import { eventMonitor } from '../eventSourcing/index.js';
+import { getConfig } from '../config/env.js';
 
 dotenv.config();
 
 const server = new StellarSDK.Horizon.Server(process.env.HORIZON_URL);
-const isTestnet = process.env.STELLAR_NETWORK === 'testnet';
-const networkPassphrase = isTestnet ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC;
+function getNetworkPassphrase() {
+  return getConfig().stellar.network === 'testnet'
+    ? StellarSDK.Networks.TESTNET
+    : StellarSDK.Networks.PUBLIC;
+}
 
 // In-memory store for pending multi-sig transactions (replace with DB in production)
 const pendingTransactions = new Map();
@@ -24,7 +28,7 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
 
   const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
-    networkPassphrase,
+    networkPassphrase: getNetworkPassphrase(),
   });
 
   // Set thresholds and master weight
@@ -88,7 +92,7 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
 
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
-    networkPassphrase,
+    networkPassphrase: getNetworkPassphrase(),
   })
     .addOperation(
       StellarSDK.Operation.payment({
@@ -140,7 +144,7 @@ export async function addSignature(txId, signerSecret) {
     throw new Error(`Signer ${signerPublicKey} has already signed this transaction`);
   }
 
-  const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, networkPassphrase);
+  const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, getNetworkPassphrase());
   transaction.sign(signerKeypair);
 
   // Update stored XDR with new signature
@@ -170,7 +174,7 @@ export async function submitMultiSigTransaction(txId) {
   if (!pending) throw new Error(`Transaction ${txId} not found`);
   if (pending.status !== 'pending') throw new Error(`Transaction ${txId} is already ${pending.status}`);
 
-  const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, networkPassphrase);
+  const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, getNetworkPassphrase());
   const result = await server.submitTransaction(transaction);
 
   pending.status = result.successful ? 'submitted' : 'failed';
@@ -200,7 +204,7 @@ export async function submitMultiSigTransaction(txId) {
  * Verify that a transaction XDR has valid signatures from the expected signers.
  */
 export function verifySignatures(txXdr, expectedSigners) {
-  const transaction = StellarSDK.TransactionBuilder.fromXDR(txXdr, networkPassphrase);
+  const transaction = StellarSDK.TransactionBuilder.fromXDR(txXdr, getNetworkPassphrase());
   const txHash = transaction.hash();
 
   const results = expectedSigners.map((publicKey) => {
@@ -254,7 +258,7 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
 
   const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
-    networkPassphrase,
+    networkPassphrase: getNetworkPassphrase(),
   });
 
   if (updates.thresholds || updates.masterWeight !== undefined) {
