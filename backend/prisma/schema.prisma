@@ -93,6 +93,9 @@ model PaymentStream {
   metadata        Json?
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
+  @@index([status, lastProcessedAt])
+}
+
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -122,6 +125,8 @@ model NotificationPreference {
   quietHoursEnd    Int      @default(7)
   typeOverrides    Json?
   updatedAt        DateTime @updatedAt
+}
+
 model KYCRecord {
   id             String   @id @default(uuid())
   userId         String   @unique
