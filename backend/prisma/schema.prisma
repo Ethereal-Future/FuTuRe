@@ -128,7 +128,7 @@ model KYCRecord {
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   status         String   @default("PENDING")  // PENDING | APPROVED | REJECTED | UNDER_REVIEW
   fullName       String
-  dateOfBirth    String
+  dateOfBirth    DateTime
   nationality    String
   documentType   String
   documentNumber String

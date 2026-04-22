@@ -16,12 +16,21 @@ class KYCCollector {
     return path.join(KYC_DIR, `${userId}.json`);
   }
 
+  _normalizeDateOfBirth(value) {
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) throw new Error('dateOfBirth must be a valid date');
+    const today = new Date();
+    if (parsed > today) throw new Error('dateOfBirth cannot be in the future');
+    return parsed.toISOString();
+  }
+
   async submitKYC(userId, data) {
     await this.initialize();
 
     const required = ['fullName', 'dateOfBirth', 'nationality', 'documentType', 'documentNumber', 'address'];
     const missing = required.filter(f => !data[f]);
     if (missing.length) throw new Error(`Missing required KYC fields: ${missing.join(', ')}`);
+    const dateOfBirth = this._normalizeDateOfBirth(data.dateOfBirth);
 
     const record = {
       userId,
@@ -30,7 +39,7 @@ class KYCCollector {
       updatedAt: new Date().toISOString(),
       data: {
         fullName: data.fullName,
-        dateOfBirth: data.dateOfBirth,
+        dateOfBirth,
         nationality: data.nationality,
         documentType: data.documentType,   // PASSPORT | NATIONAL_ID | DRIVERS_LICENSE
         documentNumber: data.documentNumber,
