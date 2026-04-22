@@ -75,6 +75,12 @@ export const rules = {
       .withMessage('Invalid asset code')
       .isIn(SUPPORTED_ASSETS)
       .withMessage(`Unsupported asset. Supported: ${SUPPORTED_ASSETS.join(', ')}`),
+    body('memo')
+      .optional()
+      .trim()
+      .custom((value) => Buffer.byteLength(value, 'utf8') <= MAX_LENGTHS.memo)
+      .withMessage(`Memo exceeds ${MAX_LENGTHS.memo} bytes`)
+      .customSanitizer(v => sanitizeText(v, MAX_LENGTHS.memo)),
   ],
 
   createTrustline: [

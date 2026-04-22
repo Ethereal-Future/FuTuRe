@@ -42,6 +42,7 @@ function App() {
   const [balance, setBalance] = useState(null);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  const [memo, setMemo] = useState('');
   const [loading, setLoading] = useState('');
   const [showQR, setShowQR] = useState(false);
   const [showShortcuts, setShowShortcuts] = useState(false);
@@ -102,6 +103,7 @@ function App() {
   const clearForm = () => {
     if ((recipient || amount) && !window.confirm('Clear the payment form?')) return;
     resetForm();
+    setMemo('');
   };
 
   const createAccount = async () => {
@@ -152,7 +154,7 @@ function App() {
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     setLoading('send');
-    const payload = { sourceSecret: account.secretKey, destination: recipient, amount, assetCode: 'XLM' };
+    const payload = { sourceSecret: account.secretKey, destination: recipient, amount, assetCode: 'XLM', memo };
 
     // Optimistic balance update
     const numAmount = parseFloat(amount);
@@ -452,6 +454,17 @@ function App() {
                     </motion.p>
                   )}
                 </AnimatePresence>
+                <div className="input-wrap">
+                  <input
+                    type="text"
+                    placeholder="Memo (optional, max 28 bytes)"
+                    value={memo}
+                    maxLength={28}
+                    onChange={(e) => setMemo(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
+                    aria-label="Payment memo"
+                  />
+                </div>
                 <FeeDisplay amount={amount} visible={amountValid} />
                 <div style={{ display: 'flex', gap: 8 }}>
                   <motion.button onClick={sendPayment} {...tap} disabled={!recipientValid || !amountValid || loading === 'send'}>
@@ -592,6 +605,19 @@ function App() {
                         </motion.p>
                       )}
                     </AnimatePresence>
+                    <div className="input-wrap">
+                      <label htmlFor="memo-input" className="sr-only">Payment memo</label>
+                      <input
+                        id="memo-input"
+                        type="text"
+                        placeholder="Memo (optional, max 28 bytes)"
+                        value={memo}
+                        maxLength={28}
+                        onChange={(e) => setMemo(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
+                        aria-label="Payment memo"
+                      />
+                    </div>
 
                     <FeeDisplay amount={amount} visible={amountValid} />
                     <div style={{ display: 'flex', gap: 8 }}>

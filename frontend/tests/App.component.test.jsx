@@ -283,6 +283,7 @@ describe('App — send payment form interactions', () => {
         destination: mockRecipient,
         amount: '10',
         assetCode: 'XLM',
+        memo: '',
       })
     );
   });
