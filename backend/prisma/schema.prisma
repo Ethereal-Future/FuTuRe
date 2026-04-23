@@ -152,3 +152,16 @@ model AMLAlert {
   riskLevel     String
   createdAt     DateTime @default(now())
 }
+
+model PendingMultiSigTx {
+  txId            String   @id
+  txXdr           String
+  sourcePublicKey String
+  destination     String
+  amount          String
+  assetCode       String   @default("XLM")
+  signatures      Json     @default("[]")
+  status          String   @default("pending")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
