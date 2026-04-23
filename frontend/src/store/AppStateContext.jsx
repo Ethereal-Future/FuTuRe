@@ -34,7 +34,10 @@ export function AppStateProvider({ children }) {
   const syncedDispatch = useCallback((action) => {
     dispatch(action);
     if ([A.SET_ACCOUNT, A.CLEAR_ACCOUNT, A.SET_BALANCE].includes(action.type)) {
-      syncRef.current?.broadcast(action);
+      const safeAction = action.type === A.SET_ACCOUNT
+        ? { ...action, payload: { ...action.payload, secretKey: undefined } }
+        : action;
+      syncRef.current?.broadcast(safeAction);
     }
   }, []);
 
