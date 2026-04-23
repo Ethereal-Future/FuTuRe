@@ -21,6 +21,7 @@ import { TransactionHistory } from './components/TransactionHistory';
 import { FeeDisplay } from './components/FeeDisplay';
 import { logError } from './utils/errorLogger';
 import { ImportAccountForm } from './components/ImportAccountForm';
+import { LanguageSelector } from './components/LanguageSelector';
 import { FileUpload } from './components/FileUpload';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
