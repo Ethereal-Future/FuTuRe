@@ -219,6 +219,9 @@ router.get('/exchange-rate/:from/:to', rules.assetCodeParams, validate,
     try {
       const { from, to } = req.params;
       const rate = await getRate(from, to);
+      if (rate === null) {
+        return res.status(503).json({ error: `Exchange rate unavailable for ${from}/${to}: no liquidity in orderbook` });
+      }
       res.json({ from, to, rate });
     } catch (error) {
       res.status(500).json({ error: error.message });
