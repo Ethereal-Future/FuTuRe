@@ -9,16 +9,19 @@ const ASSETS = {
   },
 };
 
-const isTestnet = process.env.STELLAR_NETWORK === 'testnet';
-const network = isTestnet ? 'testnet' : 'mainnet';
+import { getConfig } from './env.js';
 
 /**
  * Returns the issuer public key for a supported non-native asset.
  * Falls back to ASSET_ISSUER env var for custom assets.
  */
 export function getIssuer(assetCode) {
-  return ASSETS[network][assetCode] ?? process.env.ASSET_ISSUER ?? null;
+  const network = getConfig().stellar.network;
+  return ASSETS[network]?.[assetCode] ?? process.env.ASSET_ISSUER ?? null;
 }
 
 /** Returns the list of supported asset codes (including XLM). */
-export const SUPPORTED_ASSETS = ['XLM', ...Object.keys(ASSETS[network])];
+export function getSupportedAssets() {
+  const network = getConfig().stellar.network;
+  return ['XLM', ...Object.keys(ASSETS[network] ?? {})];
+}

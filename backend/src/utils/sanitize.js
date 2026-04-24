@@ -33,9 +33,13 @@ export const MAX_LENGTHS = {
   username: 32,
   text: 500,
   memo: 28,       // Stellar memo text limit
+  memoId: 18,     // uint64 max is 18446744073709551615 (20 digits), but safe integer is 18 digits
   address: 256,
   default: 1000,
 };
+
+/** Allowed Stellar memo types supported by this application. */
+export const MEMO_TYPES = ['text', 'id'];
 
 /**
  * Truncates a string to the given max length.

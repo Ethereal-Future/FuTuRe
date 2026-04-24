@@ -11,6 +11,8 @@ export const A = {
   SET_LOADING: 'SET_LOADING',
   SET_RECIPIENT: 'SET_RECIPIENT',
   SET_AMOUNT: 'SET_AMOUNT',
+  SET_MEMO: 'SET_MEMO',
+  SET_MEMO_TYPE: 'SET_MEMO_TYPE',
   RESET_FORM: 'RESET_FORM',
   SET_SHOW_QR: 'SET_SHOW_QR',
   SET_SHOW_IMPORT: 'SET_SHOW_IMPORT',
@@ -30,6 +32,8 @@ export const initialState = {
   loading: '',         // 'create' | 'balance' | 'send' | 'import' | ''
   recipient: '',
   amount: '',
+  memo: '',
+  memoType: 'text',    // 'text' | 'id'
   showQR: false,
   showImportForm: false,
   showShortcuts: false,
@@ -55,8 +59,12 @@ export function appReducer(state, action) {
       return { ...state, recipient: action.payload };
     case A.SET_AMOUNT:
       return { ...state, amount: action.payload };
+    case A.SET_MEMO:
+      return { ...state, memo: action.payload };
+    case A.SET_MEMO_TYPE:
+      return { ...state, memoType: action.payload };
     case A.RESET_FORM:
-      return { ...state, recipient: '', amount: '' };
+      return { ...state, recipient: '', amount: '', memo: '', memoType: 'text' };
     case A.SET_SHOW_QR:
       return { ...state, showQR: action.payload };
     case A.SET_SHOW_IMPORT:

@@ -3,6 +3,7 @@ import logger from '../config/logger.js';
 import { getIssuer, SUPPORTED_ASSETS } from '../config/assets.js';
 import { broadcastToAccount } from './websocket.js';
 import { onConfigChange } from '../config/env.js';
+import { getHorizonServer } from './stellar.js';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -79,12 +80,9 @@ async function fetchFromCoinGecko(from, to) {
 // ---------------------------------------------------------------------------
 async function fetchFromStellarDex(from, to) {
   try {
-    const horizonUrl = process.env.HORIZON_URL;
-    if (!horizonUrl) return null;
-    const horizonServer = new StellarSDK.Horizon.Server(horizonUrl);
     const fromAsset = from === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(from, getIssuer(from));
     const toAsset   = to   === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(to,   getIssuer(to));
-    const orderbook = await horizonServer.orderbook(fromAsset, toAsset).call();
+    const orderbook = await getHorizonServer().orderbook(fromAsset, toAsset).call();
     const rate = orderbook.asks?.[0]?.price ? parseFloat(orderbook.asks[0].price) : null;
     if (rate != null) logger.debug('exchangeRate.stellarDex', { from, to, rate });
     return rate;

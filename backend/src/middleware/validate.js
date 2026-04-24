@@ -1,6 +1,6 @@
 import { body, param, validationResult } from 'express-validator';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
-import { sanitizeText, MAX_LENGTHS } from '../utils/sanitize.js';
+import { sanitizeText, MAX_LENGTHS, MEMO_TYPES } from '../utils/sanitize.js';
 
 // Stellar public key: starts with G, 56 chars, base32
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
@@ -35,6 +35,17 @@ export const rules = {
       .isLength({ max: MAX_LENGTHS.memo })
       .withMessage(`Memo exceeds ${MAX_LENGTHS.memo} characters`)
       .customSanitizer(v => sanitizeText(v, MAX_LENGTHS.memo)),
+
+  publicKeyBody: body('publicKey')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid Stellar public key'),
+  memoTypeField: () =>
+    body('memoType')
+      .optional()
+      .trim()
+      .isIn(MEMO_TYPES)
+      .withMessage(`memoType must be one of: ${MEMO_TYPES.join(', ')}`),
 
   publicKeyParam: param('publicKey')
     .trim()
@@ -76,6 +87,17 @@ export const rules = {
       .isIn(SUPPORTED_ASSETS)
       .withMessage(`Unsupported asset. Supported: ${SUPPORTED_ASSETS.join(', ')}`),
     rules.memoField(),
+    rules.memoTypeField(),
+    // Cross-field: memo type 'id' requires a numeric memo value
+    body('memo').custom((memo, { req }) => {
+      const memoType = req.body.memoType;
+      if (memoType === 'id') {
+        if (!memo) throw new Error('Memo is required when memoType is "id"');
+        if (!/^\d{1,20}$/.test(memo)) throw new Error('Memo must be a numeric ID when memoType is "id"');
+        if (BigInt(memo) > 18446744073709551615n) throw new Error('Memo ID exceeds maximum uint64 value');
+      }
+      return true;
+    }),
   ],
 
   createTrustline: [

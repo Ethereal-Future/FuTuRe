@@ -26,9 +26,10 @@ export function wrapWithFeeBump(innerTx, feeAccountSecret) {
     ? StellarSDK.Networks.TESTNET
     : StellarSDK.Networks.PUBLIC;
 
+  const multiplier = parseInt(process.env.FEE_BUMP_MULTIPLIER ?? '10', 10);
   const feeBumpTx = StellarSDK.TransactionBuilder.buildFeeBumpTransaction(
     feeKeypair,
-    StellarSDK.BASE_FEE * 10, // fee bump pays 10x base fee
+    StellarSDK.BASE_FEE * multiplier,
     innerTx,
     networkPassphrase
   );
@@ -39,7 +40,7 @@ export function wrapWithFeeBump(innerTx, feeAccountSecret) {
 let horizonServerUrl;
 let horizonServer;
 
-function getHorizonServer() {
+export function getHorizonServer() {
   const { horizonUrl } = getConfig().stellar;
   if (!horizonServer || horizonUrl !== horizonServerUrl) {
     horizonServerUrl = horizonUrl;
@@ -48,8 +49,16 @@ function getHorizonServer() {
   return horizonServer;
 }
 
-function isTestnet() {
+export function isTestnet() {
   return getConfig().stellar.network === 'testnet';
+}
+
+export async function fundAccount(publicKey) {
+  if (!isTestnet()) throw new Error('Only available on testnet');
+  const res = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+  if (!res.ok) throw new Error(`Friendbot funding failed: ${res.status} ${res.statusText}`);
+  logger.debug('stellar.friendbotFunded', { publicKey });
+  return { funded: true, publicKey };
 }
 
 export async function createAccount() {
@@ -97,20 +106,15 @@ export async function getBalance(publicKey) {
   }));
 
   logger.info('stellar.balanceFetched', { publicKey, balances });
-  await eventMonitor.publishEvent(publicKey, {
-    type: 'BalanceChecked',
-    data: { balances },
-    version: 1
-  });
 
   return { publicKey, balances };
 }
 
-export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = null) {
+export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = null, memoType = 'text') {
   const { assetIssuer } = getConfig().stellar;
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
-  logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode, memo });
+  logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode, memo, memoType });
 
   const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
   
@@ -135,7 +139,10 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     }));
 
   if (memo) {
-    txBuilder.addMemo(StellarSDK.Memo.text(memo));
+    const stellarMemo = memoType === 'id'
+      ? StellarSDK.Memo.id(memo)
+      : StellarSDK.Memo.text(memo);
+    txBuilder.addMemo(stellarMemo);
   }
 
   const transaction = txBuilder.setTimeout(30).build();
@@ -161,7 +168,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
       });
       // Track stats for cost monitoring
       feeBumpStats.total += 1;
-      feeBumpStats.totalFeeStroops += StellarSDK.BASE_FEE * 10;
+      feeBumpStats.totalFeeStroops += StellarSDK.BASE_FEE * parseInt(process.env.FEE_BUMP_MULTIPLIER ?? '10', 10);
       feeBumpStats.accounts.add(sourcePublicKey);
     }
   }
@@ -169,7 +176,6 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
   let result;
   try {
     result = await getHorizonServer().submitTransaction(txToSubmit);
-    result = await getHorizonServer().submitTransaction(transaction);
   } catch (err) {
     logger.error('stellar.sendPayment.failed', { source: sourcePublicKey, destination, amount, assetCode, error: err.message });
     throw err;
@@ -184,11 +190,12 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     ledger: result.ledger,
     feeBump: usedFeeBump,
     memo,
+    memoType,
   });
 
   await eventMonitor.publishEvent(sourcePublicKey, {
     type: 'PaymentSent',
-    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump, memo },
+    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump, memo, memoType },
     version: 1
   });
 
@@ -207,6 +214,8 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
         successful: result.successful,
         senderId: sender.id,
         recipientId: recipient.id,
+        memo: memo ?? null,
+        memoType: memo ? (memoType || 'text') : null,
       },
     });
   }).catch(err => logger.warn('db.transaction.save.failed', { error: err.message }));

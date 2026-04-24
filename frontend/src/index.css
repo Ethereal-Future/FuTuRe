@@ -885,3 +885,76 @@ kbd {
 }
 .replay-modal__hint { font-size: 0.78rem; color: #6b7280; }
 .replay-modal__actions { display: flex; gap: 8px; }
+
+/* Confirm Send Dialog */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+.modal {
+  background: var(--card, #fff);
+  color: var(--text, #111);
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  outline: none;
+}
+.modal-sm  { max-width: 380px; }
+.modal-md  { max-width: 520px; }
+.modal-lg  { max-width: 720px; }
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-title { margin: 0; font-size: 1.1rem; }
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  color: var(--text-secondary, #6b7280);
+  padding: 4px;
+  line-height: 1;
+}
+.modal-close:hover { color: var(--danger, #ef4444); }
+.modal-body { display: flex; flex-direction: column; gap: 16px; }
+
+.confirm-dialog__summary {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.confirm-dialog__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.9rem;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border, #e5e7eb);
+}
+.confirm-dialog__row:last-child { border-bottom: none; }
+.confirm-dialog__row dt { color: var(--text-secondary, #6b7280); flex-shrink: 0; }
+.confirm-dialog__row dd { margin: 0; font-weight: 500; text-align: right; word-break: break-all; }
+.confirm-dialog__row--total dt,
+.confirm-dialog__row--total dd { font-weight: 700; }
+.confirm-dialog__usd { font-size: 0.8rem; color: var(--text-secondary, #6b7280); margin-left: 4px; }
+
+.confirm-dialog__actions {
+  display: flex;
+  gap: 8px;
+}
+.confirm-dialog__btn-confirm { flex: 1; }
+.confirm-dialog__btn-cancel  { flex: 1; }

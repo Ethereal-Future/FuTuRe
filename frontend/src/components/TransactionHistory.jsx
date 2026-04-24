@@ -95,7 +95,7 @@ export function TransactionHistory({ publicKey }) {
   const [loading, setLoading] = useState(false);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState(null);
-  const [filters, setFilters] = useState({ type: '', dateFrom: '', dateTo: '' });
+  const [filters, setFilters] = useState({ type: '', dateFrom: '', dateTo: '', hash: '' });
   const [cursors, setCursors] = useState([]); // ring-buffer for back-pagination (max 50)
   const [error, setError] = useState(null);
 
@@ -110,6 +110,7 @@ export function TransactionHistory({ publicKey }) {
       if (filters.type) params.type = filters.type;
       if (filters.dateFrom) params.dateFrom = filters.dateFrom;
       if (filters.dateTo) params.dateTo = filters.dateTo;
+      if (filters.hash) params.hash = filters.hash;
       const { data } = await axios.get(`/api/stellar/account/${publicKey}/transactions`, { params });
       setTxs(data.records);
       setNextCursor(data.nextCursor);
@@ -184,6 +185,16 @@ export function TransactionHistory({ publicKey }) {
           aria-label="Filter to date"
         />
         <button type="submit" className="tx-filter-btn">Filter</button>
+        <label htmlFor="tx-hash-filter" className="sr-only">Transaction hash</label>
+        <input
+          id="tx-hash-filter"
+          type="text"
+          placeholder="Search by hash…"
+          value={filters.hash}
+          onChange={e => setFilters(f => ({ ...f, hash: e.target.value }))}
+          aria-label="Filter by transaction hash"
+          spellCheck={false}
+        />
       </form>
 
       <AnimatePresence mode="wait">

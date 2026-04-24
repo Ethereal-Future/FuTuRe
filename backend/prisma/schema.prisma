@@ -29,6 +29,8 @@ model Transaction {
   amount        Decimal
   ledger        Int?
   successful    Boolean        @default(true)
+  memo          String?
+  memoType      String?        // 'text' | 'id'
   createdAt     DateTime       @default(now())
   senderId      String
   sender        User           @relation("sender", fields: [senderId], references: [id])
