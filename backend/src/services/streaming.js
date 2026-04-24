@@ -88,22 +88,34 @@ export async function cancelStream(id) {
 }
 
 export async function getStreamAnalytics() {
-  const streams = await prisma.paymentStream.findMany({
-    include: { sender: true, recipient: true }
-  });
+  const [statusCounts, totalVolumeResult, assets] = await Promise.all([
+    prisma.paymentStream.groupBy({
+      by: ['status'],
+      _count: true,
+    }),
+    prisma.paymentStream.aggregate({
+      _sum: { totalStreamed: true },
+    }),
+    prisma.paymentStream.findMany({
+      select: { assetCode: true },
+      distinct: ['assetCode'],
+    }),
+  ]);
 
-  const totalVolume = streams.reduce((acc, s) => acc + parseFloat(s.totalStreamed), 0);
-  const activeCount = streams.filter(s => s.status === 'ACTIVE').length;
-  const pausedCount = streams.filter(s => s.status === 'PAUSED').length;
-  const failedCount = streams.filter(s => s.status === 'FAILED').length;
+  const statusMap = statusCounts.reduce((acc, { status, _count }) => {
+    acc[status] = _count;
+    return acc;
+  }, {});
+
+  const totalVolume = statusMap.totalStreamed || 0;
 
   return {
-    totalVolume: totalVolume.toFixed(7),
-    activeStreams: activeCount,
-    pausedStreams: pausedCount,
-    failedStreams: failedCount,
-    totalStreams: streams.length,
-    topAssets: Array.from(new Set(streams.map(s => s.assetCode))),
+    totalVolume: (totalVolumeResult._sum.totalStreamed || 0).toFixed(7),
+    activeStreams: statusMap.ACTIVE || 0,
+    pausedStreams: statusMap.PAUSED || 0,
+    failedStreams: statusMap.FAILED || 0,
+    totalStreams: Object.values(statusMap).reduce((a, b) => a + b, 0),
+    topAssets: assets.map(a => a.assetCode),
   };
 }
 

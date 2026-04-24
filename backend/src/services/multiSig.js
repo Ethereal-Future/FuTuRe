@@ -2,6 +2,7 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import dotenv from 'dotenv';
 import { eventMonitor } from '../eventSourcing/index.js';
 import prisma from '../db/client.js';
+import { getIssuer } from '../config/assets.js';
 
 dotenv.config();
 
@@ -82,7 +83,7 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
   const asset =
     assetCode === 'XLM'
       ? StellarSDK.Asset.native()
-      : new StellarSDK.Asset(assetCode, process.env.ASSET_ISSUER);
+      : new StellarSDK.Asset(assetCode, getIssuer(assetCode));
 
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,

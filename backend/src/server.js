@@ -57,11 +57,19 @@ app.use(cors({
     const allowedOrigins = getConfig().cors.allowedOrigins;
     // Allow requests with no origin (curl, mobile apps, server-to-server)
     if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    cb(new Error(`CORS: origin ${origin} not allowed`));
+    cb(null, false);
   },
   methods: ['GET', 'POST'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
 }));
+
+// CORS error handler - returns 403 for disallowed origins
+app.use((err, req, res, next) => {
+  if (err.message && err.message.includes('CORS')) {
+    return res.status(403).json({ error: 'CORS: origin not allowed' });
+  }
+  next(err);
+});
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: false, limit: '10mb' }));
 app.use(requestIdMiddleware);
