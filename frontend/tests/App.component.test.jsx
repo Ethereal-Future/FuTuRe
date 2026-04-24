@@ -166,6 +166,26 @@ describe('App — balance retrieval', () => {
     );
   });
 
+  it('displays non-XLM asset balances after successful fetch', async () => {
+    await renderWithAccount();
+    axios.get.mockResolvedValueOnce({
+      data: {
+        publicKey: mockAccount.publicKey,
+        balances: [
+          { asset: 'XLM', balance: '9999.0000000' },
+          { asset: 'USDC', balance: '100.0000000' },
+        ],
+      },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: /Check Balance/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText('USDC')).toBeInTheDocument();
+      expect(screen.getByText(/100(\.0+)? USDC/i)).toBeInTheDocument();
+    });
+  });
+
   it('shows error alert when balance fetch fails', async () => {
     await renderWithAccount();
     axios.get.mockRejectedValueOnce({ message: 'Network error' });
