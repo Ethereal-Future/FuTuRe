@@ -773,6 +773,16 @@ kbd {
   line-height: 1;
 }
 .fee-tip-btn:hover { background: none; color: #0284c7; }
+
+.rate-estimate {
+  margin: -4px 0 10px;
+  font-size: 13px;
+  color: #0369a1;
+  font-weight: 500;
+}
+.rate-source { color: #94a3b8; font-weight: 400; font-size: 11px; }
+[data-theme="dark"] .rate-estimate { color: #38bdf8; }
+[data-theme="dark"] .rate-source { color: #64748b; }
 .fee-tooltip {
   background: #fff;
   border: 1px solid #bae6fd;

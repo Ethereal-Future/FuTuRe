@@ -1,16 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+
+const STORAGE_KEY = 'stellar_address_book';
+
+function loadContacts() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) ?? []; } catch { return []; }
+}
+
+function saveContacts(contacts) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(contacts));
+}
 
 /**
  * AddressBook — manage saved recipients and select one.
- * Props: onSelect, contacts (array of { name, address })
+ * Props: onSelect, prefillAddress (string to pre-populate the new-contact address field)
  */
-export function AddressBook({ onSelect, contacts: initialContacts = [] }) {
-  const [contacts, setContacts] = useState(initialContacts);
+export function AddressBook({ onSelect, prefillAddress = '' }) {
+  const [contacts, setContacts] = useState(loadContacts);
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState('');
-  const [newAddress, setNewAddress] = useState('');
+  const [newAddress, setNewAddress] = useState(prefillAddress);
   const [search, setSearch] = useState('');
+
+  // Sync prefillAddress into the new-contact form when it changes
+  useEffect(() => { if (prefillAddress) setNewAddress(prefillAddress); }, [prefillAddress]);
 
   const filtered = contacts.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -19,12 +32,18 @@ export function AddressBook({ onSelect, contacts: initialContacts = [] }) {
 
   const add = () => {
     if (!newName.trim() || !newAddress.trim()) return;
-    setContacts(prev => [...prev, { name: newName.trim(), address: newAddress.trim() }]);
+    const updated = [...contacts, { name: newName.trim(), address: newAddress.trim() }];
+    setContacts(updated);
+    saveContacts(updated);
     setNewName('');
     setNewAddress('');
   };
 
-  const remove = (address) => setContacts(prev => prev.filter(c => c.address !== address));
+  const remove = (address) => {
+    const updated = contacts.filter(c => c.address !== address);
+    setContacts(updated);
+    saveContacts(updated);
+  };
 
   return (
     <div>
