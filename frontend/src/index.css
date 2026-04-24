@@ -781,6 +781,7 @@ kbd {
   font-weight: 500;
 }
 .rate-source { color: #94a3b8; font-weight: 400; font-size: 11px; }
+.rate-estimate--loading { color: #94a3b8; font-style: italic; }
 [data-theme="dark"] .rate-estimate { color: #38bdf8; }
 [data-theme="dark"] .rate-source { color: #64748b; }
 .fee-tooltip {

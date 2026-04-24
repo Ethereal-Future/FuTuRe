@@ -98,7 +98,7 @@ function App() {
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatus();
-  const xlmUsdRate = useExchangeRate(lastWsMessage);
+  const { rate: xlmUsdRate, loading: rateLoading } = useExchangeRate(lastWsMessage);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -507,11 +507,12 @@ function App() {
                   )}
                 </AnimatePresence>
                 <FeeDisplay amount={amount} visible={amountValid} />
-                {amountValid && xlmUsdRate && (
-                  <p className="rate-estimate" aria-live="polite">
-                    ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
-                    <span className="rate-source"> · live rate</span>
-                  </p>
+                {amountValid && (xlmUsdRate
+                  ? <p className="rate-estimate" aria-live="polite">
+                      ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                      <span className="rate-source"> · live rate</span>
+                    </p>
+                  : rateLoading && <p className="rate-estimate rate-estimate--loading" aria-live="polite">Loading rate…</p>
                 )}
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                   <motion.button onClick={sendPayment} {...tap} disabled={!recipientValid || !amountValid || loading === 'send'}>
@@ -711,11 +712,12 @@ function App() {
                     </div>
 
                     <FeeDisplay amount={amount} visible={amountValid} />
-                    {amountValid && xlmUsdRate && (
-                      <p className="rate-estimate" aria-live="polite">
-                        ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
-                        <span className="rate-source"> · live rate</span>
-                      </p>
+                    {amountValid && (xlmUsdRate
+                      ? <p className="rate-estimate" aria-live="polite">
+                          ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                          <span className="rate-source"> · live rate</span>
+                        </p>
+                      : rateLoading && <p className="rate-estimate rate-estimate--loading" aria-live="polite">Loading rate…</p>
                     )}
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                       <motion.button
