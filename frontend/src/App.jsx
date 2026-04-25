@@ -41,6 +41,9 @@ import { NotificationBell } from './components/NotificationBell';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
 import { useExchangeRate } from './hooks/useExchangeRate';
+import { AMMPoolBrowser } from './components/AMMPoolBrowser';
+import { ConvertWidget } from './components/ConvertWidget';
+import { AccountRecovery } from './components/AccountRecovery';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
 const TIMEOUT_MS = 30000;
@@ -70,7 +73,7 @@ function App() {
   const [kycError, setKycError] = useState(null);
 
   const msg = useMessages();
-  const { canInstall, install, updateAvailable, applyUpdate } = usePWA();
+  const { canInstall, install, updateAvailable, applyUpdate, pushEnabled, enablePush } = usePWA();
   const { queue: queueOffline, dequeue, pendingItems, pendingCount } = useOfflineQueue();
   const [showTxLookup, setShowTxLookup] = useState(false);
   const [deepLinkHash, setDeepLinkHash] = useState('');
@@ -436,6 +439,11 @@ function App() {
               {canInstall && (
                 <button type="button" className="pwa-install-btn" onClick={install} aria-label="Install app">
                   ⬇ Install
+                </button>
+              )}
+              {!pushEnabled && 'Notification' in window && (
+                <button type="button" className="pwa-install-btn" onClick={() => enablePush(account?.publicKey)} aria-label="Enable push notifications">
+                  🔔 Notify
                 </button>
               )}
               <button
@@ -873,6 +881,19 @@ function App() {
                   <StreamPayment publicKey={account.publicKey} />
                 </motion.div>
 
+                {/* Asset Conversion Calculator */}
+                <motion.div variants={v.fadeSlide}>
+                  <ConvertWidget />
+                </motion.div>
+
+                {/* AMM Pool Browser */}
+                <motion.div variants={v.fadeSlide}>
+                  <AMMPoolBrowser />
+                </motion.div>
+
+                {/* Account Recovery */}
+                <motion.div variants={v.fadeSlide}>
+                  <AccountRecovery />
                 {/* Settings Sections Tabs */}
                 <motion.section className="section" variants={v.fadeSlide}>
                   <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>

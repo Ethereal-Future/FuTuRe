@@ -11,6 +11,7 @@ import { dispatchEvent } from '../webhooks/dispatcher.js';
 import { cacheMiddleware } from '../middleware/cache.js';
 import { keys as cacheKeys, TTL, invalidateBalance } from '../cache/appCache.js';
 import prisma from '../db/client.js';
+import { getSubscriptionByPublicKey, sendWebPush } from '../notifications/webPush.js';
 
 const router = express.Router();
 
@@ -159,6 +160,10 @@ router.post('/payment/send', rules.sendPayment, validate, async (req, res) => {
       const recipientBalance = await StellarService.getBalance(destination);
       broadcastToAccount(destination, { ...notification, direction: 'received', balance: recipientBalance.balances });
       dispatchEvent(destination, 'payment_received', { hash: result.hash, amount, assetCode: assetCode || 'XLM', source: senderKey });
+      const pushSub = getSubscriptionByPublicKey(destination);
+      if (pushSub) {
+        sendWebPush(pushSub, { title: 'Payment received', body: `You received ${amount} ${assetCode || 'XLM'}` }).catch(() => {});
+      }
     } catch (_) {}
 
     res.json(result);
@@ -274,6 +279,10 @@ router.get('/network/status', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+});
+
+router.get('/amm/pools', (req, res) => {
+  res.json({ pools: AMMService.getAllPools() });
 });
 
 router.post('/amm/pools/register', (req, res) => {

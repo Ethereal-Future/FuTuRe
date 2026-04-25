@@ -100,4 +100,21 @@ router.get('/stats', (req, res) => {
   res.json({ stats });
 });
 
+import { saveSubscription, getSubscription } from '../notifications/webPush.js';
+
+/** POST /api/notifications/push/subscribe */
+router.post('/push/subscribe', [
+  body('subscription').isObject(),
+  body('subscription.endpoint').isURL(),
+  body('publicKey').optional().isString(),
+], validate, (req, res) => {
+  saveSubscription(req.user.sub, req.body.subscription, req.body.publicKey);
+  res.status(201).json({ subscribed: true });
+});
+
+/** GET /api/notifications/push/subscription — for testing */
+router.get('/push/subscription', (req, res) => {
+  res.json({ subscription: getSubscription(req.user.sub) });
+});
+
 export default router;
