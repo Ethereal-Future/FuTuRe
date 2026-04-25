@@ -36,6 +36,11 @@ i18n
       caches: ['localStorage'],
       lookupLocalStorage: 'i18n_language',
     },
+  })
+  .then(() => {
+    const lang = i18n.language?.split('-')[0] ?? 'en';
+    document.documentElement.lang = lang;
+    document.documentElement.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
   });
 
 export default i18n;
