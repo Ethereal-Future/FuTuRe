@@ -12,23 +12,18 @@ const THEMES = {
   dark: 'dark',
 };
 
+function getInitialTheme() {
+  try {
+    const saved = window.localStorage.getItem(THEME_KEY);
+    if (saved === THEMES.dark || saved === THEMES.light) return saved;
+    return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? THEMES.dark : THEMES.light;
+  } catch {
+    return THEMES.light;
+  }
+}
+
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(THEMES.light);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(THEME_KEY);
-      if (saved === THEMES.dark || saved === THEMES.light) {
-        setTheme(saved);
-        return;
-      }
-
-      const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? THEMES.dark : THEMES.light);
-    } catch {
-      setTheme(THEMES.light);
-    }
-  }, []);
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
     document.documentElement.classList.toggle('theme-dark', theme === THEMES.dark);
