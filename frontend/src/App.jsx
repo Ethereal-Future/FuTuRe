@@ -16,6 +16,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
 import { QRScanner } from './components/QRScanner';
 import { NetworkBadge } from './components/NetworkBadge';
+import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 import { StatusMessage } from './components/StatusMessage';
 import { CopyButton } from './components/CopyButton';
 import { Spinner } from './components/Spinner';
@@ -291,6 +292,7 @@ function App() {
       />
 
       <div className="app">
+        <NetworkStatusBanner />
         <div aria-live="polite" aria-atomic="true" className="sr-only">
           {loading === 'create' && 'Creating account…'}
           {loading === 'balance' && 'Checking balance…'}

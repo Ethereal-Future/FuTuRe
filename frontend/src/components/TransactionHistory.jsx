@@ -11,6 +11,7 @@ function fmt(dateStr) {
   return new Date(dateStr).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
+function TxRow({ tx, onClick, onRetry }) {
 function csvEscape(val) {
   const s = val == null ? '' : String(val);
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
@@ -80,6 +81,15 @@ function TxRow({ tx, onClick }) {
       <span className={`tx-status ${tx.successful ? 'tx-ok' : 'tx-fail'}`} aria-hidden="true">
         {tx.successful ? '✓' : '✗'}
       </span>
+      {!tx.successful && onRetry && (
+        <button
+          className="tx-retry-btn"
+          onClick={(e) => { e.stopPropagation(); onRetry(tx); }}
+          aria-label={`Retry failed transaction ${tx.hash}`}
+        >
+          Retry
+        </button>
+      )}
     </motion.div>
   );
 }
@@ -140,6 +150,7 @@ export function TransactionHistory({ publicKey }) {
   const [filters, setFilters] = useState({ type: '', dateFrom: '', dateTo: '', hash: '' });
   const [cursors, setCursors] = useState([]); // ring-buffer for back-pagination (max 50)
   const [error, setError] = useState(null);
+  const [retrying, setRetrying] = useState({}); // { [txId]: 'pending' | 'success' | 'error' }
   const [exporting, setExporting] = useState(false);
 
   const handleExportCsv = async () => {
@@ -192,6 +203,17 @@ export function TransactionHistory({ publicKey }) {
     fetchPage(prev, true);
   };
   const applyFilters = (e) => { e.preventDefault(); setCursors([]); fetchPage(null); };
+
+  const handleRetry = useCallback(async (tx) => {
+    setRetrying(r => ({ ...r, [tx.id]: 'pending' }));
+    try {
+      await axios.post('/api/retry/transaction', { transactionHash: tx.hash });
+      setRetrying(r => ({ ...r, [tx.id]: 'success' }));
+      setTxs(prev => prev.map(t => t.id === tx.id ? { ...t, successful: true } : t));
+    } catch {
+      setRetrying(r => ({ ...r, [tx.id]: 'error' }));
+    }
+  }, []);
 
   return (
     <section className="section" aria-labelledby="tx-history-heading">
@@ -275,7 +297,7 @@ export function TransactionHistory({ publicKey }) {
             ) : (
               <>
                 <div className="tx-list" role="list" aria-label="Transactions">
-                  {txs.map(tx => <TxRow key={tx.id} tx={tx} onClick={setSelected} />)}
+                  {txs.map(tx => <TxRow key={tx.id} tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />)}
                 </div>
                 <nav className="tx-pagination" aria-label="Transaction page navigation">
                   <button onClick={handleBack} disabled={cursors.length === 0 || loading} className="tx-page-btn" aria-label="Previous page">← Prev</button>

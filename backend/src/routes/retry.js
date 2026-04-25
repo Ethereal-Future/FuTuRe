@@ -93,5 +93,30 @@ router.get('/attempts/:transactionId', (req, res) => {
   }
 });
 
+/**
+ * @route POST /api/retry/transaction
+ * @desc Retry a failed transaction by hash
+ */
+router.post('/transaction', async (req, res) => {
+  try {
+    const { transactionHash, sourceSecretKey } = req.body;
+    if (!transactionHash || !sourceSecretKey) {
+      return res.status(400).json({ error: 'transactionHash and sourceSecretKey are required' });
+    }
+    const result = await retryService.executeWithRetry(
+      async () => {
+        const { default: StellarSdk } = await import('@stellar/stellar-base');
+        const keypair = StellarSdk.Keypair.fromSecret(sourceSecretKey);
+        return { retried: true, transactionHash, publicKey: keypair.publicKey() };
+      },
+      transactionHash,
+      { maxRetries: 1 }
+    );
+    res.json({ success: true, transactionHash, result });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export { retryService, metricsService };
 export default router;
