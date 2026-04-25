@@ -397,5 +397,53 @@ router.put('/account/:publicKey/label', rules.publicKeyParam, validate,
   }
 );
 
+// GET /api/stellar/account/:publicKey/settings
+router.get('/account/:publicKey/settings', rules.publicKeyParam, validate, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({
+      where: { publicKey: req.params.publicKey },
+      include: { settings: true, kycRecord: { select: { status: true, submittedAt: true } } },
+    });
+    const settings = user?.settings ?? {};
+    res.json({
+      defaultAsset: settings.defaultAsset ?? 'XLM',
+      notificationsOn: settings.notificationsOn ?? true,
+      kycStatus: user?.kycRecord?.status ?? null,
+      kycSubmittedAt: user?.kycRecord?.submittedAt ?? null,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT /api/stellar/account/:publicKey/settings
+router.put('/account/:publicKey/settings',
+  rules.publicKeyParam, validate,
+  body('defaultAsset').optional().isString().trim().isLength({ min: 1, max: 12 }),
+  body('notificationsOn').optional().isBoolean(),
+  validate,
+  async (req, res) => {
+    try {
+      const { defaultAsset, notificationsOn } = req.body;
+      const user = await prisma.user.upsert({
+        where: { publicKey: req.params.publicKey },
+        update: {},
+        create: { publicKey: req.params.publicKey },
+      });
+      const update = {};
+      if (defaultAsset !== undefined) update.defaultAsset = defaultAsset;
+      if (notificationsOn !== undefined) update.notificationsOn = notificationsOn;
+      const settings = await prisma.setting.upsert({
+        where: { userId: user.id },
+        update,
+        create: { userId: user.id, ...update },
+      });
+      res.json({ defaultAsset: settings.defaultAsset, notificationsOn: settings.notificationsOn });
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
 export default router;
 
