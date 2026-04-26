@@ -1,40 +1,48 @@
+import { z } from 'zod';
 import prisma from '../db/client.js';
 
 const KYC_STATUS = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED', UNDER_REVIEW: 'UNDER_REVIEW' };
 
+const kycSchema = z.object({
+  fullName:       z.string().min(1),
+  dateOfBirth:    z.string().date(),
+  nationality:    z.string().min(1),
+  documentType:   z.enum(['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'RESIDENCE_PERMIT']),
+  documentNumber: z.string().min(1),
+  address:        z.string().min(1),
+  phoneNumber:    z.string().regex(/^\+[1-9]\d{1,14}$/).optional(),
+  email:          z.string().email().optional(),
+});
+
 class KYCCollector {
   async submitKYC(userId, data) {
-    const required = ['fullName', 'dateOfBirth', 'nationality', 'documentType', 'documentNumber', 'address'];
-    const missing = required.filter(f => !data[f]);
-    if (missing.length) throw new Error(`Missing required KYC fields: ${missing.join(', ')}`);
-
-    const dob = new Date(data.dateOfBirth);
-    if (isNaN(dob.getTime())) throw new Error('dateOfBirth must be a valid date');
+    const parsed = kycSchema.parse(data);
+    const dob = new Date(parsed.dateOfBirth);
 
     return prisma.kYCRecord.upsert({
       where: { userId },
       create: {
         userId,
         status: KYC_STATUS.PENDING,
-        fullName: data.fullName,
+        fullName: parsed.fullName,
         dateOfBirth: dob,
-        nationality: data.nationality,
-        documentType: data.documentType,
-        documentNumber: data.documentNumber,
-        address: data.address,
-        phoneNumber: data.phoneNumber ?? null,
-        email: data.email ?? null,
+        nationality: parsed.nationality,
+        documentType: parsed.documentType,
+        documentNumber: parsed.documentNumber,
+        address: parsed.address,
+        phoneNumber: parsed.phoneNumber ?? null,
+        email: parsed.email ?? null,
       },
       update: {
         status: KYC_STATUS.PENDING,
-        fullName: data.fullName,
+        fullName: parsed.fullName,
         dateOfBirth: dob,
-        nationality: data.nationality,
-        documentType: data.documentType,
-        documentNumber: data.documentNumber,
-        address: data.address,
-        phoneNumber: data.phoneNumber ?? null,
-        email: data.email ?? null,
+        nationality: parsed.nationality,
+        documentType: parsed.documentType,
+        documentNumber: parsed.documentNumber,
+        address: parsed.address,
+        phoneNumber: parsed.phoneNumber ?? null,
+        email: parsed.email ?? null,
       },
     });
   }

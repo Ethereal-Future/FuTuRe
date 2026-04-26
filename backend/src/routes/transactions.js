@@ -2,8 +2,21 @@ import express from 'express';
 import { transactionService } from '../services/transactions.js';
 import { validate, rules } from '../middleware/validate.js';
 import { broadcastToAccount } from '../services/websocket.js';
+import logger from '../config/logger.js';
 
 const router = express.Router();
+
+function logError(req, error, context = {}) {
+  logger.error('route.error', {
+    requestId: req.id,
+    correlationId: req.correlationId,
+    method: req.method,
+    path: req.path,
+    ...context,
+    error: error.message,
+    stack: error.stack,
+  });
+}
 
 /**
  * @swagger
@@ -89,7 +102,8 @@ router.get('/:accountId', rules.accountIdParam, validate, async (req, res) => {
     const transactions = await transactionService.getTransactions(accountId, options);
     res.json(transactions);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to retrieve transactions' });
   }
 });
 
@@ -146,7 +160,8 @@ router.get('/:accountId/search', rules.accountIdParam, validate, async (req, res
     const results = await transactionService.searchTransactions(accountId, searchTerm, { limit });
     res.json(results);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to search transactions' });
   }
 });
 
@@ -188,7 +203,8 @@ router.get('/:accountId/analytics', rules.accountIdParam, validate, async (req, 
     const analytics = await transactionService.getTransactionAnalytics(accountId, timeframe);
     res.json(analytics);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to retrieve transaction analytics' });
   }
 });
 
@@ -229,7 +245,8 @@ router.get('/:accountId/latest', rules.accountIdParam, validate, async (req, res
 
     res.json(transaction);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to retrieve latest transaction' });
   }
 });
 
@@ -259,7 +276,8 @@ router.post('/:accountId/monitor', rules.accountIdParam, validate, async (req, r
     transactionService.startMonitoring(accountId);
     res.json({ message: 'Transaction monitoring started' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to start transaction monitoring' });
   }
 });
 
@@ -289,7 +307,8 @@ router.delete('/:accountId/monitor', rules.accountIdParam, validate, async (req,
     transactionService.stopMonitoring(req.params.accountId);
     res.json({ message: 'Transaction monitoring stopped' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    logError(req, error, { accountId: req.params.accountId });
+    res.status(500).json({ error: 'Failed to stop transaction monitoring' });
   }
 });
 

@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { AddressBook } from './AddressBook';
 import { WebhookManager } from './WebhookManager';
+import { BackupSettings } from './BackupSettings';
+import { ComplianceDashboard } from './ComplianceDashboard';
+import { AccountMerge } from './AccountMerge';
 
 const ASSETS = ['XLM', 'USDC', 'EURC'];
 
@@ -10,10 +13,26 @@ export function AccountSettings({ publicKey, onClose }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [showBackup, setShowBackup] = useState(false);
+  const [showCompliance, setShowCompliance] = useState(false);
+  const [showMerge, setShowMerge] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   useEffect(() => {
     axios.get(`/api/stellar/account/${publicKey}/settings`)
-      .then(({ data }) => setSettings(data))
+      .then(({ data }) => {
+        setSettings(data);
+        // Check if user has admin role from JWT token
+        const token = localStorage.getItem('authToken');
+        if (token) {
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            setUserRole(payload.role);
+          } catch (e) {
+            // Invalid token format
+          }
+        }
+      })
       .catch(e => setError(e?.response?.data?.error ?? e.message));
   }, [publicKey]);
 
@@ -110,6 +129,32 @@ export function AccountSettings({ publicKey, onClose }) {
               <WebhookManager accountId={publicKey} />
             </div>
 
+            <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => setShowBackup(true)}
+                style={{ fontSize: '0.9rem', padding: '8px 16px' }}
+              >
+                💾 Backup & Restore
+              </button>
+              {userRole === 'admin' && (
+                <button
+                  type="button"
+                  onClick={() => setShowCompliance(true)}
+                  style={{ fontSize: '0.9rem', padding: '8px 16px', background: '#dc2626' }}
+                >
+                  🛡️ Compliance Dashboard
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setShowMerge(true)}
+                style={{ fontSize: '0.9rem', padding: '8px 16px', background: '#dc2626' }}
+              >
+                ⚠️ Merge Account
+              </button>
+            </div>
+
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button type="button" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Save'}
@@ -118,6 +163,21 @@ export function AccountSettings({ publicKey, onClose }) {
               {saved && <span role="status" style={{ color: '#22c55e', fontSize: '0.9rem' }}>Saved ✓</span>}
             </div>
           </>
+        )}
+
+        {showBackup && <BackupSettings onClose={() => setShowBackup(false)} />}
+        {showCompliance && <ComplianceDashboard onClose={() => setShowCompliance(false)} />}
+        {showMerge && (
+          <AccountMerge
+            sourceSecret={localStorage.getItem('secretKey')}
+            onClose={() => setShowMerge(false)}
+            onSuccess={() => {
+              setShowMerge(false);
+              alert('Account merged successfully. You will be logged out.');
+              localStorage.clear();
+              window.location.reload();
+            }}
+          />
         )}
       </div>
     </div>

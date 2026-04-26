@@ -5,6 +5,7 @@ import { createUser, findUser, getUserById, updateUserPassword } from '../auth/u
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
 import { requireAuth } from '../middleware/auth.js';
 import { consumePendingCredentials } from '../recovery/recoveryStore.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -19,7 +20,40 @@ const userRules = [
   body('password').isLength({ min: 8 }).withMessage('Password must be at least 8 chars'),
 ];
 
-// POST /api/auth/register
+/**
+ * @swagger
+ * /api/auth/register:
+ *   post:
+ *     summary: Register a new user
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [username, password]
+ *             properties:
+ *               username:
+ *                 type: string
+ *                 minLength: 3
+ *                 maxLength: 32
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *     responses:
+ *       201:
+ *         description: User created
+ *       409:
+ *         description: Username already taken
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       422:
+ *         description: Validation error
+ */
 router.post('/register', userRules, validateBody, async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -31,8 +65,55 @@ router.post('/register', userRules, validateBody, async (req, res) => {
   }
 });
 
-// POST /api/auth/login
+/**
+ * @swagger
+ * /api/auth/login:
+ *   post:
+ *     summary: Log in and receive JWT tokens
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [username, password]
+ *             properties:
+ *               username:
+ *                 type: string
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Tokens issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken: { type: string }
+ *                 refreshToken: { type: string }
+ *                 recovered: { type: boolean }
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *       422:
+ *         description: Validation error
+ */
 router.post('/login', userRules, validateBody, async (req, res) => {
+// Stricter rate limit for login endpoint (10 req/min)
+const loginRateLimiter = createRateLimiter({
+  windowMs: 60000,
+  max: 10,
+  message: 'Too many login attempts, please try again later.',
+});
+
+// POST /api/auth/login
+router.post('/login', loginRateLimiter, userRules, validateBody, async (req, res) => {
   const { username, password } = req.body;
   const user = findUser(username);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });
@@ -62,7 +143,37 @@ router.post('/login', userRules, validateBody, async (req, res) => {
   });
 });
 
-// POST /api/auth/refresh
+/**
+ * @swagger
+ * /api/auth/refresh:
+ *   post:
+ *     summary: Refresh access token
+ *     tags: [Auth]
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [refreshToken]
+ *             properties:
+ *               refreshToken:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: New access token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessToken: { type: string }
+ *       400:
+ *         description: refreshToken missing
+ *       401:
+ *         description: Invalid or expired refresh token
+ */
 router.post('/refresh', (req, res) => {
   const { refreshToken } = req.body;
   if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
@@ -74,12 +185,48 @@ router.post('/refresh', (req, res) => {
   }
 });
 
-// POST /api/auth/logout  (client should discard tokens; server-side blacklist can be added later)
+/**
+ * @swagger
+ * /api/auth/logout:
+ *   post:
+ *     summary: Log out (client should discard tokens)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logged out
+ *       401:
+ *         description: Unauthorized
+ */
 router.post('/logout', requireAuth, (_req, res) => {
   res.json({ message: 'Logged out successfully' });
 });
 
-// GET /api/auth/profile
+/**
+ * @swagger
+ * /api/auth/profile:
+ *   get:
+ *     summary: Get authenticated user profile
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: User profile
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 id: { type: string }
+ *                 username: { type: string }
+ *                 createdAt: { type: string, format: date-time }
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: User not found
+ */
 router.get('/profile', requireAuth, (req, res) => {
   const user = getUserById(req.user.sub);
   if (!user) return res.status(404).json({ error: 'User not found' });

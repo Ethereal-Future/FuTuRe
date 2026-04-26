@@ -39,7 +39,7 @@ export const MAX_LENGTHS = {
 };
 
 /** Allowed Stellar memo types supported by this application. */
-export const MEMO_TYPES = ['text', 'id'];
+export const MEMO_TYPES = ['none', 'text', 'id', 'hash', 'return'];
 
 /**
  * Truncates a string to the given max length.
