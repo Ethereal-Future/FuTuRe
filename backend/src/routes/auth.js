@@ -5,6 +5,7 @@ import { createUser, findUser, getUserById, updateUserPassword } from '../auth/u
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
 import { requireAuth } from '../middleware/auth.js';
 import { consumePendingCredentials } from '../recovery/recoveryStore.js';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -104,6 +105,15 @@ router.post('/register', userRules, validateBody, async (req, res) => {
  *         description: Validation error
  */
 router.post('/login', userRules, validateBody, async (req, res) => {
+// Stricter rate limit for login endpoint (10 req/min)
+const loginRateLimiter = createRateLimiter({
+  windowMs: 60000,
+  max: 10,
+  message: 'Too many login attempts, please try again later.',
+});
+
+// POST /api/auth/login
+router.post('/login', loginRateLimiter, userRules, validateBody, async (req, res) => {
   const { username, password } = req.body;
   const user = findUser(username);
   if (!user) return res.status(401).json({ error: 'Invalid credentials' });

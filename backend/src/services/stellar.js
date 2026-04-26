@@ -163,9 +163,22 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     }));
 
   if (memo) {
-    const stellarMemo = memoType === 'id'
-      ? StellarSDK.Memo.id(memo)
-      : StellarSDK.Memo.text(memo);
+    let stellarMemo;
+    switch (memoType) {
+      case 'id':
+        stellarMemo = StellarSDK.Memo.id(memo);
+        break;
+      case 'hash':
+        stellarMemo = StellarSDK.Memo.hash(memo);
+        break;
+      case 'return':
+        stellarMemo = StellarSDK.Memo.return(memo);
+        break;
+      case 'text':
+      default:
+        stellarMemo = StellarSDK.Memo.text(memo);
+        break;
+    }
     txBuilder.addMemo(stellarMemo);
   }
 
@@ -413,4 +426,48 @@ export async function getNetworkStatus() {
       online: false,
     };
   }
+}
+export async function mergeAccount(sourceSecret, destination) {
+  const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  const sourcePublicKey = sourceKeypair.publicKey();
+  logger.info('stellar.mergeAccount.start', { source: sourcePublicKey, destination });
+
+  const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
+
+  const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+  })
+    .addOperation(StellarSDK.Operation.accountMerge({ destination }))
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  let result;
+  try {
+    result = await getHorizonServer().submitTransaction(transaction);
+  } catch (err) {
+    logger.error('stellar.mergeAccount.failed', { source: sourcePublicKey, destination, error: err.message });
+    throw err;
+  }
+
+  logger.info('stellar.mergeAccount.success', {
+    source: sourcePublicKey,
+    destination,
+    hash: result.hash,
+    ledger: result.ledger,
+  });
+
+  await eventMonitor.publishEvent(sourcePublicKey, {
+    type: 'AccountMerged',
+    data: { destination, hash: result.hash },
+    version: 1,
+  });
+
+  return {
+    hash: result.hash,
+    ledger: result.ledger,
+    success: result.successful,
+  };
 }

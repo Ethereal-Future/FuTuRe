@@ -57,6 +57,11 @@ export const rules = {
     .matches(STELLAR_PUBLIC_KEY)
     .withMessage('Invalid Stellar account ID'),
 
+  addressParam: param('address')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid Stellar address'),
+
   importAccount: [
     body('secretKey')
       .trim()
@@ -88,13 +93,31 @@ export const rules = {
       .withMessage(`Unsupported asset. Supported: ${SUPPORTED_ASSETS.join(', ')}`),
     rules.memoField(),
     rules.memoTypeField(),
-    // Cross-field: memo type 'id' requires a numeric memo value
+    // Cross-field validation for memo types
     body('memo').custom((memo, { req }) => {
-      const memoType = req.body.memoType;
-      if (memoType === 'id') {
-        if (!memo) throw new Error('Memo is required when memoType is "id"');
-        if (!/^\d{1,20}$/.test(memo)) throw new Error('Memo must be a numeric ID when memoType is "id"');
-        if (BigInt(memo) > 18446744073709551615n) throw new Error('Memo ID exceeds maximum uint64 value');
+      const memoType = req.body.memoType || 'text';
+      
+      if (!memo && memoType !== 'none') return true; // Optional memo
+      
+      switch (memoType) {
+        case 'id':
+          if (!memo) throw new Error('Memo is required when memoType is "id"');
+          if (!/^\d{1,20}$/.test(memo)) throw new Error('Memo must be a numeric ID when memoType is "id"');
+          if (BigInt(memo) > 18446744073709551615n) throw new Error('Memo ID exceeds maximum uint64 value');
+          break;
+        case 'hash':
+        case 'return':
+          if (!memo) throw new Error(`Memo is required when memoType is "${memoType}"`);
+          // Must be 32-byte hex string (64 hex chars)
+          if (!/^[0-9a-fA-F]{64}$/.test(memo)) {
+            throw new Error(`Memo must be a 64-character hex string (32 bytes) when memoType is "${memoType}"`);
+          }
+          break;
+        case 'text':
+        case 'none':
+        default:
+          // Text memos already validated by memoField()
+          break;
       }
       return true;
     }),
@@ -202,3 +225,13 @@ export const rules = {
       .withMessage('Invalid expected signer public key'),
   ],
 };
+mergeAccount: [
+  body('sourceSecret')
+    .trim()
+    .matches(STELLAR_SECRET_KEY)
+    .withMessage('Invalid Stellar secret key'),
+  body('destination')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid destination public key'),
+],
