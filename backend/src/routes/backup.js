@@ -65,4 +65,28 @@ router.get('/metrics', (_req, res) => {
   res.json(getMetrics());
 });
 
+// GET  /api/backup/status   — get last backup info for UI
+router.get('/status', async (_req, res) => {
+  try {
+    const backups = await listBackups();
+    const lastBackup = backups.length > 0 ? backups[0] : null;
+    const metrics = getMetrics();
+    
+    res.json({
+      lastBackup: lastBackup ? {
+        timestamp: lastBackup.createdAt,
+        file: lastBackup.file,
+        size: lastBackup.size,
+      } : null,
+      metrics: {
+        totalBackups: backups.length,
+        totalSize: backups.reduce((sum, b) => sum + b.size, 0),
+        ...metrics,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

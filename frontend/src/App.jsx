@@ -44,6 +44,8 @@ import { useExchangeRate } from './hooks/useExchangeRate';
 import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { AccountRecovery } from './components/AccountRecovery';
+import { ComplianceDashboard } from './components/ComplianceDashboard';
+import { BackupSettings } from './components/BackupSettings';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
 const TIMEOUT_MS = 30000;
@@ -71,6 +73,9 @@ function App() {
   const [kycStatus, setKycStatus] = useState(null);
   const [kycLoading, setKycLoading] = useState(false);
   const [kycError, setKycError] = useState(null);
+  const [showComplianceDashboard, setShowComplianceDashboard] = useState(false);
+  const [showBackupSettings, setShowBackupSettings] = useState(false);
+  const [userRole, setUserRole] = useState(null);
 
   const msg = useMessages();
   const { canInstall, install, updateAvailable, applyUpdate, pushEnabled, enablePush } = usePWA();
@@ -214,6 +219,16 @@ function App() {
 
   useEffect(() => {
     fetchKycStatus();
+    // Check if user has admin role from JWT token
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        setUserRole(payload.role);
+      } catch (e) {
+        // Invalid token format
+      }
+    }
   }, [fetchKycStatus]);
 
   const saveLabel = async () => {
@@ -902,11 +917,19 @@ function App() {
                       { id: 'multisig', label: '🔐 Multi-Sig' },
                       { id: 'kyc', label: '📋 KYC' },
                       { id: 'notifications', label: '🔔 Notifications' },
+                      { id: 'backup', label: '💾 Backup', action: () => setShowBackupSettings(true) },
+                      ...(userRole === 'admin' ? [{ id: 'compliance', label: '🛡️ Compliance', action: () => setShowComplianceDashboard(true) }] : []),
                     ].map((section) => (
                       <button
                         key={section.id}
                         type="button"
-                        onClick={() => setActiveSettingsSection(activeSettingsSection === section.id ? null : section.id)}
+                        onClick={() => {
+                          if (section.action) {
+                            section.action();
+                          } else {
+                            setActiveSettingsSection(activeSettingsSection === section.id ? null : section.id);
+                          }
+                        }}
                         style={{
                           padding: '10px 16px',
                           background: activeSettingsSection === section.id ? '#2563eb' : '#f3f4f6',
@@ -1035,6 +1058,14 @@ function App() {
             publicKey={account.publicKey}
             onClose={() => setShowSettings(false)}
           />
+        )}
+
+        {showComplianceDashboard && (
+          <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
+        )}
+
+        {showBackupSettings && (
+          <BackupSettings onClose={() => setShowBackupSettings(false)} />
         )}
       </div>
     </>

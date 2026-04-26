@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import { requireAuth as authMiddleware } from '../middleware/auth.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
+import { prisma } from '../db/client.js';
 import {
   kycCollector,
   identityVerifier,
@@ -86,6 +88,76 @@ router.post('/reports', authMiddleware, async (req, res) => {
 router.get('/reports', authMiddleware, async (req, res) => {
   const reports = await complianceReporting.listReports();
   res.json(reports);
+});
+
+// ── AML Alerts Dashboard (Admin Only) ────────────────────────────────────────
+
+// List all AML alerts with pagination
+router.get('/aml/alerts', requireAdmin, async (req, res) => {
+  try {
+    const { page = 1, limit = 20, severity, reviewed } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const where = {};
+    if (severity) where.severity = severity;
+    
+    const alerts = await prisma.aMLAlert.findMany({
+      where,
+      include: {
+        transaction: {
+          select: {
+            hash: true,
+            amount: true,
+            assetCode: true,
+            createdAt: true,
+          },
+        },
+        user: {
+          select: {
+            publicKey: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: parseInt(limit),
+    });
+    
+    const total = await prisma.aMLAlert.count({ where });
+    
+    res.json({
+      alerts,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit)),
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Mark alert as reviewed (admin only)
+router.patch('/aml/alerts/:id/review', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { notes } = req.body;
+    
+    // For now, we'll log the review action in the audit trail
+    // In a production system, you'd add a 'reviewed' field to the AMLAlert model
+    await complianceAudit.log('AML_ALERT_REVIEWED', req.user.id, {
+      alertId: id,
+      reviewedBy: req.user.id,
+      notes: notes || '',
+      reviewedAt: new Date().toISOString(),
+    });
+    
+    res.json({ success: true, message: 'Alert marked as reviewed' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;
