@@ -44,6 +44,7 @@ import { useExchangeRate } from './hooks/useExchangeRate';
 import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { AccountRecovery } from './components/AccountRecovery';
+import { XLMInfoIcon } from './components/XLMInfoIcon';
 import { ComplianceDashboard } from './components/ComplianceDashboard';
 import { BackupSettings } from './components/BackupSettings';
 
@@ -703,7 +704,10 @@ function App() {
                       >
                         {balance.balances.map((b, i) => (
                           <motion.p key={i} variants={v.fadeSlide} className="balance-row" role="listitem">
-                            <span className="balance-asset">{b.asset}</span>
+                            <span className="balance-asset">
+                              {b.asset}
+                              {b.asset === 'XLM' && <XLMInfoIcon />}
+                            </span>
                             <span className="balance-amount">{formatBalanceWithAsset(b.balance, b.asset)}</span>
                           </motion.p>
                         ))}
@@ -790,6 +794,9 @@ function App() {
                         Max
                       </motion.button>
                     </div>
+                    <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '-8px', marginBottom: '8px' }}>
+                      <XLMInfoIcon /> XLM is the native Stellar currency
+                    </div>
                     <AnimatePresence>
                       {amountTouched && amountError && (
                         <motion.p id="amount-error" className="field-error" role="alert" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
@@ -853,7 +860,7 @@ function App() {
                       </motion.button>
                       {largeTransactionBlocked && (
                         <p style={{ color: '#b45309', margin: '0 0 0 12px', fontSize: '0.9rem' }}>
-                          Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.
+                          Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM<XLMInfoIcon /> require approved KYC.
                         </p>
                       )}
                       <InlineConfirmation

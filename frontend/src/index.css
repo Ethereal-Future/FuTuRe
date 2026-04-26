@@ -1379,6 +1379,114 @@ kbd {
   display: flex;
   gap: 8px;
 }
+.confirm-dialog__btn-confirm { flex: 1; }
+.confirm-dialog__btn-cancel  { flex: 1; }
+
+/* XLM Info Icon & Tooltip */
+.xlm-info-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  margin-left: 4px;
+  vertical-align: middle;
+}
+
+.xlm-info-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  min-height: unset;
+  min-width: unset;
+  width: auto;
+  line-height: 1;
+  color: var(--primary);
+  opacity: 0.8;
+  transition: opacity 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.xlm-info-btn:hover,
+.xlm-info-btn:focus {
+  opacity: 1;
+  background: none;
+}
+
+.xlm-info-btn:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+.xlm-tooltip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  max-width: 240px;
+  width: max-content;
+  box-shadow: var(--shadow);
+  z-index: 1000;
+  pointer-events: auto;
+  text-align: left;
+}
+
+.xlm-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 6px solid transparent;
+  border-top-color: var(--card);
+}
+
+.xlm-tooltip strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--primary);
+}
+
+/* Mobile adjustments */
+@media (max-width: 480px) {
+  .xlm-tooltip {
+    max-width: 200px;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  
+  .xlm-info-btn {
+    font-size: 16px;
+    padding: 4px 6px;
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* Ensure tooltip doesn't overflow viewport */
+@media (max-width: 320px) {
+  .xlm-tooltip {
+    left: auto;
+    right: 0;
+    transform: none;
+    max-width: 180px;
+  }
+  
+  .xlm-tooltip::after {
+    left: auto;
+    right: 12px;
+    transform: none;
+  }
 .confirm-dialog__btn-confirm {
   flex: 1;
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
 import { Modal } from '../design-system/Modal';
+import { XLMInfoIcon } from './XLMInfoIcon';
 
 function truncate(addr) {
   if (!addr || addr.length <= 12) return addr;
@@ -59,6 +60,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
           <dt>Amount</dt>
           <dd>
             {amount} {asset}
+            {asset === 'XLM' && <XLMInfoIcon />}
             {amtUsd && <span className="confirm-dialog__usd"> ≈ ${amtUsd} USD</span>}
           </dd>
         </div>
@@ -66,14 +68,14 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
           <dt>Estimated fee</dt>
           <dd>
             {feeXLM !== null
-              ? <>{feeXLM} XLM{fee?.feeUsd && <span className="confirm-dialog__usd"> ≈ ${fee.feeUsd} USD</span>}</>
+              ? <>{feeXLM} XLM<XLMInfoIcon />{fee?.feeUsd && <span className="confirm-dialog__usd"> ≈ ${fee.feeUsd} USD</span>}</>
               : '—'}
           </dd>
         </div>
         {totalXLM && (
           <div className="confirm-dialog__row confirm-dialog__row--total">
             <dt>Total deducted</dt>
-            <dd>{totalXLM} {asset}</dd>
+            <dd>{totalXLM} {asset}{asset === 'XLM' && <XLMInfoIcon />}</dd>
           </div>
         )}
       </dl>
