@@ -30,6 +30,38 @@ const streamRules = {
   ],
 };
 
+/**
+ * @swagger
+ * /api/streaming:
+ *   post:
+ *     summary: Create a streaming payment
+ *     tags: [Streaming]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [senderPublicKey, recipientPublicKey, rateAmount]
+ *             properties:
+ *               senderPublicKey: { type: string }
+ *               recipientPublicKey: { type: string }
+ *               assetCode: { type: string, default: XLM }
+ *               rateAmount: { type: number, description: Amount per interval }
+ *               intervalSeconds: { type: integer, minimum: 10, default: 60 }
+ *               endTime: { type: string, format: date-time }
+ *     responses:
+ *       201:
+ *         description: Stream created
+ *       400:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ */
 router.post('/', streamRules.create, validate, async (req, res) => {
   try {
     const stream = await StreamingService.createStream(req.body);
@@ -40,6 +72,23 @@ router.post('/', streamRules.create, validate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming:
+ *   get:
+ *     summary: List streaming payments
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: query
+ *         name: senderPublicKey
+ *         schema: { type: string }
+ *         description: Filter by sender public key
+ *     responses:
+ *       200:
+ *         description: List of streams
+ *       500:
+ *         description: Server error
+ */
 router.get('/', async (req, res) => {
   try {
     const { senderPublicKey } = req.query;
@@ -57,6 +106,18 @@ router.get('/', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/analytics:
+ *   get:
+ *     summary: Get streaming payment analytics
+ *     tags: [Streaming]
+ *     responses:
+ *       200:
+ *         description: Analytics data
+ *       500:
+ *         description: Server error
+ */
 router.get('/analytics', async (req, res) => {
   try {
     const analytics = await StreamingService.getStreamAnalytics();
@@ -67,6 +128,25 @@ router.get('/analytics', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/{id}:
+ *   get:
+ *     summary: Get a streaming payment by ID
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Stream details
+ *       404:
+ *         description: Stream not found
+ *       500:
+ *         description: Server error
+ */
 router.get('/:id', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.prisma.paymentStream.findUnique({
@@ -80,6 +160,23 @@ router.get('/:id', streamRules.idParam, validate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/{id}/pause:
+ *   post:
+ *     summary: Pause a streaming payment
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Stream paused
+ *       500:
+ *         description: Server error
+ */
 router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.pauseStream(req.params.id);
@@ -89,6 +186,23 @@ router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/{id}/resume:
+ *   post:
+ *     summary: Resume a paused streaming payment
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Stream resumed
+ *       500:
+ *         description: Server error
+ */
 router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.resumeStream(req.params.id);
@@ -98,6 +212,23 @@ router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/{id}/cancel:
+ *   post:
+ *     summary: Cancel a streaming payment
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     responses:
+ *       200:
+ *         description: Stream cancelled
+ *       500:
+ *         description: Server error
+ */
 router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.cancelStream(req.params.id);

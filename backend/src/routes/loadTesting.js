@@ -12,7 +12,40 @@ import {
 
 const router = express.Router();
 
-// Scenario endpoints
+/**
+ * @swagger
+ * /api/load-testing/scenarios/create:
+ *   post:
+ *     summary: Create a load test scenario
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name]
+ *             properties:
+ *               name: { type: string }
+ *               description: { type: string }
+ *               requests:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     method: { type: string }
+ *                     path: { type: string }
+ *                     body: { type: object }
+ *                     weight: { type: number }
+ *               duration: { type: integer, description: Duration in ms }
+ *               rampUp: { type: integer }
+ *               concurrency: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Scenario created
+ *       500:
+ *         description: Server error
+ */
 router.post('/scenarios/create', async (req, res) => {
   try {
     const { name, description, requests, duration, rampUp, concurrency } = req.body;
@@ -31,7 +64,28 @@ router.post('/scenarios/create', async (req, res) => {
   }
 });
 
-// Load test endpoints
+/**
+ * @swagger
+ * /api/load-testing/run:
+ *   post:
+ *     summary: Run a load test scenario
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *               baseUrl: { type: string, default: 'http://localhost:3001' }
+ *     responses:
+ *       200:
+ *         description: Load test results
+ *       500:
+ *         description: Server error
+ */
 router.post('/run', async (req, res) => {
   try {
     const { scenarioName, baseUrl } = req.body;
@@ -47,6 +101,26 @@ router.post('/run', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/load-testing/results/{scenarioName}:
+ *   get:
+ *     summary: Get latest load test results for a scenario
+ *     tags: [LoadTesting]
+ *     parameters:
+ *       - in: path
+ *         name: scenarioName
+ *         required: true
+ *         schema: { type: string }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 10 }
+ *     responses:
+ *       200:
+ *         description: Test results
+ *       500:
+ *         description: Server error
+ */
 router.get('/results/:scenarioName', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 10;
@@ -57,7 +131,29 @@ router.get('/results/:scenarioName', async (req, res) => {
   }
 });
 
-// Baseline endpoints
+/**
+ * @swagger
+ * /api/load-testing/baseline/establish:
+ *   post:
+ *     summary: Establish a performance baseline from latest results
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Baseline established
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/baseline/establish', async (req, res) => {
   try {
     const { scenarioName } = req.body;
@@ -77,6 +173,23 @@ router.post('/baseline/establish', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/load-testing/baseline/latest/{scenarioName}:
+ *   get:
+ *     summary: Get the latest performance baseline for a scenario
+ *     tags: [LoadTesting]
+ *     parameters:
+ *       - in: path
+ *         name: scenarioName
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Latest baseline
+ *       500:
+ *         description: Server error
+ */
 router.get('/baseline/latest/:scenarioName', async (req, res) => {
   try {
     const baseline = await PerformanceBaseline.getLatest(req.params.scenarioName);
@@ -86,7 +199,29 @@ router.get('/baseline/latest/:scenarioName', async (req, res) => {
   }
 });
 
-// Regression testing endpoints
+/**
+ * @swagger
+ * /api/load-testing/regression/check:
+ *   post:
+ *     summary: Check for performance regressions against baseline
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Regression report
+ *       400:
+ *         description: Missing baseline or results
+ *       500:
+ *         description: Server error
+ */
 router.post('/regression/check', async (req, res) => {
   try {
     const { scenarioName } = req.body;
@@ -106,7 +241,29 @@ router.post('/regression/check', async (req, res) => {
   }
 });
 
-// Bottleneck analysis endpoints
+/**
+ * @swagger
+ * /api/load-testing/bottlenecks/analyze:
+ *   post:
+ *     summary: Analyze bottlenecks from latest test results
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Bottlenecks and recommendations
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/bottlenecks/analyze', async (req, res) => {
   try {
     const { scenarioName } = req.body;
@@ -125,7 +282,30 @@ router.post('/bottlenecks/analyze', async (req, res) => {
   }
 });
 
-// Capacity planning endpoints
+/**
+ * @swagger
+ * /api/load-testing/capacity/calculate:
+ *   post:
+ *     summary: Calculate current capacity from test results
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *               targetErrorRate: { type: number, default: 1 }
+ *     responses:
+ *       200:
+ *         description: Capacity data
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/capacity/calculate', async (req, res) => {
   try {
     const { scenarioName, targetErrorRate } = req.body;
@@ -142,6 +322,31 @@ router.post('/capacity/calculate', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/load-testing/capacity/project:
+ *   post:
+ *     summary: Project future capacity needs based on growth rate
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName, growthRate, months]
+ *             properties:
+ *               scenarioName: { type: string }
+ *               growthRate: { type: number, description: Monthly growth rate as decimal }
+ *               months: { type: integer }
+ *     responses:
+ *       200:
+ *         description: Capacity projection
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/capacity/project', async (req, res) => {
   try {
     const { scenarioName, growthRate, months } = req.body;
@@ -162,7 +367,29 @@ router.post('/capacity/project', async (req, res) => {
   }
 });
 
-// Performance alerting endpoints
+/**
+ * @swagger
+ * /api/load-testing/alerts/check:
+ *   post:
+ *     summary: Check performance metrics against alert thresholds
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Alerts triggered
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/alerts/check', async (req, res) => {
   try {
     const { scenarioName } = req.body;
@@ -181,6 +408,22 @@ router.post('/alerts/check', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/load-testing/alerts:
+ *   get:
+ *     summary: Get performance alerts
+ *     tags: [LoadTesting]
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, default: 100 }
+ *     responses:
+ *       200:
+ *         description: Performance alerts
+ *       500:
+ *         description: Server error
+ */
 router.get('/alerts', async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 100;
@@ -191,6 +434,18 @@ router.get('/alerts', async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/load-testing/alerts/critical:
+ *   get:
+ *     summary: Get critical performance alerts
+ *     tags: [LoadTesting]
+ *     responses:
+ *       200:
+ *         description: Critical alerts
+ *       500:
+ *         description: Server error
+ */
 router.get('/alerts/critical', async (req, res) => {
   try {
     const alerts = await performanceAlerting.constructor.getCriticalAlerts();
@@ -200,7 +455,29 @@ router.get('/alerts/critical', async (req, res) => {
   }
 });
 
-// Optimization recommendations endpoints
+/**
+ * @swagger
+ * /api/load-testing/recommendations:
+ *   post:
+ *     summary: Get optimization recommendations from test results
+ *     tags: [LoadTesting]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [scenarioName]
+ *             properties:
+ *               scenarioName: { type: string }
+ *     responses:
+ *       200:
+ *         description: Prioritized recommendations
+ *       400:
+ *         description: No test results found
+ *       500:
+ *         description: Server error
+ */
 router.post('/recommendations', async (req, res) => {
   try {
     const { scenarioName } = req.body;
