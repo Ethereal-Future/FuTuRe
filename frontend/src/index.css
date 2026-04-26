@@ -148,6 +148,7 @@ button:disabled {
   border-radius: 3px;
   cursor: pointer;
   transition: background 0.2s;
+  z-index: 1;
 }
 
 .btn-send-max:hover:not(:disabled) {
@@ -158,6 +159,15 @@ button:disabled {
   background: #a5a5a5;
   cursor: not-allowed;
   opacity: 0.6;
+}
+
+/* Responsive Max button */
+@media (max-width: 360px) {
+  .btn-send-max {
+    min-width: 40px;
+    padding: 6px 8px;
+    font-size: 12px;
+  }
 }
 
 /* Inputs */
@@ -171,11 +181,25 @@ input {
   margin-bottom: 10px;
   background: var(--surface);
   color: var(--text);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 input:focus {
   outline: none;
   border-color: var(--primary);
+}
+
+select {
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 10px;
+  font-size: 15px;
+  min-height: 44px;
+  background: var(--surface);
+  color: var(--text);
+  box-sizing: border-box;
+  max-width: 100%;
 }
 
 /* Account info box */
@@ -191,8 +215,47 @@ input:focus {
 }
 
 /* Validated input wrapper */
-.input-wrap { position: relative; margin-bottom: 4px; }
-.input-wrap input { margin-bottom: 0; padding-right: 60px; }
+.input-wrap { 
+  position: relative; 
+  margin-bottom: 4px;
+  width: 100%;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.input-wrap input { 
+  margin-bottom: 0; 
+  padding-right: 60px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-wrap select {
+  margin-bottom: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Memo input with type selector */
+.input-wrap.memo-wrap {
+  display: flex;
+  flex-direction: row;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.input-wrap.memo-wrap select {
+  flex-shrink: 0;
+  width: auto;
+  min-width: 100px;
+}
+
+.input-wrap.memo-wrap input {
+  flex: 1;
+  min-width: 0;
+}
+
 .input-icon {
   position: absolute;
   right: 10px;
@@ -201,7 +264,37 @@ input:focus {
   pointer-events: none;
 }
 
-.field-error { color: #ef4444; font-size: 13px; margin: 4px 0 8px; }
+/* Responsive adjustments for memo wrap */
+@media (max-width: 480px) {
+  .input-wrap.memo-wrap {
+    flex-direction: column;
+    gap: 8px;
+  }
+  
+  .input-wrap.memo-wrap select {
+    width: 100%;
+  }
+  
+  .input-wrap.memo-wrap input {
+    padding-right: 40px;
+  }
+}
+
+.field-error { 
+  color: #ef4444; 
+  font-size: 13px; 
+  margin: 4px 0 8px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+}
+
+/* Responsive field error */
+@media (max-width: 480px) {
+  .field-error {
+    font-size: 12px;
+  }
+}
 
 /* Status banner */
 .status-banner {
@@ -290,18 +383,32 @@ input:focus {
 .qr-close:hover { background: var(--surface); border-radius: 4px; }
 
 .qr-scan-btn {
+  position: absolute;
+  right: 50px;
+  top: 50%;
+  transform: translateY(-50%);
   background: none;
   border: none;
   cursor: pointer;
   font-size: 1.2rem;
-  padding: 0 6px;
+  padding: 4px 6px;
   line-height: 1;
   min-height: unset;
   min-width: unset;
   width: auto;
   flex-shrink: 0;
+  z-index: 1;
 }
 .qr-scan-btn:hover { opacity: 0.7; }
+
+/* Responsive QR scan button */
+@media (max-width: 360px) {
+  .qr-scan-btn {
+    right: 40px;
+    font-size: 1rem;
+    padding: 2px 4px;
+  }
+}
 
 .qr-canvas-wrap canvas {
   display: block;
@@ -793,11 +900,23 @@ kbd {
   font-size: 13px;
   color: #0369a1;
   font-weight: 500;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 .rate-source { color: #94a3b8; font-weight: 400; font-size: 11px; }
 .rate-estimate--loading { color: #94a3b8; font-style: italic; }
 [data-theme="dark"] .rate-estimate { color: #38bdf8; }
 [data-theme="dark"] .rate-source { color: #64748b; }
+
+/* Responsive rate estimate */
+@media (max-width: 480px) {
+  .rate-estimate {
+    font-size: 12px;
+  }
+  .rate-source {
+    font-size: 10px;
+  }
+}
 .fee-tooltip {
   background: #fff;
   border: 1px solid #bae6fd;
@@ -1088,5 +1207,59 @@ kbd {
     left: auto;
     right: 12px;
     transform: none;
+  }
+}
+
+/* Payment Form Actions */
+.payment-form-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+
+.payment-form-actions button {
+  flex: 1;
+  min-width: 120px;
+}
+
+/* KYC Warning */
+.kyc-warning {
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+/* Responsive payment form */
+@media (max-width: 480px) {
+  .payment-form-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .payment-form-actions button {
+    width: 100%;
+    min-width: unset;
+  }
+  
+  .kyc-warning {
+    font-size: 0.85rem;
+    padding: 8px 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .kyc-warning {
+    font-size: 0.8rem;
   }
 }

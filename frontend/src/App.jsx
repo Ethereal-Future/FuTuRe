@@ -791,39 +791,40 @@ function App() {
                       )}
                     </AnimatePresence>
 
-                    <div className="input-wrap">
-                      <label htmlFor="memo-input" className="sr-only">Payment memo (optional)</label>
+                    <div className="input-wrap memo-wrap">
                       <label htmlFor="memo-type-select" className="sr-only">Memo type</label>
                       <select
                         id="memo-type-select"
                         value={memoType}
                         onChange={(e) => dispatch({ type: A.SET_MEMO_TYPE, payload: e.target.value })}
                         aria-label="Memo type"
-                        style={{ flexShrink: 0 }}
                       >
                         <option value="text">Text</option>
                         <option value="id">ID (exchange)</option>
                       </select>
-                      <label htmlFor="memo-input" className="sr-only">
-                        {memoType === 'id' ? 'Numeric memo ID (required for exchange deposits)' : 'Payment memo (optional, max 28 characters)'}
-                      </label>
-                      <input
-                        id="memo-input"
-                        type={memoType === 'id' ? 'number' : 'text'}
-                        inputMode={memoType === 'id' ? 'numeric' : undefined}
-                        placeholder={memoType === 'id' ? 'Numeric memo ID (exchange deposit)' : 'Memo (optional, max 28 chars)'}
-                        value={memo}
-                        onChange={(e) => {
-                          const val = memoType === 'id'
-                            ? e.target.value.replace(/\D/g, '').slice(0, 20)
-                            : e.target.value.slice(0, 28);
-                          dispatch({ type: A.SET_MEMO, payload: val });
-                        }}
-                        onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
-                        aria-label={memoType === 'id' ? 'Numeric memo ID for exchange deposit' : 'Payment memo (optional)'}
-                        maxLength={memoType === 'id' ? 20 : 28}
-                      />
-                      {memo && memoType === 'text' && <span className="input-icon" aria-hidden="true">{memo.length}/28</span>}
+                      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                        <label htmlFor="memo-input" className="sr-only">
+                          {memoType === 'id' ? 'Numeric memo ID (required for exchange deposits)' : 'Payment memo (optional, max 28 characters)'}
+                        </label>
+                        <input
+                          id="memo-input"
+                          type={memoType === 'id' ? 'number' : 'text'}
+                          inputMode={memoType === 'id' ? 'numeric' : undefined}
+                          placeholder={memoType === 'id' ? 'Numeric memo ID (exchange deposit)' : 'Memo (optional, max 28 chars)'}
+                          value={memo}
+                          onChange={(e) => {
+                            const val = memoType === 'id'
+                              ? e.target.value.replace(/\D/g, '').slice(0, 20)
+                              : e.target.value.slice(0, 28);
+                            dispatch({ type: A.SET_MEMO, payload: val });
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
+                          aria-label={memoType === 'id' ? 'Numeric memo ID for exchange deposit' : 'Payment memo (optional)'}
+                          maxLength={memoType === 'id' ? 20 : 28}
+                          style={{ paddingRight: memo && memoType === 'text' ? '50px' : '10px' }}
+                        />
+                        {memo && memoType === 'text' && <span className="input-icon" aria-hidden="true">{memo.length}/28</span>}
+                      </div>
                     </div>
 
                     <FeeDisplay amount={amount} visible={amountValid} />
@@ -834,7 +835,7 @@ function App() {
                         </p>
                       : rateLoading && <p className="rate-estimate rate-estimate--loading" aria-live="polite">Loading rate…</p>
                     )}
-                    <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <div className="payment-form-actions">
                       <motion.button
                         onClick={() => setShowConfirm(true)}
                         {...tap}
@@ -844,11 +845,6 @@ function App() {
                       >
                         {loading === 'send' ? <Spinner label="Sending payment…" /> : 'Send'}
                       </motion.button>
-                      {largeTransactionBlocked && (
-                        <p style={{ color: '#b45309', margin: '0 0 0 12px', fontSize: '0.9rem' }}>
-                          Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM<XLMInfoIcon /> require approved KYC.
-                        </p>
-                      )}
                       <InlineConfirmation
                         isVisible={confirmClear}
                         message="Clear form?"
@@ -869,6 +865,11 @@ function App() {
                         </motion.button>
                       )}
                     </div>
+                    {largeTransactionBlocked && (
+                      <p className="kyc-warning">
+                        Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM<XLMInfoIcon /> require approved KYC.
+                      </p>
+                    )}
                   </ErrorBoundary>
                 </motion.section>
 
