@@ -403,6 +403,21 @@ router.post('/trustline', rules.createTrustline, validate, async (req, res) => {
   }
 });
 
+// DELETE /api/stellar/trustline - Remove a trustline (balance must be zero)
+router.delete('/trustline', rules.removeTrustline, validate, async (req, res) => {
+  try {
+    const { sourceSecret, assetCode } = req.body;
+    const result = await StellarService.removeTrustline(sourceSecret, assetCode);
+    res.json(result);
+  } catch (error) {
+    if (error.message.startsWith('Cannot remove trustline') || error.message.startsWith('No trustline found')) {
+      return res.status(400).json({ error: error.message });
+    }
+    logError(req, error, { assetCode: req.body.assetCode });
+    res.status(500).json({ error: 'Failed to remove trustline' });
+  }
+});
+
 router.get('/account/:publicKey/label', rules.publicKeyParam, validate, async (req, res) => {
   try {
     const user = await prisma.user.findUnique({

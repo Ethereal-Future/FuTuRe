@@ -138,6 +138,21 @@ export const rules = {
       .withMessage(`Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter(a => a !== 'XLM').join(', ')}`),
   ],
 
+  removeTrustline: [
+    body('sourceSecret')
+      .trim()
+      .matches(STELLAR_SECRET_KEY)
+      .withMessage('Invalid Stellar secret key'),
+    body('assetCode')
+      .trim()
+      .matches(ASSET_CODE)
+      .withMessage('Invalid asset code')
+      .custom(v => v !== 'XLM')
+      .withMessage('Cannot remove trustline for native XLM asset')
+      .isIn(SUPPORTED_ASSETS.filter(a => a !== 'XLM'))
+      .withMessage(`Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter(a => a !== 'XLM').join(', ')}`),
+  ],
+
   assetCodeParams: [
     param('from').trim().matches(ASSET_CODE).withMessage('Invalid source asset code'),
     param('to').trim().matches(ASSET_CODE).withMessage('Invalid target asset code'),

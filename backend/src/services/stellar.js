@@ -314,6 +314,57 @@ export async function createTrustline(sourceSecret, assetCode) {
   return { hash: result.hash, assetCode, issuer };
 }
 
+export async function removeTrustline(sourceSecret, assetCode) {
+  const issuer = getIssuer(assetCode);
+  if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
+
+  const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  const sourcePublicKey = sourceKeypair.publicKey();
+  logger.info('stellar.removeTrustline', { publicKey: sourcePublicKey, assetCode });
+
+  const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
+
+  const balance = sourceAccount.balances.find(
+    b => b.asset_code === assetCode && b.asset_issuer === issuer
+  );
+  if (!balance) {
+    throw new Error(`No trustline found for ${assetCode}`);
+  }
+  if (parseFloat(balance.balance) !== 0) {
+    throw new Error(`Cannot remove trustline: balance is non-zero (${balance.balance} ${assetCode})`);
+  }
+
+  const asset = new StellarSDK.Asset(assetCode, issuer);
+
+  const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+  })
+    .addOperation(StellarSDK.Operation.changeTrust({ asset, limit: '0' }))
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  let result;
+  try {
+    result = await getHorizonServer().submitTransaction(transaction);
+  } catch (err) {
+    logger.error('stellar.removeTrustline.failed', { publicKey: sourcePublicKey, assetCode, error: err.message });
+    throw err;
+  }
+
+  logger.info('stellar.removeTrustline.success', { publicKey: sourcePublicKey, assetCode, hash: result.hash });
+
+  await eventMonitor.publishEvent(sourcePublicKey, {
+    type: 'TrustlineRemoved',
+    data: { assetCode, issuer, hash: result.hash },
+    version: 1,
+  });
+
+  return { hash: result.hash, assetCode, issuer };
+}
+
 export async function getTransactions(publicKey, { cursor, limit = 10, type, dateFrom, dateTo } = {}) {
   let builder = getHorizonServer().transactions().forAccount(publicKey).order('desc').limit(limit);
   if (cursor) builder = builder.cursor(cursor);

@@ -17,9 +17,9 @@ vi.mock('@stellar/stellar-sdk', () => ({
   Horizon: {
     Server: vi.fn(),
   },
-  Asset: {
-    native: vi.fn(),
-  },
+  Asset: Object.assign(vi.fn().mockImplementation(function (code, issuer) { return { code, issuer }; }), {
+    native: vi.fn().mockReturnValue({ code: 'XLM', issuer: null }),
+  }),
   TransactionBuilder: vi.fn(),
   Operation: {
     payment: vi.fn(),
@@ -181,9 +181,9 @@ describe('Stellar Service Unit Tests', () => {
     // Setup Stellar SDK mocks
     StellarSDK.Keypair.random.mockReturnValue(mockKeypair);
     StellarSDK.Keypair.fromSecret.mockReturnValue(mockKeypair);
-    StellarSDK.Horizon.Server.mockReturnValue(mockServer);
+    StellarSDK.Horizon.Server.mockImplementation(function () { return mockServer; });
     StellarSDK.Asset.native.mockReturnValue({ code: 'XLM', issuer: null });
-    StellarSDK.TransactionBuilder.mockReturnValue(mockTransactionBuilder);
+    StellarSDK.TransactionBuilder.mockImplementation(function () { return mockTransactionBuilder; });
     StellarSDK.Operation.payment.mockReturnValue({});
     StellarSDK.Operation.changeTrust.mockReturnValue({});
     
@@ -568,7 +568,7 @@ describe('Stellar Service Unit Tests', () => {
 
     it('should return null for invalid asset pair', async () => {
       mockServer.orderbook.mockReturnValueOnce({
-        call: vi.fn(() => Promise.reject(new Error('Invalid assets')),
+        call: vi.fn(() => Promise.reject(new Error('Invalid assets'))),
       });
       
       const result = await stellarService.getExchangeRate('INVALID', 'USDC');
@@ -578,7 +578,7 @@ describe('Stellar Service Unit Tests', () => {
 
     it('should handle orderbook fetch failure', async () => {
       mockServer.orderbook.mockReturnValueOnce({
-        call: vi.fn(() => Promise.reject(new Error('Orderbook unavailable')),
+        call: vi.fn(() => Promise.reject(new Error('Orderbook unavailable'))),
       });
       
       const result = await stellarService.getExchangeRate('XLM', 'USDC');
@@ -656,6 +656,102 @@ describe('Stellar Service Unit Tests', () => {
       await expect(
         stellarService.sendPayment(sourceSecret, destination, amount)
       ).rejects.toThrow('insufficient balance');
+    });
+  });
+
+  describe('removeTrustline', () => {
+    const USDC_TESTNET_ISSUER = 'GBBD47IF6LWK7P7MDEVSCWR7DPUWV3NY3DTQEVFL4NAT4AQH3ZLLFLA5';
+
+    it('should remove a trustline with zero balance', async () => {
+      mockServer.loadAccount.mockResolvedValueOnce({
+        ...mockAccount,
+        balances: [
+          { asset_type: 'native', balance: '100.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: USDC_TESTNET_ISSUER,
+            balance: '0.0000000',
+            limit: '922337203685.4775807',
+            is_authorized: true,
+          },
+        ],
+      });
+      const result = await stellarService.removeTrustline(
+        'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+        'USDC'
+      );
+      expect(result).toHaveProperty('hash');
+      expect(result).toHaveProperty('assetCode', 'USDC');
+    });
+
+    it('should reject when balance is non-zero', async () => {
+      mockServer.loadAccount.mockResolvedValueOnce({
+        ...mockAccount,
+        balances: [
+          { asset_type: 'native', balance: '100.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: USDC_TESTNET_ISSUER,
+            balance: '50.0000000',
+            limit: '922337203685.4775807',
+            is_authorized: true,
+          },
+        ],
+      });
+      await expect(
+        stellarService.removeTrustline(
+          'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+          'USDC'
+        )
+      ).rejects.toThrow('Cannot remove trustline: balance is non-zero');
+    });
+
+    it('should reject when trustline does not exist', async () => {
+      mockServer.loadAccount.mockResolvedValueOnce({
+        ...mockAccount,
+        balances: [{ asset_type: 'native', balance: '100.0000000' }],
+      });
+      await expect(
+        stellarService.removeTrustline(
+          'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+          'USDC'
+        )
+      ).rejects.toThrow('No trustline found for USDC');
+    });
+
+    it('should reject for unknown asset', async () => {
+      await expect(
+        stellarService.removeTrustline(
+          'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+          'UNKNOWN'
+        )
+      ).rejects.toThrow('Unknown asset or missing issuer for UNKNOWN');
+    });
+
+    it('should propagate Horizon submission errors', async () => {
+      mockServer.loadAccount.mockResolvedValueOnce({
+        ...mockAccount,
+        balances: [
+          { asset_type: 'native', balance: '100.0000000' },
+          {
+            asset_type: 'credit_alphanum4',
+            asset_code: 'USDC',
+            asset_issuer: USDC_TESTNET_ISSUER,
+            balance: '0.0000000',
+            limit: '922337203685.4775807',
+            is_authorized: true,
+          },
+        ],
+      });
+      mockServer.submitTransaction.mockRejectedValueOnce(new Error('tx_failed'));
+      await expect(
+        stellarService.removeTrustline(
+          'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
+          'USDC'
+        )
+      ).rejects.toThrow('tx_failed');
     });
   });
 });
