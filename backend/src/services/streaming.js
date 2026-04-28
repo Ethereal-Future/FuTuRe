@@ -99,6 +99,37 @@ export async function cancelStream(id) {
   return stream;
 }
 
+export async function updateStream(id, updates) {
+  const stream = await prisma.paymentStream.findUnique({
+    where: { id },
+    include: { sender: true },
+  });
+
+  if (!stream) throw new Error('Stream not found');
+  if (!['ACTIVE', 'PAUSED'].includes(stream.status)) {
+    throw new Error(`Cannot update stream with status ${stream.status}`);
+  }
+
+  const updateData = {};
+  if (updates.rateAmount !== undefined) updateData.rateAmount = updates.rateAmount;
+  if (updates.intervalSeconds !== undefined) updateData.intervalSeconds = updates.intervalSeconds;
+  if (updates.endTime !== undefined) updateData.endTime = updates.endTime ? new Date(updates.endTime) : null;
+
+  const updated = await prisma.paymentStream.update({
+    where: { id },
+    data: updateData,
+    include: { sender: true },
+  });
+
+  await eventMonitor.publishEvent(stream.sender.publicKey, {
+    type: 'StreamUpdated',
+    data: { streamId: id, updates: updateData },
+    version: 1,
+  });
+
+  return updated;
+}
+
 export async function getStreamAnalytics() {
   const [statusCounts, totalVolumeResult, assets] = await Promise.all([
     prisma.paymentStream.groupBy({

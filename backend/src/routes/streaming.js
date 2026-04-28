@@ -238,4 +238,49 @@ router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
   }
 });
 
+/**
+ * @swagger
+ * /api/streaming/{id}:
+ *   patch:
+ *     summary: Update a streaming payment (rate, interval, or endTime)
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string, format: uuid }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               rateAmount: { type: number, description: New amount per interval }
+ *               intervalSeconds: { type: integer, minimum: 10, description: New interval in seconds }
+ *               endTime: { type: string, format: date-time, description: New end time }
+ *     responses:
+ *       200:
+ *         description: Stream updated
+ *       400:
+ *         description: Validation error or invalid stream status
+ *       404:
+ *         description: Stream not found
+ *       500:
+ *         description: Server error
+ */
+router.patch('/:id', streamRules.idParam, [
+  body('rateAmount').optional().isFloat({ gt: 0 }).withMessage('rateAmount must be a positive number'),
+  body('intervalSeconds').optional().isInt({ min: 10 }).withMessage('intervalSeconds must be at least 10'),
+  body('endTime').optional().isISO8601().withMessage('endTime must be a valid ISO8601 date'),
+], validate, async (req, res) => {
+  try {
+    const stream = await StreamingService.updateStream(req.params.id, req.body);
+    res.json(stream);
+  } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 400;
+    res.status(statusCode).json({ error: error.message });
+  }
+});
+
 export default router;
