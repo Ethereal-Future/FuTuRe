@@ -1,0 +1,135 @@
+name: Cross-Platform Testing
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Vitest cross-platform unit/integration tests ──────────────────────────
+  cross-platform-unit:
+    name: Cross-Platform Unit Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run cross-platform tests
+        run: npx vitest run frontend/tests/cross-platform.test.jsx --reporter=verbose
+        env:
+          NODE_ENV: test
+
+      - name: Upload compatibility report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cross-platform-report-${{ github.sha }}
+          path: test-reports/
+          retention-days: 14
+
+  # ── Playwright cross-browser E2E tests ───────────────────────────────────
+  cross-browser-e2e:
+    name: Cross-Browser E2E (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+        working-directory: e2e
+
+      - name: Run Playwright E2E tests
+        run: npx playwright test --project=${{ matrix.browser }}
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true
+        continue-on-error: true
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-${{ matrix.browser }}-${{ github.sha }}
+          path: e2e/test-reports/
+          retention-days: 14
+
+  # ── Mobile platform E2E tests ─────────────────────────────────────────────
+  mobile-platform:
+    name: Mobile Platform Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: e2e
+
+      - name: Run mobile platform tests
+        run: npx playwright test --project=mobile-chrome --project=mobile-safari
+        working-directory: e2e
+        env:
+          BASE_URL: http://localhost:3000
+          CI: true
+        continue-on-error: true
+
+      - name: Upload mobile test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-platform-report-${{ github.sha }}
+          path: e2e/test-reports/
+          retention-days: 14
+
+  # ── Compatibility summary comment on PR ───────────────────────────────────
+  compatibility-summary:
+    name: Compatibility Summary
+    runs-on: ubuntu-latest
+    needs: [cross-platform-unit, cross-browser-e2e, mobile-platform]
+    if: always() && github.event_name == 'pull_request'
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const unitStatus = '${{ needs.cross-platform-unit.result }}';
+            const e2eStatus = '${{ needs.cross-browser-e2e.result }}';
+            const mobileStatus = '${{ needs.mobile-platform.result }}';
+            const icon = (s) => s === 'success' ? '✅' : s === 'skipped' ? '⏭️' : '❌';
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `## Cross-Platform Compatibility Report\n\n| Suite | Status |\n|-------|--------|\n| Cross-Platform Unit | ${icon(unitStatus)} ${unitStatus} |\n| Cross-Browser E2E | ${icon(e2eStatus)} ${e2eStatus} |\n| Mobile Platform | ${icon(mobileStatus)} ${mobileStatus} |\n\nSee artifacts for detailed compatibility matrix.`
+            });

@@ -1,0 +1,13 @@
+{
+  "app": { "title": "Plataforma de Remessas Stellar", "loading": "Carregando…" },
+  "nav": { "switchToLight": "Mudar para modo claro", "switchToDark": "Mudar para modo escuro", "light": "☀️ Claro", "dark": "🌙 Escuro", "install": "⬇ Instalar", "shortcuts": "Atalhos de teclado (?)" },
+  "account": { "create": "Criar conta", "creating": "Criando conta...", "import": "Importar conta", "cancelImport": "Cancelar importação", "publicKey": "Chave pública:", "secretKey": "Chave secreta:", "copyPublicKey": "Copiar chave pública", "copySecretKey": "Copiar chave secreta", "showQR": "🔲 Mostrar QR Code", "created": "Conta criada! Salve sua chave secreta com segurança.", "imported": "Conta importada com sucesso!" },
+  "balance": { "check": "Verificar saldo", "checking": "Verificando saldo..." },
+  "payment": { "title": "Enviar pagamento", "recipientPlaceholder": "Chave pública do destinatário", "recipientLabel": "Chave pública do destinatário", "amountPlaceholder": "Valor (XLM)", "amountLabel": "Valor do pagamento em XLM", "send": "Enviar", "sending": "Enviando pagamento...", "clear": "Limpar", "clearConfirm": "Limpar o formulário de pagamento?", "sent": "Pagamento enviado! Hash: {{hash}}", "queued": "Você está offline. Pagamento na fila, será sincronizado automaticamente.", "largeWarning": "⚠️ Por favor revise e confirme o aviso de transação grande abaixo." },
+  "validation": { "invalidAddress": "Formato de endereço Stellar inválido (deve começar com G e ter 56 caracteres)" },
+  "pwa": { "updateAvailable": "Uma nova versão está disponível.", "updateNow": "Atualizar agora", "queued_one": "{{count}} pagamento na fila — será sincronizado online.", "queued_other": "{{count}} pagamentos na fila — serão sincronizados online." },
+  "shortcuts": { "title": "Atalhos de teclado", "close": "Fechar", "createAccount": "Criar nova conta", "copyKey": "Copiar chave", "escape": "Fechar modais", "help": "Mostrar/ocultar ajuda", "tab": "Navegar entre campos", "enter": "Enviar formulário" },
+  "network": { "connected": "conectado", "disconnected": "desconectado", "reconnecting": "reconectando" },
+  "errors": { "timeout": "A solicitação expirou. Por favor tente novamente." },
+  "language": { "select": "Idioma", "en": "English", "ar": "العربية", "he": "עברית", "fr": "Français", "es": "Español", "zh": "中文", "pt": "Português" }
+}

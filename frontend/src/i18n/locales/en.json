@@ -1,0 +1,82 @@
+{
+  "app": {
+    "title": "Stellar Remittance Platform",
+    "loading": "Loading…"
+  },
+  "nav": {
+    "switchToLight": "Switch to light mode",
+    "switchToDark": "Switch to dark mode",
+    "light": "☀️ Light",
+    "dark": "🌙 Dark",
+    "install": "⬇ Install",
+    "shortcuts": "Keyboard shortcuts (?)"
+  },
+  "account": {
+    "create": "Create Account",
+    "creating": "Creating account...",
+    "import": "Import Account",
+    "cancelImport": "Cancel Import",
+    "publicKey": "Public Key:",
+    "secretKey": "Secret Key:",
+    "copyPublicKey": "Copy public key",
+    "copySecretKey": "Copy secret key",
+    "showQR": "🔲 Show QR Code",
+    "created": "Account created! Save your secret key securely.",
+    "imported": "Account imported successfully!"
+  },
+  "balance": {
+    "check": "Check Balance",
+    "checking": "Checking balance..."
+  },
+  "payment": {
+    "title": "Send Payment",
+    "recipientPlaceholder": "Recipient Public Key",
+    "recipientLabel": "Recipient public key",
+    "amountPlaceholder": "Amount (XLM)",
+    "amountLabel": "Payment amount in XLM",
+    "send": "Send",
+    "sending": "Sending payment...",
+    "clear": "Clear",
+    "clearConfirm": "Clear the payment form?",
+    "sent": "Payment sent! Hash: {{hash}}",
+    "queued": "You are offline. Payment queued and will sync automatically.",
+    "largeWarning": "⚠️ Please review and confirm the large transaction warning below."
+  },
+  "validation": {
+    "invalidAddress": "Invalid Stellar address format (must start with G and be 56 characters)"
+  },
+  "pwa": {
+    "updateAvailable": "A new version is available.",
+    "updateNow": "Update now",
+    "queued_one": "{{count}} payment queued offline — will sync when back online.",
+    "queued_other": "{{count}} payments queued offline — will sync when back online."
+  },
+  "shortcuts": {
+    "title": "Keyboard Shortcuts",
+    "close": "Close",
+    "createAccount": "Create new account",
+    "copyKey": "Copy key (when copy button focused)",
+    "escape": "Close modals",
+    "help": "Toggle this help",
+    "tab": "Navigate between fields",
+    "enter": "Submit focused form"
+  },
+  "network": {
+    "connected": "connected",
+    "disconnected": "disconnected",
+    "reconnecting": "reconnecting"
+  },
+  "errors": {
+    "timeout": "Request timed out. Please try again."
+  },
+  "language": {
+    "select": "Language",
+    "en": "English",
+    "ar": "العربية",
+    "he": "עברית",
+    "fr": "Français",
+    "es": "Español",
+    "zh": "中文",
+    "pt": "Português"
+  }
+}

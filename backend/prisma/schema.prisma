@@ -1,0 +1,183 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                     String                  @id @default(uuid())
+  publicKey              String                  @unique
+  createdAt              DateTime                @default(now())
+  updatedAt              DateTime                @updatedAt
+  settings               Setting?
+  sentTxs                Transaction[]           @relation("sender")
+  receivedTxs            Transaction[]           @relation("recipient")
+  sentStreams            PaymentStream[]         @relation("streamSender")
+  receivedStreams        PaymentStream[]         @relation("streamRecipient")
+  notifications          Notification[]
+  notificationPreference NotificationPreference?
+  kycRecord              KYCRecord?
+  amlAlerts              AMLAlert[]
+}
+
+model Transaction {
+  id            String         @id @default(uuid())
+  hash          String         @unique
+  assetCode     String         @default("XLM")
+  amount        Decimal
+  ledger        Int?
+  successful    Boolean        @default(true)
+  memo          String?
+  memoType      String?        // 'text' | 'id'
+  createdAt     DateTime       @default(now())
+  senderId      String
+  sender        User           @relation("sender", fields: [senderId], references: [id])
+  recipientId   String
+  recipient     User           @relation("recipient", fields: [recipientId], references: [id])
+  retryAttempts Int            @default(0)
+  retryStatus   String?
+  lastRetryAt   DateTime?
+  retryHistory  RetryAttempt[]
+  amlAlerts     AMLAlert[]
+}
+
+model RetryAttempt {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  attemptNumber Int
+  errorType     String
+  errorMessage  String
+  timestamp     DateTime    @default(now())
+}
+
+model Setting {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  defaultAsset    String   @default("XLM")
+  notificationsOn Boolean  @default(true)
+  accountLabel    String?
+  updatedAt       DateTime @updatedAt
+}
+
+enum StreamStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model PaymentStream {
+  id              String       @id @default(uuid())
+  senderId        String
+  sender          User         @relation("streamSender", fields: [senderId], references: [id])
+  recipientId     String
+  recipient       User         @relation("streamRecipient", fields: [recipientId], references: [id])
+  assetCode       String       @default("XLM")
+  rateAmount      Decimal
+  intervalSeconds Int          @default(60)
+  startTime       DateTime     @default(now())
+  endTime         DateTime?
+  lastProcessedAt DateTime     @default(now())
+  totalStreamed    Decimal      @default(0)
+  status          StreamStatus @default(ACTIVE)
+  failureCount    Int          @default(0)
+  metadata        Json?
+  senderSecret    String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@index([status, lastProcessedAt])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String
+  channel   String
+  status    String   @default("sent")
+  title     String?
+  body      String
+  read      Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, read])
+}
+
+model NotificationPreference {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled    Boolean  @default(true)
+  pushEnabled     Boolean  @default(true)
+  smsEnabled      Boolean  @default(false)
+  inAppEnabled    Boolean  @default(true)
+  quietHoursStart Int      @default(22)
+  quietHoursEnd   Int      @default(7)
+  typeOverrides   Json?
+  updatedAt       DateTime @updatedAt
+}
+
+model KYCRecord {
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         String   @default("PENDING")
+  fullName       String
+  dateOfBirth    DateTime
+  nationality    String
+  documentType   String
+  documentNumber String
+  address        String
+  phoneNumber    String?
+  email          String?
+  riskScore      Int?
+  riskLevel      String?
+  submittedAt    DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AMLAlert {
+  id            String      @id @default(uuid())
+  transactionId String
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
+  userId        String
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  ruleId        String
+  severity      String
+  description   String
+  riskScore     Int
+  riskLevel     String
+  createdAt     DateTime    @default(now())
+}
+
+model FeeBumpStat {
+  id              String   @id @default("singleton")
+  total           Int      @default(0)
+  totalFeeStroops BigInt   @default(0)
+  accounts        Json     @default("[]")
+  updatedAt       DateTime @updatedAt
+}
+
+model PendingMultiSigTx {
+  txId            String   @id
+  txXdr           String
+  sourcePublicKey String
+  destination     String
+  amount          String
+  assetCode       String   @default("XLM")
+  signatures      Json     @default("[]")
+  status          String   @default("pending")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([status, expiresAt])
+}

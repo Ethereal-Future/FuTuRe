@@ -20,9 +20,9 @@ const AUTO_DISMISS = { success: 5000, info: 4000, warning: 0, error: 0 };
 export function useMessages() {
   const [state, dispatch] = useReducer(reducer, { messages: [], history: [] });
 
-  const add = useCallback((type, message, { retry, timeout } = {}) => {
+  const add = useCallback((type, message, { retry, timeout, hash } = {}) => {
     const id = nextId++;
-    const msg = { id, type, message, retry, timestamp: new Date(), icon: ICONS[type] };
+    const msg = { id, type, message, retry, hash, timestamp: new Date(), icon: ICONS[type] };
     dispatch({ type: 'ADD', msg });
     const ms = timeout ?? AUTO_DISMISS[type];
     if (ms > 0) setTimeout(() => dispatch({ type: 'REMOVE', id }), ms);

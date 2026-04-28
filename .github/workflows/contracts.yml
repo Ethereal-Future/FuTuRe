@@ -1,0 +1,86 @@
+name: Contract Tests
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  consumer:
+    name: Consumer Contract Generation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm install
+      - name: Generate pact files
+        run: npm run test:contracts:consumer
+      - name: Upload pacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-files
+          path: contracts/pacts/
+
+  provider:
+    name: Provider Contract Verification
+    runs-on: ubuntu-latest
+    needs: consumer
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm install
+      - name: Download pacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-files
+          path: contracts/pacts/
+      - name: Verify provider
+        run: npm run test:contracts:provider
+
+  breaking-changes:
+    name: Breaking Change Detection
+    runs-on: ubuntu-latest
+    needs: [consumer, provider]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm install
+      - name: Download pacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pact-files
+          path: contracts/pacts/
+      - name: Run registry tests
+        run: npm run test:contracts:registry
+      - name: Publish version & detect breaking changes
+        run: |
+          node -e "
+          import('./contracts/registry.js').then(({ publishVersion, listVersions, detectBreakingChanges }) => {
+            const consumer = 'FuTuRe-Frontend';
+            const provider = 'FuTuRe-Backend';
+            const versions = listVersions(consumer, provider);
+            const newVersion = publishVersion(consumer, provider);
+            if (versions.length > 0) {
+              const lastVersion = versions[versions.length - 1].version;
+              const breaks = detectBreakingChanges(consumer, provider, lastVersion, newVersion);
+              if (breaks.length > 0) {
+                console.error('Breaking contract changes detected:');
+                breaks.forEach(b => console.error(' -', b));
+                process.exit(1);
+              }
+            }
+            console.log('No breaking changes detected. Contract version:', newVersion);
+          });
+          "

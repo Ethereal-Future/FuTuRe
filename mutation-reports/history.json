@@ -1,0 +1,12 @@
+[
+  {
+    "score": 59,
+    "timestamp": "2026-03-28T16:40:46.546Z",
+    "totals": {
+      "killed": 61,
+      "survived": 43,
+      "timeout": 0,
+      "noCoverage": 0
+    }
+  }
+]

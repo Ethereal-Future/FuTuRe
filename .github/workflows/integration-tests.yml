@@ -1,0 +1,62 @@
+name: Integration Tests
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: future_test
+          POSTGRES_USER: future_admin
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+
+    - name: Run Prisma Migrations
+      run: npx prisma migrate deploy
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://future_admin:test_password@localhost:5432/future_test
+
+    - name: Run Integration Tests
+      run: npm run test:integration:all
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://future_admin:test_password@localhost:5432/future_test
+        NODE_ENV: test
+        JWT_SECRET: test-secret
+        STELLAR_NETWORK: testnet
+        HORIZON_URL: https://horizon-testnet.stellar.org
+
+    - name: Upload Test Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: integration-test-reports
+        path: backend/test-reports/
+        retention-days: 30

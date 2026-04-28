@@ -1,6 +1,0 @@
-{"name":"event_AccountCreated","value":1,"tags":{"aggregateId":"agg-1"},"timestamp":"2026-03-25T02:30:12.878Z"}
-{"name":"event_AccountCreated","value":1,"tags":{"aggregateId":"agg-2"},"timestamp":"2026-03-25T02:30:12.878Z"}
-{"name":"event_AccountCreated","value":1,"tags":{},"timestamp":"2026-03-25T02:30:12.880Z"}
-{"name":"event_AccountCreated","value":1,"tags":{"aggregateId":"agg-1"},"timestamp":"2026-03-25T02:30:12.882Z"}
-{"name":"event_AccountCreated","value":1,"tags":{"aggregateId":"agg-monitor-test"},"timestamp":"2026-03-25T02:30:12.884Z"}
-{"name":"event_AccountCreated","value":1,"tags":{"aggregateId":"agg-1"},"timestamp":"2026-03-25T02:30:12.886Z"}
