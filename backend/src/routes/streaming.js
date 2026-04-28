@@ -76,31 +76,43 @@ router.post('/', streamRules.create, validate, async (req, res) => {
  * @swagger
  * /api/streaming:
  *   get:
- *     summary: List streaming payments
+ *     summary: List streaming payments for authenticated user
  *     tags: [Streaming]
  *     parameters:
  *       - in: query
  *         name: senderPublicKey
  *         schema: { type: string }
- *         description: Filter by sender public key
+ *         required: true
+ *         description: Sender's public key to filter streams
  *     responses:
  *       200:
- *         description: List of streams
+ *         description: List of streams with status, totalStreamed, and nextPaymentAt
+ *       400:
+ *         description: Missing senderPublicKey parameter
  *       500:
  *         description: Server error
  */
 router.get('/', async (req, res) => {
   try {
     const { senderPublicKey } = req.query;
-    const where = senderPublicKey
-      ? { sender: { publicKey: senderPublicKey } }
-      : {};
+    if (!senderPublicKey) {
+      return res.status(400).json({ error: 'senderPublicKey query parameter is required' });
+    }
+
     const streams = await StreamingService.prisma.paymentStream.findMany({
-      where,
+      where: { sender: { publicKey: senderPublicKey } },
       include: { sender: true, recipient: true },
       orderBy: { startTime: 'desc' },
     });
-    res.json(streams);
+
+    const enriched = streams.map(stream => ({
+      ...stream,
+      nextPaymentAt: stream.status === 'ACTIVE' 
+        ? new Date(new Date(stream.lastProcessedAt).getTime() + stream.intervalSeconds * 1000)
+        : null,
+    }));
+
+    res.json(enriched);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
