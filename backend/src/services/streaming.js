@@ -5,6 +5,17 @@ import { eventMonitor } from '../eventSourcing/index.js';
 import logger from '../config/logger.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 
+/**
+ * Per-stream secret encryption/decryption
+ * 
+ * SECURITY MODEL:
+ * - Each PaymentStream stores an encrypted senderSecret
+ * - Secrets are encrypted at rest using STREAM_SECRET_ENCRYPTION_KEY
+ * - Decryption happens only during payment processing
+ * - This is an interim solution before full delegated signing
+ * 
+ * See STREAMING_SECURITY.md for detailed security trade-offs and future improvements
+ */
 function getStreamEncryptionKey() {
   const key = process.env.STREAM_SECRET_ENCRYPTION_KEY;
   if (!key) throw new Error('STREAM_SECRET_ENCRYPTION_KEY is not set');
@@ -99,6 +110,37 @@ export async function cancelStream(id) {
   return stream;
 }
 
+export async function updateStream(id, updates) {
+  const stream = await prisma.paymentStream.findUnique({
+    where: { id },
+    include: { sender: true },
+  });
+
+  if (!stream) throw new Error('Stream not found');
+  if (!['ACTIVE', 'PAUSED'].includes(stream.status)) {
+    throw new Error(`Cannot update stream with status ${stream.status}`);
+  }
+
+  const updateData = {};
+  if (updates.rateAmount !== undefined) updateData.rateAmount = updates.rateAmount;
+  if (updates.intervalSeconds !== undefined) updateData.intervalSeconds = updates.intervalSeconds;
+  if (updates.endTime !== undefined) updateData.endTime = updates.endTime ? new Date(updates.endTime) : null;
+
+  const updated = await prisma.paymentStream.update({
+    where: { id },
+    data: updateData,
+    include: { sender: true },
+  });
+
+  await eventMonitor.publishEvent(stream.sender.publicKey, {
+    type: 'StreamUpdated',
+    data: { streamId: id, updates: updateData },
+    version: 1,
+  });
+
+  return updated;
+}
+
 export async function getStreamAnalytics() {
   const [statusCounts, totalVolumeResult, assets] = await Promise.all([
     prisma.paymentStream.groupBy({
@@ -108,9 +150,11 @@ export async function getStreamAnalytics() {
     prisma.paymentStream.aggregate({
       _sum: { totalStreamed: true },
     }),
-    prisma.paymentStream.findMany({
-      select: { assetCode: true },
-      distinct: ['assetCode'],
+    prisma.paymentStream.groupBy({
+      by: ['assetCode'],
+      _count: true,
+      orderBy: { _count: { assetCode: 'desc' } },
+      take: 10,
     }),
   ]);
 
@@ -119,15 +163,15 @@ export async function getStreamAnalytics() {
     return acc;
   }, {});
 
-  const totalVolume = statusMap.totalStreamed || 0;
-
   return {
     totalVolume: (totalVolumeResult._sum.totalStreamed || 0).toFixed(7),
     activeStreams: statusMap.ACTIVE || 0,
     pausedStreams: statusMap.PAUSED || 0,
     failedStreams: statusMap.FAILED || 0,
+    completedStreams: statusMap.COMPLETED || 0,
+    cancelledStreams: statusMap.CANCELLED || 0,
     totalStreams: Object.values(statusMap).reduce((a, b) => a + b, 0),
-    topAssets: assets.map(a => a.assetCode),
+    topAssets: assets.map(a => ({ assetCode: a.assetCode, count: a._count })),
   };
 }
 
