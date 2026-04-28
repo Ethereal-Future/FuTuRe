@@ -28,7 +28,11 @@ export function helmetMiddleware() {
         ].filter(Boolean),
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: ["'self'", "https://horizon.stellar.org", "https://horizon-testnet.stellar.org"],
+        connectSrc: [
+          "'self'",
+          "https://horizon.stellar.org",
+          "https://horizon-testnet.stellar.org",
+        ],
         fontSrc: ["'self'", "https:", "data:"],
         objectSrc: ["'none'"],
         mediaSrc: ["'self'"],

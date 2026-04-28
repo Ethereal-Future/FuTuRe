@@ -215,6 +215,16 @@ function formatErrorResponse(err, req) {
 }
 
 /**
+ * Attach request ID to error response
+ */
+export function attachRequestIdToError(err, req) {
+  if (!err.requestId) {
+    err.requestId = req.id || 'unknown';
+  }
+  return err;
+}
+
+/**
  * Centralized error handling middleware
  */
 export function errorHandler(err, req, res, next) {
@@ -222,6 +232,9 @@ export function errorHandler(err, req, res, next) {
   if (res.headersSent) {
     return next(err);
   }
+
+  // Attach request ID to error
+  attachRequestIdToError(err, req);
 
   // Default error values
   let statusCode = err.statusCode || 500;
@@ -327,4 +340,5 @@ export default {
   createValidationError,
   createStellarError,
   generateRequestId,
+  attachRequestIdToError,
 };
