@@ -16,7 +16,6 @@ function Message({ msg, onRemove, onRetry }) {
       initial="hidden" animate="visible" exit="exit"
       layout
       role="alert"
-      aria-live={msg.type === 'error' ? 'assertive' : 'polite'}
       aria-atomic="true"
     >
       <span className="sm-icon" aria-hidden="true">{msg.icon}</span>
@@ -34,7 +33,7 @@ export function StatusMessage({ messages, onRemove, showHistory = false, history
   const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
-    <div className="sm-wrap" aria-label="Notifications">
+    <div className="sm-wrap" aria-label="Notifications" aria-live="polite" aria-atomic="false">
       <AnimatePresence initial={false}>
         {messages.map((msg) => (
           <Message key={msg.id} msg={msg} onRemove={onRemove} onRetry={onRemove} />

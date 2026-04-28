@@ -41,6 +41,9 @@ model Transaction {
   lastRetryAt   DateTime?
   retryHistory  RetryAttempt[]
   amlAlerts     AMLAlert[]
+
+  @@index([senderId, createdAt])
+  @@index([recipientId, createdAt])
 }
 
 model RetryAttempt {
@@ -142,6 +145,8 @@ model KYCRecord {
   riskLevel      String?
   submittedAt    DateTime @default(now())
   updatedAt      DateTime @updatedAt
+
+  @@index([status])
 }
 
 model AMLAlert {
@@ -156,6 +161,9 @@ model AMLAlert {
   riskScore     Int
   riskLevel     String
   createdAt     DateTime    @default(now())
+
+  @@index([userId])
+  @@index([severity, createdAt])
 }
 
 model FeeBumpStat {
