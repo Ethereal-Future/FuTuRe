@@ -5,6 +5,17 @@ import { eventMonitor } from '../eventSourcing/index.js';
 import logger from '../config/logger.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 
+/**
+ * Per-stream secret encryption/decryption
+ * 
+ * SECURITY MODEL:
+ * - Each PaymentStream stores an encrypted senderSecret
+ * - Secrets are encrypted at rest using STREAM_SECRET_ENCRYPTION_KEY
+ * - Decryption happens only during payment processing
+ * - This is an interim solution before full delegated signing
+ * 
+ * See STREAMING_SECURITY.md for detailed security trade-offs and future improvements
+ */
 function getStreamEncryptionKey() {
   const key = process.env.STREAM_SECRET_ENCRYPTION_KEY;
   if (!key) throw new Error('STREAM_SECRET_ENCRYPTION_KEY is not set');
