@@ -139,9 +139,11 @@ export async function getStreamAnalytics() {
     prisma.paymentStream.aggregate({
       _sum: { totalStreamed: true },
     }),
-    prisma.paymentStream.findMany({
-      select: { assetCode: true },
-      distinct: ['assetCode'],
+    prisma.paymentStream.groupBy({
+      by: ['assetCode'],
+      _count: true,
+      orderBy: { _count: { assetCode: 'desc' } },
+      take: 10,
     }),
   ]);
 
@@ -150,15 +152,15 @@ export async function getStreamAnalytics() {
     return acc;
   }, {});
 
-  const totalVolume = statusMap.totalStreamed || 0;
-
   return {
     totalVolume: (totalVolumeResult._sum.totalStreamed || 0).toFixed(7),
     activeStreams: statusMap.ACTIVE || 0,
     pausedStreams: statusMap.PAUSED || 0,
     failedStreams: statusMap.FAILED || 0,
+    completedStreams: statusMap.COMPLETED || 0,
+    cancelledStreams: statusMap.CANCELLED || 0,
     totalStreams: Object.values(statusMap).reduce((a, b) => a + b, 0),
-    topAssets: assets.map(a => a.assetCode),
+    topAssets: assets.map(a => ({ assetCode: a.assetCode, count: a._count })),
   };
 }
 
