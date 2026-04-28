@@ -83,7 +83,24 @@ export const rules = {
       .isFloat({ gt: 0 })
       .withMessage('Amount must be a positive number')
       .isLength({ max: 20 })
-      .withMessage('Amount too long'),
+      .withMessage('Amount too long')
+      .custom((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        const parsed = parseFloat(amount);
+        if (isNaN(parsed)) throw new Error('Amount must be a valid number');
+        
+        const normalized = parsed.toFixed(7);
+        const decimalPlaces = normalized.split('.')[1].replace(/0+$/, '').length;
+        
+        if (decimalPlaces > 7) {
+          throw new Error('Amount cannot have more than 7 decimal places');
+        }
+        return true;
+      })
+      .customSanitizer((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        return parseFloat(amount).toFixed(7);
+      }),
     body('assetCode')
       .optional()
       .trim()
@@ -209,7 +226,24 @@ export const rules = {
       .isFloat({ gt: 0 })
       .withMessage('Amount must be a positive number')
       .isLength({ max: 20 })
-      .withMessage('Amount too long'),
+      .withMessage('Amount too long')
+      .custom((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        const parsed = parseFloat(amount);
+        if (isNaN(parsed)) throw new Error('Amount must be a valid number');
+        
+        const normalized = parsed.toFixed(7);
+        const decimalPlaces = normalized.split('.')[1].replace(/0+$/, '').length;
+        
+        if (decimalPlaces > 7) {
+          throw new Error('Amount cannot have more than 7 decimal places');
+        }
+        return true;
+      })
+      .customSanitizer((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        return parseFloat(amount).toFixed(7);
+      }),
     body('assetCode')
       .optional()
       .trim()
