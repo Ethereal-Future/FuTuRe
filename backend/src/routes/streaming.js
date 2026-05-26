@@ -6,6 +6,15 @@ import logger from '../config/logger.js';
 
 const router = express.Router();
 
+function withNextPaymentAt(stream) {
+  return {
+    ...stream,
+    nextPaymentAt: stream.status === 'ACTIVE'
+      ? new Date(new Date(stream.lastProcessedAt).getTime() + stream.intervalSeconds * 1000)
+      : null,
+  };
+}
+
 const validate = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -65,7 +74,7 @@ const streamRules = {
 router.post('/', streamRules.create, validate, async (req, res) => {
   try {
     const stream = await StreamingService.createStream(req.body);
-    res.status(201).json(stream);
+    res.status(201).json(withNextPaymentAt(stream));
   } catch (error) {
     logger.error('streaming.route.create.failed', { error: error.message });
     res.status(500).json({ error: error.message });
@@ -105,12 +114,7 @@ router.get('/', async (req, res) => {
       orderBy: { startTime: 'desc' },
     });
 
-    const enriched = streams.map(stream => ({
-      ...stream,
-      nextPaymentAt: stream.status === 'ACTIVE' 
-        ? new Date(new Date(stream.lastProcessedAt).getTime() + stream.intervalSeconds * 1000)
-        : null,
-    }));
+    const enriched = streams.map(withNextPaymentAt);
 
     res.json(enriched);
   } catch (error) {
@@ -166,7 +170,7 @@ router.get('/:id', streamRules.idParam, validate, async (req, res) => {
       include: { sender: true, recipient: true },
     });
     if (!stream) return res.status(404).json({ error: 'Stream not found' });
-    res.json(stream);
+    res.json(withNextPaymentAt(stream));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -192,7 +196,7 @@ router.get('/:id', streamRules.idParam, validate, async (req, res) => {
 router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.pauseStream(req.params.id);
-    res.json(stream);
+    res.json(withNextPaymentAt(stream));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -218,7 +222,7 @@ router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
 router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.resumeStream(req.params.id);
-    res.json(stream);
+    res.json(withNextPaymentAt(stream));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -244,7 +248,7 @@ router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
 router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
   try {
     const stream = await StreamingService.cancelStream(req.params.id);
-    res.json(stream);
+    res.json(withNextPaymentAt(stream));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -288,7 +292,7 @@ router.patch('/:id', streamRules.idParam, [
 ], validate, async (req, res) => {
   try {
     const stream = await StreamingService.updateStream(req.params.id, req.body);
-    res.json(stream);
+    res.json(withNextPaymentAt(stream));
   } catch (error) {
     const statusCode = error.message.includes('not found') ? 404 : 400;
     res.status(statusCode).json({ error: error.message });
