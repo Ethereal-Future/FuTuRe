@@ -1,0 +1,13 @@
+{
+  "app": { "title": "Plataforma de Remesas Stellar", "loading": "Cargando…" },
+  "nav": { "switchToLight": "Cambiar a modo claro", "switchToDark": "Cambiar a modo oscuro", "light": "☀️ Claro", "dark": "🌙 Oscuro", "install": "⬇ Instalar", "shortcuts": "Atajos de teclado (?)" },
+  "account": { "create": "Crear cuenta", "creating": "Creando cuenta...", "import": "Importar cuenta", "cancelImport": "Cancelar importación", "publicKey": "Clave pública:", "secretKey": "Clave secreta:", "copyPublicKey": "Copiar clave pública", "copySecretKey": "Copiar clave secreta", "showQR": "🔲 Mostrar código QR", "created": "¡Cuenta creada! Guarda tu clave secreta de forma segura.", "imported": "¡Cuenta importada con éxito!" },
+  "balance": { "check": "Verificar saldo", "checking": "Verificando saldo..." },
+  "payment": { "title": "Enviar pago", "recipientPlaceholder": "Clave pública del destinatario", "recipientLabel": "Clave pública del destinatario", "amountPlaceholder": "Monto (XLM)", "amountLabel": "Monto del pago en XLM", "send": "Enviar", "sending": "Enviando pago...", "clear": "Limpiar", "clearConfirm": "¿Limpiar el formulario de pago?", "sent": "¡Pago enviado! Hash: {{hash}}", "queued": "Estás sin conexión. Pago en cola, se sincronizará automáticamente.", "largeWarning": "⚠️ Por favor revisa y confirma la advertencia de transacción grande." },
+  "validation": { "invalidAddress": "Formato de dirección Stellar inválido (debe comenzar con G y tener 56 caracteres)" },
+  "pwa": { "updateAvailable": "Hay una nueva versión disponible.", "updateNow": "Actualizar ahora", "queued_one": "{{count}} pago en cola — se sincronizará en línea.", "queued_other": "{{count}} pagos en cola — se sincronizarán en línea." },
+  "shortcuts": { "title": "Atajos de teclado", "close": "Cerrar", "createAccount": "Crear nueva cuenta", "copyKey": "Copiar clave", "escape": "Cerrar modales", "help": "Mostrar/ocultar ayuda", "tab": "Navegar entre campos", "enter": "Enviar formulario" },
+  "network": { "connected": "conectado", "disconnected": "desconectado", "reconnecting": "reconectando" },
+  "errors": { "timeout": "La solicitud expiró. Por favor intenta de nuevo." },
+  "language": { "select": "Idioma", "en": "English", "ar": "العربية", "he": "עברית", "fr": "Français", "es": "Español", "zh": "中文", "pt": "Português" }
+}

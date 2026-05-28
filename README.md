@@ -28,6 +28,7 @@ npm install
 cd backend
 cp .env.example .env
 ```
+See `backend/CONFIGURATION.md` for environment options, validation rules, and optional encrypted secrets.
 
 3. Start development servers:
 ```bash

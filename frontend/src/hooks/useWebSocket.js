@@ -21,11 +21,15 @@ export function useWebSocket(publicKey, onMessage) {
       attempts.current = 0;
       setStatus('connected');
       if (publicKey) socket.send(JSON.stringify({ type: 'subscribe', publicKey }));
+      // Also subscribe to the shared rates channel for rateChange events
+      socket.send(JSON.stringify({ type: 'subscribe', publicKey: 'rates' }));
     };
 
     socket.onmessage = (e) => {
       try {
-        onMessageRef.current?.(JSON.parse(e.data));
+        const parsed = JSON.parse(e.data);
+        // Broadcast messages are wrapped in { data, sig }; direct messages are not
+        onMessageRef.current?.(parsed.data ?? parsed);
       } catch (_) {}
     };
 

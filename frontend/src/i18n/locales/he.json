@@ -1,0 +1,82 @@
+{
+  "app": {
+    "title": "פלטפורמת העברות Stellar",
+    "loading": "טוען…"
+  },
+  "nav": {
+    "switchToLight": "עבור למצב בהיר",
+    "switchToDark": "עבור למצב כהה",
+    "light": "☀️ בהיר",
+    "dark": "🌙 כהה",
+    "install": "⬇ התקן",
+    "shortcuts": "קיצורי מקלדת (?)"
+  },
+  "account": {
+    "create": "צור חשבון",
+    "creating": "יוצר חשבון...",
+    "import": "ייבא חשבון",
+    "cancelImport": "בטל ייבוא",
+    "publicKey": "מפתח ציבורי:",
+    "secretKey": "מפתח סודי:",
+    "copyPublicKey": "העתק מפתח ציבורי",
+    "copySecretKey": "העתק מפתח סודי",
+    "showQR": "🔲 הצג קוד QR",
+    "created": "החשבון נוצר! שמור את המפתח הסודי שלך בבטחה.",
+    "imported": "החשבון יובא בהצלחה!"
+  },
+  "balance": {
+    "check": "בדוק יתרה",
+    "checking": "בודק יתרה..."
+  },
+  "payment": {
+    "title": "שלח תשלום",
+    "recipientPlaceholder": "מפתח ציבורי של הנמען",
+    "recipientLabel": "מפתח ציבורי של הנמען",
+    "amountPlaceholder": "סכום (XLM)",
+    "amountLabel": "סכום התשלום ב-XLM",
+    "send": "שלח",
+    "sending": "שולח תשלום...",
+    "clear": "נקה",
+    "clearConfirm": "לנקות את טופס התשלום?",
+    "sent": "התשלום נשלח! גיבוב: {{hash}}",
+    "queued": "אתה לא מחובר. התשלום נוסף לתור ויסונכרן אוטומטית.",
+    "largeWarning": "⚠️ אנא בדוק ואשר את אזהרת העסקה הגדולה למטה."
+  },
+  "validation": {
+    "invalidAddress": "פורמט כתובת Stellar לא חוקי (חייב להתחיל ב-G ולהיות 56 תווים)"
+  },
+  "pwa": {
+    "updateAvailable": "גרסה חדשה זמינה.",
+    "updateNow": "עדכן עכשיו",
+    "queued_one": "{{count}} תשלום בתור — יסונכרן בעת חיבור.",
+    "queued_other": "{{count}} תשלומים בתור — יסונכרנו בעת חיבור."
+  },
+  "shortcuts": {
+    "title": "קיצורי מקלדת",
+    "close": "סגור",
+    "createAccount": "צור חשבון חדש",
+    "copyKey": "העתק מפתח (כשכפתור ההעתקה ממוקד)",
+    "escape": "סגור חלונות",
+    "help": "הצג/הסתר עזרה זו",
+    "tab": "נווט בין שדות",
+    "enter": "שלח טופס ממוקד"
+  },
+  "network": {
+    "connected": "מחובר",
+    "disconnected": "מנותק",
+    "reconnecting": "מתחבר מחדש"
+  },
+  "errors": {
+    "timeout": "הבקשה פגה. אנא נסה שוב."
+  },
+  "language": {
+    "select": "שפה",
+    "en": "English",
+    "ar": "العربية",
+    "he": "עברית",
+    "fr": "Français",
+    "es": "Español",
+    "zh": "中文",
+    "pt": "Português"
+  }
+}

@@ -1,4 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import request from 'supertest';
+import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +14,7 @@ import {
   penetrationTester,
   complianceReporter
 } from '../src/security/index.js';
+import { securityHeaders, helmetMiddleware, cspNonceMiddleware } from '../src/middleware/securityHeaders.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
@@ -248,5 +251,28 @@ describe('Security Features', () => {
       const reports = await complianceReporter.getLatestReports(1);
       expect(reports.length).toBeGreaterThan(0);
     });
+  });
+});
+
+const securedApp = express();
+securedApp.use(cspNonceMiddleware());
+securedApp.use(helmetMiddleware());
+securedApp.use(securityHeaders());
+securedApp.get('/ping', (_req, res) => res.json({ ok: true }));
+
+describe('Security headers middleware', () => {
+  it('sets X-Content-Type-Options: nosniff on API responses', async () => {
+    const res = await request(securedApp).get('/ping');
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
+  it('sets X-Frame-Options: DENY on API responses', async () => {
+    const res = await request(securedApp).get('/ping');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+  });
+
+  it('sets Strict-Transport-Security on API responses', async () => {
+    const res = await request(securedApp).get('/ping');
+    expect(res.headers['strict-transport-security']).toBeDefined();
   });
 });

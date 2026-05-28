@@ -97,6 +97,100 @@ const options = {
             },
           },
         },
+        Transaction: {
+          type: 'object',
+          properties: {
+            hash: {
+              type: 'string',
+              description: 'The transaction hash.',
+              example: 'a1b2c3d4e5f6...',
+            },
+            ledger: {
+              type: 'integer',
+              description: 'The ledger number.',
+              example: 123456,
+            },
+            created_at: {
+              type: 'string',
+              format: 'date-time',
+              description: 'Transaction creation timestamp.',
+            },
+            source_account: {
+              type: 'string',
+              description: 'The source account public key.',
+            },
+            successful: {
+              type: 'boolean',
+              description: 'Whether the transaction was successful.',
+            },
+            operation_count: {
+              type: 'integer',
+              description: 'Number of operations in the transaction.',
+            },
+            fee_charged: {
+              type: 'string',
+              description: 'The fee charged for the transaction.',
+            },
+            operations: {
+              type: 'array',
+              items: {
+                type: 'object',
+                description: 'Transaction operations.',
+              },
+            },
+            status: {
+              type: 'string',
+              enum: ['successful', 'failed'],
+              description: 'Transaction status.',
+            },
+          },
+        },
+        TransactionAnalytics: {
+          type: 'object',
+          properties: {
+            totalTransactions: {
+              type: 'integer',
+              description: 'Total number of transactions.',
+            },
+            successfulTransactions: {
+              type: 'integer',
+              description: 'Number of successful transactions.',
+            },
+            failedTransactions: {
+              type: 'integer',
+              description: 'Number of failed transactions.',
+            },
+            totalVolume: {
+              type: 'number',
+              description: 'Total transaction volume.',
+            },
+            averageFee: {
+              type: 'number',
+              description: 'Average transaction fee.',
+            },
+            operationTypes: {
+              type: 'object',
+              description: 'Count of each operation type.',
+              additionalProperties: {
+                type: 'integer',
+              },
+            },
+            dailyVolume: {
+              type: 'object',
+              description: 'Daily transaction volume.',
+              additionalProperties: {
+                type: 'integer',
+              },
+            },
+            assets: {
+              type: 'array',
+              items: {
+                type: 'string',
+              },
+              description: 'Assets involved in transactions.',
+            },
+          },
+        },
         Error: {
           type: 'object',
           properties: {

@@ -1,9 +1,0 @@
-{
-  "aggregateId": "agg-snapshot-test",
-  "state": {
-    "publicKey": "test",
-    "balance": 100
-  },
-  "version": 5,
-  "timestamp": "2026-03-25T02:30:12.823Z"
-}

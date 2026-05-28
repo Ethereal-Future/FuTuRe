@@ -12,10 +12,45 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
         node-version: '20'
         cache: 'npm'
+
     - run: npm install
-    - run: npm test
+
+    - name: Run tests with coverage
+      run: npm run test:coverage
+
+    - name: Upload snapshot artifacts on failure
+      uses: actions/upload-artifact@v4
+      if: failure()
+      with:
+        name: snapshot-failures
+        path: '**/__snapshots__/'
+        retention-days: 7
+
+    - name: Upload coverage reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report
+        path: coverage/
+        retention-days: 30
+
+    - name: Coverage summary
+      if: always()
+      run: |
+        if [ -f coverage/coverage-summary.json ]; then
+          echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+          node -e "
+            const s = require('./coverage/coverage-summary.json').total;
+            console.log('| Metric | Coverage |');
+            console.log('|--------|----------|');
+            ['lines','statements','functions','branches'].forEach(k =>
+              console.log(\`| \${k} | \${s[k].pct}% |\`)
+            );
+          " >> $GITHUB_STEP_SUMMARY
+        fi

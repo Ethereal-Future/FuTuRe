@@ -1,0 +1,20 @@
+{
+  "consumer": {
+    "name": "Test-Consumer"
+  },
+  "provider": {
+    "name": "Test-Provider"
+  },
+  "interactions": [
+    {
+      "description": "get test",
+      "request": {
+        "method": "GET",
+        "path": "/test"
+      },
+      "response": {
+        "status": 404
+      }
+    }
+  ]
+}

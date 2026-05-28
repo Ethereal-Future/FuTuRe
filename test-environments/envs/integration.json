@@ -1,0 +1,16 @@
+{
+  "name": "integration",
+  "version": "1.0.0",
+  "description": "Integration tests — real Express app, mocked Stellar",
+  "vars": {
+    "NODE_ENV": "test",
+    "STELLAR_NETWORK": "testnet",
+    "HORIZON_URL": "https://horizon-testnet.stellar.org",
+    "PORT": "3101",
+    "LOG_LEVEL": "warn",
+    "JWT_SECRET": "test-secret-integration",
+    "DATABASE_URL": "postgresql://future_admin:test_password@localhost:5433/future_test"
+  },
+  "isolation": "process",
+  "cleanup": ["env", "db"]
+}

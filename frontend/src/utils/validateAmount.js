@@ -1,5 +1,7 @@
 const MIN = 0.0000001;
 const MAX_DECIMALS = 7;
+const BASE_FEE = 0.00001;
+const MIN_RESERVE = 1;
 
 export function validateAmount(value, availableBalance) {
   if (!value) return null;
@@ -9,7 +11,11 @@ export function validateAmount(value, availableBalance) {
   if (num < MIN) return `Minimum amount is ${MIN} XLM`;
   const decimals = value.includes('.') ? value.split('.')[1].length : 0;
   if (decimals > MAX_DECIMALS) return `Maximum ${MAX_DECIMALS} decimal places allowed`;
-  if (availableBalance !== null && num > availableBalance) return 'Amount exceeds available balance';
+  if (availableBalance !== null) {
+    if (num > availableBalance) return 'Amount exceeds available balance';
+    if (availableBalance - num - BASE_FEE < MIN_RESERVE)
+      return 'Insufficient balance: account must keep a 1 XLM minimum reserve';
+  }
   return null;
 }
 

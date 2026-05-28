@@ -1,0 +1,49 @@
+name: Mutation Testing
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'frontend/src/utils/**'
+      - 'frontend/tests/**'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'frontend/src/utils/**'
+      - 'frontend/tests/**'
+  # Allow manual trigger
+  workflow_dispatch:
+
+jobs:
+  mutation:
+    name: Mutation Testing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm install
+
+      - name: Run mutation tests
+        run: npm run test:mutation
+        # Don't fail the job on Stryker threshold — tracker handles that
+        continue-on-error: true
+
+      - name: Track score & detect regressions
+        run: npm run test:mutation:track
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mutation-report
+          path: |
+            mutation-reports/mutation-report.html
+            mutation-reports/mutation-report.json
+          if-no-files-found: ignore

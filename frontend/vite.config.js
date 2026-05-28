@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import { visualizer } from 'rollup-plugin-visualizer';
 
 export default defineConfig(({ mode }) => ({
+  // CDN base URL: set VITE_CDN_URL in .env to serve assets from CDN
+  base: process.env.VITE_CDN_URL ?? '/',
   plugins: [
     react(),
     // Bundle analysis: generates stats.html after `npm run build`
@@ -21,6 +23,10 @@ export default defineConfig(({ mode }) => ({
           motion:        ['framer-motion'],
           stellar:       ['@stellar/stellar-sdk'],
         },
+        // Ensure hashed filenames for immutable CDN caching
+        entryFileNames: 'assets/[name]-[hash].js',
+        chunkFileNames: 'assets/[name]-[hash].js',
+        assetFileNames: 'assets/[name]-[hash][extname]',
       },
     },
     // Performance budget: warn if any chunk > 500 kB

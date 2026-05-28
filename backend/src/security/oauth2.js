@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import { getConfig } from '../config/env.js';
 
 class OAuth2Provider {
   constructor() {
@@ -51,7 +52,7 @@ class OAuth2Provider {
 
     const accessToken = jwt.sign(
       { userId: authCode.userId, clientId, scope: authCode.scope },
-      process.env.JWT_SECRET || 'secret',
+      getConfig().security.jwtSecret,
       { expiresIn: '1h' }
     );
 
@@ -75,7 +76,7 @@ class OAuth2Provider {
 
     const accessToken = jwt.sign(
       { userId: tokenData.userId, clientId, scope: tokenData.scope },
-      process.env.JWT_SECRET || 'secret',
+      getConfig().security.jwtSecret,
       { expiresIn: '1h' }
     );
 
@@ -84,7 +85,7 @@ class OAuth2Provider {
 
   validateToken(token) {
     try {
-      return jwt.verify(token, process.env.JWT_SECRET || 'secret');
+      return jwt.verify(token, getConfig().security.jwtSecret);
     } catch (error) {
       throw new Error('Invalid token');
     }
