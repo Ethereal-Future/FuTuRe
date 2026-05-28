@@ -59,13 +59,6 @@ function withTimeout(promiseFn) {
 }
 
 function App() {
-  const [account, setAccount] = useState(null);
-  const [balance, setBalance] = useState(null);
-  const [recipient, setRecipient] = useState('');
-  const [amount, setAmount] = useState('');
-  const [loading, setLoading] = useState('');
-  const [showQR, setShowQR] = useState(false);
-  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const { account, balance, loading, recipient, amount, memo, memoType, showQR, showImportForm, showShortcuts, accountLabel } = useAppState();
   const dispatch = useAppDispatch();
 
