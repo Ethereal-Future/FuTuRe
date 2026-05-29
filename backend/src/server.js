@@ -7,7 +7,7 @@ import logger from './config/logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { connectDB, checkDBHealth, disconnectDB } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import stellarRoutes from './routes/stellar.js';
+import stellarRoutes from './routes/stellar/index.js';
 import multiSigRoutes from './routes/multiSig.js';
 import authRoutes from './routes/auth.js';
 import { initWebSocket } from './services/websocket.js';
