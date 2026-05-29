@@ -6,7 +6,6 @@ import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
 import { formatBalanceWithAsset } from './utils/formatBalance';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
@@ -42,6 +41,7 @@ import { NotificationBell } from './components/NotificationBell';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
 import { useExchangeRate } from './hooks/useExchangeRate';
+import { useBalance, useSendPayment, useCreateAccount, useImportAccount, useKycStatus, useSaveAccountLabel, useNetworkStatusQuery } from './hooks/useQueryHooks';
 import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { AccountRecovery } from './components/AccountRecovery';
@@ -304,7 +304,6 @@ function App() {
 
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
-    setLoading('send');
     if (kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
       msg.error(`Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`);
       return;
@@ -330,16 +329,13 @@ function App() {
       setAmount('');
       setRecipient('');
     } catch (error) {
-      logError(error, { context: 'sendPayment' });
-      msg.error(getFriendlyError(error), { retry: confirmPayment });
-    } finally { setLoading(''); }
       dispatch({ type: A.REVERT_BALANCE });
       if (!navigator.onLine) {
         await queueOffline({ destination: payload.destination, amount: payload.amount, assetCode: payload.assetCode });
         msg.info('You are offline. Payment queued — you\'ll be prompted to re-enter your secret key when back online.');
       } else {
         logError(error, { context: 'sendPayment' });
-        msg.error(getFriendlyError(error), { retry: sendPayment });
+        msg.error(getFriendlyError(error), { retry: confirmPayment });
       }
     } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
   };
@@ -797,6 +793,7 @@ function App() {
                         aria-invalid={amountTouched && !!amountError}
                         aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
                         autoComplete="transaction-amount"
+                      />
                       {amountTouched && <span className="input-icon" aria-hidden="true">{amountValid ? '✅' : '❌'}</span>}
                       <motion.button
                         type="button"
