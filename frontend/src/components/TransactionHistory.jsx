@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Spinner } from './Spinner';
+import { SkeletonCard } from './Skeleton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { CopyButton } from './CopyButton';
 import { makeVariants, tapScale } from '../utils/animations';
@@ -18,17 +19,7 @@ function fmt(dateStr) {
   return new Date(dateStr).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function TxSkeletonRow() {
-  return (
-    <div className="tx-row tx-skeleton" aria-hidden="true" style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '10px 0' }}>
-      <span className="tx-skeleton-block" style={{ width: 16, height: 16, borderRadius: 4 }} />
-      <span className="tx-skeleton-block" style={{ width: 80, height: 14, borderRadius: 4 }} />
-      <span className="tx-skeleton-block" style={{ width: 100, height: 14, borderRadius: 4 }} />
-      <span className="tx-skeleton-block" style={{ width: 120, height: 14, borderRadius: 4, marginLeft: 'auto' }} />
-      <span className="tx-skeleton-block" style={{ width: 16, height: 16, borderRadius: 4 }} />
-    </div>
-  );
-}
+
 function csvEscape(val) {
   const s = val == null ? '' : String(val);
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
@@ -266,7 +257,7 @@ export function TransactionHistory({ publicKey }) {
             {...tap}
             aria-label={loaded ? 'Refresh transaction history' : 'Load transaction history'}
           >
-            {loading ? <Spinner label="Loading transactions…" /> : loaded ? '↺ Refresh' : 'Load History'}
+            {loading ? 'Loading transactions…' : loaded ? '↺ Refresh' : 'Load History'}
           </motion.button>
         </div>
       </div>
@@ -321,7 +312,7 @@ export function TransactionHistory({ publicKey }) {
         )}
         {!error && loading && (
           <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-label="Loading transactions" aria-busy="true">
-            {Array.from({ length: 5 }, (_, i) => <TxSkeletonRow key={i} />)}
+            {Array.from({ length: 5 }, (_, i) => <SkeletonCard key={i} />)}
           </motion.div>
         )}
         {!error && !loading && loaded && (

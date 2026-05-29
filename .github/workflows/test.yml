@@ -54,3 +54,61 @@ jobs:
             );
           " >> $GITHUB_STEP_SUMMARY
         fi
+
+  migration-smoke-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+      working-directory: ./backend
+
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U test_user; do
+          echo 'Waiting for PostgreSQL...'
+          sleep 1
+        done
+      env:
+        PGPASSWORD: test_password
+
+    - name: Validate Prisma schema
+      run: npx prisma validate
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+
+    - name: Run Prisma migrations
+      run: npx prisma migrate deploy
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+
+    - name: Verify migration success
+      run: |
+        echo "✓ All migrations completed successfully"
+        echo "✓ Database schema is valid"
+      if: success()

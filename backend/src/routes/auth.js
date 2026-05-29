@@ -5,7 +5,12 @@ import { createUser, findUser, getUserById, updateUserPassword } from '../auth/u
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
 import { requireAuth } from '../middleware/auth.js';
 import { consumePendingCredentials } from '../recovery/recoveryStore.js';
+ ci/add-migration-smoke-test
+import prisma from '../db/client.js';
+
+import prisma from '../db/client.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
+ main
 
 const router = express.Router();
 
@@ -231,6 +236,29 @@ router.get('/profile', requireAuth, (req, res) => {
   const user = getUserById(req.user.sub);
   if (!user) return res.status(404).json({ error: 'User not found' });
   res.json({ id: user.id, username: user.username, createdAt: user.createdAt });
+});
+
+// DELETE /api/auth/account
+router.delete('/account', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    
+    // Soft delete the user (sets deletedAt timestamp)
+    const deletedUser = await prisma.user.update({
+      where: { id: userId },
+      data: { deletedAt: new Date() },
+    });
+
+    res.json({
+      message: 'Account deleted successfully',
+      deletedAt: deletedUser.deletedAt,
+    });
+  } catch (error) {
+    if (error.code === 'P2025') {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(500).json({ error: 'Failed to delete account' });
+  }
 });
 
 export default router;

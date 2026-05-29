@@ -9,6 +9,23 @@ datasource db {
 }
 
 model User {
+ ci/add-migration-smoke-test
+  id                      String                   @id @default(uuid())
+  publicKey               String                   @unique
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  deletedAt               DateTime?
+  settings                Setting?
+  sentTxs                 Transaction[]            @relation("sender")
+  receivedTxs             Transaction[]            @relation("recipient")
+  sentStreams             PaymentStream[]          @relation("streamSender")
+  receivedStreams         PaymentStream[]          @relation("streamRecipient")
+  notifications           Notification[]
+  notificationPreference  NotificationPreference?
+  kycRecord               KYCRecord?
+
+  @@index([deletedAt])
+
   id                     String                  @id @default(uuid())
   publicKey              String                  @unique
   username               String                  @unique
@@ -24,6 +41,7 @@ model User {
   notificationPreference NotificationPreference?
   kycRecord              KYCRecord?
   amlAlerts              AMLAlert[]
+ main
 }
 
 model Transaction {
@@ -32,10 +50,17 @@ model Transaction {
   assetCode     String         @default("XLM")
   amount        Decimal
   ledger        Int?
+ ci/add-migration-smoke-test
+  successful    Boolean         @default(true)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  deletedAt     DateTime?
+
   successful    Boolean        @default(true)
   memo          String?
   memoType      String?        // 'text' | 'id'
   createdAt     DateTime       @default(now())
+ main
   senderId      String
   sender        User           @relation("sender", fields: [senderId], references: [id])
   recipientId   String
@@ -44,10 +69,17 @@ model Transaction {
   retryStatus   String?
   lastRetryAt   DateTime?
   retryHistory  RetryAttempt[]
+ ci/add-migration-smoke-test
+
+  @@index([deletedAt])
+
+
+  @@index([deletedAt])
   amlAlerts     AMLAlert[]
 
   @@index([senderId, createdAt])
   @@index([recipientId, createdAt])
+ main
 }
 
 model RetryAttempt {
@@ -58,6 +90,8 @@ model RetryAttempt {
   errorType     String
   errorMessage  String
   timestamp     DateTime    @default(now())
+
+  @@index([transactionId])
 }
 
 model Setting {
@@ -98,9 +132,20 @@ model PaymentStream {
   createdAt       DateTime     @default(now())
   updatedAt       DateTime     @updatedAt
 
+ ci/add-migration-smoke-test
+  @@index([senderId])
+  @@index([recipientId])
+}
+
   @@index([status, lastProcessedAt])
 }
 
+ main
+  @@index([senderId])
+  @@index([recipientId])
+}
+  @@index([status, lastProcessedAt])
+}
 model Notification {
   id        String   @id @default(uuid())
   userId    String
@@ -119,6 +164,19 @@ model Notification {
 }
 
 model NotificationPreference {
+ ci/add-migration-smoke-test
+  id               String   @id @default(uuid())
+  userId           String   @unique
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled     Boolean  @default(true)
+  pushEnabled      Boolean  @default(true)
+  smsEnabled       Boolean  @default(false)
+  inAppEnabled     Boolean  @default(true)
+  quietHoursStart  Int      @default(22)
+  quietHoursEnd    Int      @default(7)
+  typeOverrides    Json?
+  updatedAt        DateTime @updatedAt
+
   id              String   @id @default(uuid())
   userId          String   @unique
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -130,6 +188,7 @@ model NotificationPreference {
   quietHoursEnd   Int      @default(7)
   typeOverrides   Json?
   updatedAt       DateTime @updatedAt
+ main
 }
 
 model KYCRecord {
@@ -164,32 +223,21 @@ model AMLAlert {
   description   String
   riskScore     Int
   riskLevel     String
+ ci/add-migration-smoke-test
+  createdAt     DateTime @default(now())
+
+  @@index([transactionId])
+  @@index([userId])
+
+  createdAt     DateTime    @default(now())
+  createdAt     DateTime @default(now())
+
+  @@index([transactionId])
+  @@index([userId])
   createdAt     DateTime    @default(now())
 
-  @@index([userId])
-  @@index([severity, createdAt])
-}
-
-model FeeBumpStat {
-  id              String   @id @default("singleton")
-  total           Int      @default(0)
-  totalFeeStroops BigInt   @default(0)
-  accounts        Json     @default("[]")
-  updatedAt       DateTime @updatedAt
-}
-
-model PendingMultiSigTx {
-  txId            String   @id
-  txXdr           String
-  sourcePublicKey String
-  destination     String
-  amount          String
-  assetCode       String   @default("XLM")
-  signatures      Json     @default("[]")
-  status          String   @default("pending")
-  expiresAt       DateTime
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
   @@index([status, expiresAt])
+ main
+  @@index([transactionId])
+  @@index([userId])
 }
