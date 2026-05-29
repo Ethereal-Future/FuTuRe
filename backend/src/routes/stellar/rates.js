@@ -2,6 +2,8 @@ import express from 'express';
 import { getAllRates, convert } from '../../services/exchangeRate.js';
 import { validate, rules } from '../../middleware/validate.js';
 import logger from '../../config/logger.js';
+import { cacheMiddleware } from '../../middleware/cache.js';
+import { keys as cacheKeys, TTL } from '../../cache/appCache.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -18,7 +20,7 @@ function logError(req, error, context = {}) {
 }
 
 // GET /rates
-router.get('/', async (req, res) => {
+router.get('/', cacheMiddleware(TTL.RATE, () => cacheKeys.allRates()), async (req, res) => {
   try {
     const rates = await getAllRates();
     res.json({ rates });

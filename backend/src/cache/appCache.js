@@ -45,7 +45,7 @@ export const invalidator = new CacheInvalidator(cache);
 // Register invalidation patterns
 invalidator
   .registerPattern('balances', [])          // keys added dynamically per account
-  .registerPattern('rates', ['rate:*'])
+  .registerPattern('rates', ['rate:*', 'rates:all'])
   .registerPattern('fee_stats', ['fee:stats']);
 
 // ── Warmer ───────────────────────────────────────────────────────────────────
@@ -55,6 +55,7 @@ export const warmer = new CacheWarmer(cache);
 export const keys = {
   balance: (publicKey) => `balance:${publicKey}`,
   rate: (from, to) => `rate:${from}:${to}`,
+  allRates: () => 'rates:all',
   feeStats: () => 'fee:stats',
 };
 
