@@ -1,46 +1,40 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import logger from '../config/logger.js';
-import { getIssuer, SUPPORTED_ASSETS } from '../config/assets.js';
+import { getIssuer, getSupportedAssets } from '../config/assets.js';
 import { broadcastToAccount } from './websocket.js';
 import { onConfigChange } from '../config/env.js';
 import { getHorizonServer } from './stellar.js';
+import { cacheGet, cacheSet, cache, TTL, keys as cacheKeys } from '../cache/appCache.js';
 
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 const COINGECKO_BASE = 'https://api.coingecko.com/api/v3';
-const CACHE_TTL_MS   = (parseInt(process.env.RATE_CACHE_TTL_S, 10) || 60) * 1000;
 const API_MIN_GAP_MS = 2_000; // minimum ms between CoinGecko calls (rate-limit guard)
 
 // CoinGecko coin IDs for supported assets
 const COINGECKO_IDS = { XLM: 'stellar', USDC: 'usd-coin' };
 
-// ---------------------------------------------------------------------------
-// In-memory cache  { key: { rate, fetchedAt } }
-// ---------------------------------------------------------------------------
-const cache = new Map();
 const lastRates = new Map(); // for change detection
 let lastFetchAt = 0;
 
 // Clear cache when config changes (e.g., STELLAR_NETWORK switches)
 onConfigChange(() => {
-  cache.clear();
+  cache.clear().catch(() => {});
   lastRates.clear();
   lastFetchAt = 0;
   logger.info('exchangeRate.cache.cleared', { reason: 'config reload' });
 });
 
-function cacheKey(from, to) { return `${from}:${to}`; }
+function cacheKey(from, to) { return cacheKeys.rate(from, to); }
 
-function getCached(from, to) {
-  const entry = cache.get(cacheKey(from, to));
-  if (!entry) return null;
-  if (Date.now() - entry.fetchedAt > CACHE_TTL_MS) { cache.delete(cacheKey(from, to)); return null; }
-  return entry.rate;
+async function getCached(from, to) {
+  const cached = await cacheGet(cacheKey(from, to));
+  return cached !== null ? cached : null;
 }
 
-function setCache(from, to, rate) {
-  cache.set(cacheKey(from, to), { rate, fetchedAt: Date.now() });
+async function setCache(from, to, rate) {
+  await cacheSet(cacheKey(from, to), rate, TTL.RATE);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,14 +94,14 @@ async function fetchFromStellarDex(from, to) {
 export async function getRate(from, to) {
   if (from === to) return 1;
 
-  const cached = getCached(from, to);
+  const cached = await getCached(from, to);
   if (cached != null) return cached;
 
   let rate = await fetchFromCoinGecko(from, to);
   if (rate == null) rate = await fetchFromStellarDex(from, to);
 
   if (rate != null) {
-    setCache(from, to, rate);
+    await setCache(from, to, rate);
     notifyIfChanged(from, to, rate);
   }
 
@@ -124,7 +118,8 @@ export async function convert(amount, from, to) {
 /** Fetch all supported pair rates at once via a single batched CoinGecko request. */
 export async function getAllRates() {
   // Collect assets that have a CoinGecko ID and aren't fully cached yet
-  const needed = SUPPORTED_ASSETS.filter(a => COINGECKO_IDS[a]);
+  const supportedAssets = getSupportedAssets();
+  const needed = supportedAssets.filter(a => COINGECKO_IDS[a]);
 
   // Single batched request: all coin IDs vs USD (USDC is pegged 1:1 to USD)
   const pricesUsd = {};
@@ -150,13 +145,13 @@ export async function getAllRates() {
 
   // Derive all pairs from USD prices, fall back to getRate for anything missing
   const results = [];
-  for (const from of SUPPORTED_ASSETS) {
-    for (const to of SUPPORTED_ASSETS) {
+  for (const from of supportedAssets) {
+    for (const to of supportedAssets) {
       if (from === to) continue;
-      let rate = getCached(from, to);
+      let rate = await getCached(from, to);
       if (rate == null && pricesUsd[from] != null && pricesUsd[to] != null) {
         rate = pricesUsd[from] / pricesUsd[to];
-        setCache(from, to, rate);
+        await setCache(from, to, rate);
         notifyIfChanged(from, to, rate);
       }
       if (rate == null) rate = await getRate(from, to); // fallback (DEX / cache)

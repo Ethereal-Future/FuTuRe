@@ -60,8 +60,6 @@ pool.on('connect', (client) => {
 
 const adapter = new PrismaPg(pool);
 
-const baseClient = new PrismaClient({
-// Enable query-level logging in development or when PRISMA_QUERY_LOG=true.
 const queryLogEnabled = isDev || process.env.PRISMA_QUERY_LOG === 'true';
 
 const prismaLogConfig = [
@@ -70,7 +68,7 @@ const prismaLogConfig = [
   ...(queryLogEnabled ? [{ emit: 'event', level: 'query' }] : []),
 ];
 
-const prisma = new PrismaClient({
+const baseClient = new PrismaClient({
   adapter,
   log: prismaLogConfig,
 });

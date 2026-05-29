@@ -25,6 +25,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.3.1",
+    "ioredis": "^5.11.0",
     "jsonwebtoken": "^9.0.0",
     "pg": "^8.20.0",
     "prisma": "^7.5.0",
