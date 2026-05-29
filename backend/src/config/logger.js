@@ -1,9 +1,28 @@
 import winston from 'winston';
 import DailyRotateFile from 'winston-daily-rotate-file';
+import { sanitizeLogData } from '../utils/sanitizeLogData.js';
 
 const { combine, timestamp, json, colorize, simple, errors } = winston.format;
 
 const isProduction = process.env.NODE_ENV === 'production';
+
+// Custom format to sanitize sensitive data
+const sanitizeFormat = winston.format((info) => {
+  if (info.message && typeof info.message === 'object') {
+    info.message = sanitizeLogData(info.message);
+  }
+  if (info.meta && typeof info.meta === 'object') {
+    info.meta = sanitizeLogData(info.meta);
+  }
+  // Sanitize all properties except standard winston fields
+  const standardFields = ['level', 'message', 'timestamp', 'label', 'meta'];
+  for (const key of Object.keys(info)) {
+    if (!standardFields.includes(key) && typeof info[key] === 'object') {
+      info[key] = sanitizeLogData(info[key]);
+    }
+  }
+  return info;
+});
 
 const fileTransport = new DailyRotateFile({
   dirname: 'logs',
@@ -11,7 +30,7 @@ const fileTransport = new DailyRotateFile({
   datePattern: 'YYYY-MM-DD',
   maxFiles: '14d',
   maxSize: '20m',
-  format: combine(timestamp(), errors({ stack: true }), json()),
+  format: combine(sanitizeFormat(), timestamp(), errors({ stack: true }), json()),
 });
 
 const errorFileTransport = new DailyRotateFile({
@@ -21,7 +40,7 @@ const errorFileTransport = new DailyRotateFile({
   level: 'error',
   maxFiles: '30d',
   maxSize: '20m',
-  format: combine(timestamp(), errors({ stack: true }), json()),
+  format: combine(sanitizeFormat(), timestamp(), errors({ stack: true }), json()),
 });
 
 const logger = winston.createLogger({
@@ -31,8 +50,8 @@ const logger = winston.createLogger({
     errorFileTransport,
     new winston.transports.Console({
       format: isProduction
-        ? combine(timestamp(), errors({ stack: true }), json())
-        : combine(colorize(), simple()),
+        ? combine(sanitizeFormat(), timestamp(), errors({ stack: true }), json())
+        : combine(sanitizeFormat(), colorize(), simple()),
     }),
   ],
 });
