@@ -29,8 +29,34 @@ prisma.$on('error', (e) => logger.error('db.error', { message: e.message, target
 prisma.$on('warn',  (e) => logger.warn('db.warn',  { message: e.message, target: e.target }));
 
 export async function connectDB() {
-  await prisma.$connect();
-  logger.info('db.connected');
+  const maxAttempts = 5;
+  const initialDelayMs = 1000;
+  
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await prisma.$connect();
+      logger.info('db.connected');
+      return;
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        logger.error('db.connection.failed', {
+          message: err.message,
+          attempts: maxAttempts,
+        });
+        process.exit(1);
+      }
+      
+      const delayMs = initialDelayMs * Math.pow(2, attempt - 1);
+      logger.warn('db.connection.retry', {
+        attempt,
+        maxAttempts,
+        delayMs,
+        error: err.message,
+      });
+      
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
 }
 
 export async function disconnectDB() {
