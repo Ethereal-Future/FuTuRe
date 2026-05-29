@@ -262,3 +262,88 @@ test.describe('Error Scenarios', () => {
     await expect(page.locator('[data-testid="payment-success"]')).toBeVisible();
   });
 });
+
+/**
+ * Full Payment Flow E2E Test (#478)
+ *
+ * Creates two Stellar testnet accounts, funds them via Friendbot,
+ * sends XLM from account A to B, and verifies balance changes.
+ * Runs directly against the Stellar testnet API (no UI).
+ */
+
+const HORIZON_URL = 'https://horizon-testnet.stellar.org';
+const FRIENDBOT_URL = 'https://friendbot.stellar.org';
+const SEND_AMOUNT = '10';
+
+async function fundAccount(publicKey) {
+  const res = await fetch(`${FRIENDBOT_URL}?addr=${encodeURIComponent(publicKey)}`);
+  if (!res.ok) throw new Error(`Friendbot failed for ${publicKey}: ${res.status}`);
+  return res.json();
+}
+
+async function getXlmBalance(publicKey) {
+  const res = await fetch(`${HORIZON_URL}/accounts/${publicKey}`);
+  if (!res.ok) throw new Error(`Failed to load account ${publicKey}: ${res.status}`);
+  const data = await res.json();
+  const xlm = data.balances.find(b => b.asset_type === 'native');
+  return parseFloat(xlm?.balance ?? '0');
+}
+
+test.describe('Stellar Testnet: Full Payment Flow @workflow', () => {
+  test('create two accounts, fund via Friendbot, send XLM, verify balances', async () => {
+    test.setTimeout(60_000);
+
+    const { Keypair, Networks, TransactionBuilder, BASE_FEE, Operation, Asset, Horizon } =
+      await import('@stellar/stellar-sdk');
+
+    const server = new Horizon.Server(HORIZON_URL);
+
+    // 1. Create two keypairs
+    const keypairA = Keypair.random();
+    const keypairB = Keypair.random();
+
+    // 2. Fund both accounts via Friendbot (parallel)
+    await Promise.all([
+      fundAccount(keypairA.publicKey()),
+      fundAccount(keypairB.publicKey()),
+    ]);
+
+    // 3. Record initial balances
+    const balanceABefore = await getXlmBalance(keypairA.publicKey());
+    const balanceBBefore = await getXlmBalance(keypairB.publicKey());
+
+    expect(balanceABefore).toBeGreaterThan(0);
+    expect(balanceBBefore).toBeGreaterThan(0);
+
+    // 4. Build and submit payment from A → B
+    const accountA = await server.loadAccount(keypairA.publicKey());
+    const tx = new TransactionBuilder(accountA, {
+      fee: BASE_FEE,
+      networkPassphrase: Networks.TESTNET,
+    })
+      .addOperation(
+        Operation.payment({
+          destination: keypairB.publicKey(),
+          asset: Asset.native(),
+          amount: SEND_AMOUNT,
+        })
+      )
+      .setTimeout(30)
+      .build();
+
+    tx.sign(keypairA);
+    const result = await server.submitTransaction(tx);
+
+    expect(result.successful).toBe(true);
+    expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
+
+    // 5. Verify balance changes
+    const balanceAAfter = await getXlmBalance(keypairA.publicKey());
+    const balanceBAfter = await getXlmBalance(keypairB.publicKey());
+
+    // A sent 10 XLM + fee, so balance decreased by more than 10
+    expect(balanceAAfter).toBeLessThan(balanceABefore - parseFloat(SEND_AMOUNT));
+    // B received exactly 10 XLM
+    expect(balanceBAfter).toBeCloseTo(balanceBBefore + parseFloat(SEND_AMOUNT), 5);
+  });
+});
