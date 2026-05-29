@@ -10,6 +10,10 @@ import prisma from '../db/client.js';
 
 import prisma from '../db/client.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
+import { csrfTokenEndpoint } from '../middleware/csrf.js';
+import mfaManager from '../security/mfa.js';
+import oauth2Provider from '../security/oauth2.js';
+import { getConfig } from '../config/env.js';
 import { getConfig } from '../config/env.js';
  main
 
@@ -241,6 +245,202 @@ router.get('/profile', requireAuth, (req, res) => {
   res.json({ id: user.id, username: user.username, createdAt: user.createdAt });
 });
 
+/**
+ * @swagger
+ * /api/auth/csrf-token:
+ *   get:
+ *     summary: Get CSRF token for state-mutating requests
+ *     tags: [Auth]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: CSRF token issued
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 csrfToken: { type: string }
+ */
+router.get('/csrf-token', csrfTokenEndpoint);
+
+/**
+ * @swagger
+ * /api/auth/mfa/setup:
+ *   post:
+ *     summary: Setup MFA (TOTP) for authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: MFA setup initiated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 secret: { type: string }
+ *                 qrCode: { type: string }
+ *                 backupCodes: { type: array, items: { type: string } }
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/mfa/setup', requireAuth, async (req, res) => {
+  try {
+    const { secret, qrCode } = mfaManager.generateSecret(req.user.sub);
+    const backupCodes = mfaManager.enableMFA(req.user.sub, secret);
+    
+    // In production, encrypt and store secret in database
+    const encryptionKey = getConfig().security.mfaEncryptionKey || 'default-key';
+    const encryptedSecret = mfaManager.encryptSecret(secret, encryptionKey);
+    
+    res.json({
+      secret,
+      qrCode,
+      backupCodes,
+      message: 'Scan the QR code with your authenticator app'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/mfa/verify:
+ *   post:
+ *     summary: Verify MFA token to complete setup
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 description: 6-digit TOTP code
+ *     responses:
+ *       200:
+ *         description: MFA verified and enabled
+ *       403:
+ *         description: Invalid MFA token
+ */
+router.post('/mfa/verify', requireAuth, (req, res) => {
+  const { token } = req.body;
+  
+  if (!token) {
+    return res.status(400).json({ error: 'Token required' });
+  }
+
+  try {
+    const mfa = mfaManager.userMFA.get(req.user.sub);
+    if (!mfa) {
+      return res.status(400).json({ error: 'MFA setup not initiated' });
+    }
+
+    mfaManager.verifyTOTP(req.user.sub, token, mfa.secret);
+    
+    // In production, mark MFA as verified in database
+    res.json({ message: 'MFA enabled successfully' });
+  } catch (error) {
+    res.status(403).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/oauth/google:
+ *   get:
+ *     summary: Redirect to Google OAuth2 login
+ *     tags: [Auth]
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: state
+ *         schema:
+ *           type: string
+ *         description: CSRF state parameter
+ *     responses:
+ *       302:
+ *         description: Redirect to Google OAuth2 consent screen
+ */
+router.get('/oauth/google', (req, res) => {
+  const clientId = getConfig().oauth.googleClientId;
+  const redirectUri = `${getConfig().server.baseUrl}/api/auth/oauth/google/callback`;
+  const state = require('crypto').randomBytes(16).toString('hex');
+  
+  // Store state in session/cookie for verification
+  res.cookie('oauth_state', state, { httpOnly: true, maxAge: 10 * 60 * 1000 });
+  
+  const authUrl = oauth2Provider.getGoogleAuthURL(clientId, redirectUri, state);
+  res.redirect(authUrl);
+});
+
+/**
+ * @swagger
+ * /api/auth/oauth/google/callback:
+ *   get:
+ *     summary: Google OAuth2 callback handler
+ *     tags: [Auth]
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: code
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: state
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       302:
+ *         description: Redirect to frontend with tokens
+ *       400:
+ *         description: Invalid state or authorization code
+ */
+router.get('/oauth/google/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const storedState = req.cookies.oauth_state;
+  
+  if (!code || !state || state !== storedState) {
+    return res.status(400).json({ error: 'Invalid state or authorization code' });
+  }
+
+  try {
+    const clientId = getConfig().oauth.googleClientId;
+    const clientSecret = getConfig().oauth.googleClientSecret;
+    const redirectUri = `${getConfig().server.baseUrl}/api/auth/oauth/google/callback`;
+    
+    // Exchange code for tokens
+    const googleTokens = await oauth2Provider.exchangeGoogleCode(code, clientId, clientSecret, redirectUri);
+    
+    // Get user info
+    const userInfo = await oauth2Provider.getGoogleUserInfo(googleTokens.access_token);
+    
+    // Find or create user
+    let user = findUser(userInfo.email);
+    if (!user) {
+      user = createUser(userInfo.email, ''); // OAuth users don't have passwords
+    }
+    
+    // Generate JWT tokens
+    const payload = { sub: user.id, username: user.username };
+    const accessToken = signAccessToken(payload);
+    const refreshToken = signRefreshToken(payload);
+    
+    // Redirect to frontend with tokens
+    const frontendUrl = getConfig().frontend.baseUrl;
+    res.redirect(`${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`);
+  } catch (error) {
+    res.status(400).json({ error: error.message });
 // DELETE /api/auth/account
 router.delete('/account', requireAuth, async (req, res) => {
   try {

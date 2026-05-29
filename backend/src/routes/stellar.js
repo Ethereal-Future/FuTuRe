@@ -14,6 +14,7 @@ import prisma from '../db/client.js';
 import { getSubscriptionByPublicKey, sendWebPush } from '../notifications/webPush.js';
 import logger from '../config/logger.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
+import { optionalMFA } from '../middleware/mfa.js';
 
 const router = express.Router();
 
@@ -169,7 +170,7 @@ const paymentRateLimiter = createRateLimiter({
   message: 'Too many payment requests, please try again later.',
 });
 
-router.post('/payment/send', paymentRateLimiter, rules.sendPayment, validate, async (req, res) => {
+router.post('/payment/send', paymentRateLimiter, rules.sendPayment, validate, optionalMFA, async (req, res) => {
   try {
     const { sourceSecret, destination, amount, assetCode, memo, memoType } = req.body;
     const result = await StellarService.sendPayment(sourceSecret, destination, amount, assetCode, memo, memoType);
