@@ -2,7 +2,7 @@
 import prisma from '../db/client.js';
 import { sendPayment } from './stellar.js';
 import { eventMonitor } from '../eventSourcing/index.js';
-import logger from '../config/logger.js';
+import logger, { withContext } from '../config/logger.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 
 /**
@@ -225,12 +225,12 @@ export async function processActiveStreams() {
              version: 1,
            });
 
-           logger.info('streaming.process.success', { streamId: stream.id, hash: result.hash });
+           withContext(logger, { action: 'processStream', correlationId: stream.id }).info('streaming.process.success', { streamId: stream.id, hash: result.hash });
          } else {
            throw new Error('Transaction submission failed');
          }
        } catch (err) {
-         logger.error('streaming.process.failed', { streamId: stream.id, error: err.message });
+         withContext(logger, { action: 'processStream', correlationId: stream.id }).error('streaming.process.failed', { streamId: stream.id, error: err.message });
          
          const updatedStream = await prisma.paymentStream.update({
            where: { id: stream.id },
@@ -249,7 +249,7 @@ export async function processActiveStreams() {
              version: 1,
            });
 
-           logger.error('streaming.stream.halted', { streamId: stream.id, reason: 'Too many failures' });
+           withContext(logger, { action: 'processStream', correlationId: stream.id }).error('streaming.stream.halted', { streamId: stream.id, reason: 'Too many failures' });
          }
        }
     }

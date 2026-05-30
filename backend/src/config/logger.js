@@ -57,3 +57,11 @@ const logger = winston.createLogger({
 });
 
 export default logger;
+
+/**
+ * Creates a child logger pre-bound with request context.
+ * Standard context shape: { correlationId, userId, action, durationMs }
+ */
+export function withContext(loggerInstance, ctx) {
+  return loggerInstance.child(ctx);
+}

@@ -6,7 +6,7 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { MultiLevelCache } from '../cache/multi-level.js';
 import { eventMonitor } from '../eventSourcing/index.js';
-import logger from '../config/logger.js';
+import logger, { withContext } from '../config/logger.js';
 import { getConfig } from '../config/env.js';
 
 const TRANSACTION_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
@@ -48,7 +48,7 @@ class TransactionService {
     // Check cache first
     let transactions = await this.cache.get(cacheKey);
     if (transactions) {
-      logger.debug('Transaction cache hit', { accountId, count: transactions.length });
+      withContext(logger, { action: 'getTransactions', accountId }).debug('Transaction cache hit', { count: transactions.length });
       return transactions;
     }
 
@@ -91,16 +91,15 @@ class TransactionService {
       // Store in event store for persistence
       await this.storeTransactions(accountId, enrichedTransactions);
 
-      logger.info('Fetched transactions from Horizon', {
-        accountId,
+      withContext(logger, { action: 'getTransactions', accountId }).info('Fetched transactions from Horizon', {
         count: enrichedTransactions.length,
         cursor,
-        limit
+        limit,
       });
 
       return enrichedTransactions;
     } catch (error) {
-      logger.error('Failed to fetch transactions', { accountId, error: error.message });
+      withContext(logger, { action: 'getTransactions', accountId }).error('Failed to fetch transactions', { error: error.message });
       throw error;
     }
   }

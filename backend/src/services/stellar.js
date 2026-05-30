@@ -2,7 +2,7 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import { eventMonitor } from '../eventSourcing/index.js';
 import { getConfig } from '../config/env.js';
 import { getIssuer } from '../config/assets.js';
-import logger from '../config/logger.js';
+import logger, { withContext } from '../config/logger.js';
 import prisma from '../db/client.js';
 
 export async function getFeeBumpStats() {
@@ -88,7 +88,7 @@ export async function fundAccount(publicKey) {
 export async function createAccount(correlationId = null) {
   const pair = StellarSDK.Keypair.random();
   const publicKey = pair.publicKey();
-  logger.info('stellar.createAccount', { publicKey, correlationId });
+  withContext(logger, { action: 'createAccount', correlationId }).info('stellar.createAccount', { publicKey });
   
   if (isTestnet()) {
     const friendbotRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);

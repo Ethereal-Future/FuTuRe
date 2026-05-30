@@ -6,6 +6,7 @@ import { SkeletonCard } from './Skeleton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { CopyButton } from './CopyButton';
 import { makeVariants, tapScale } from '../utils/animations';
+import { VirtualList } from './VirtualList';
 
 function truncateKey(key) {
   if (!key || key.length <= 8) return key;
@@ -332,9 +333,14 @@ export function TransactionHistory({ publicKey }) {
               </div>
             ) : (
               <>
-                <div className="tx-list" role="list" aria-label="Transactions">
-                  {txs.map(tx => <TxRow key={tx.id} tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />)}
-                </div>
+                <VirtualList
+                  items={txs}
+                  renderItem={(tx) => (
+                    <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
+                  )}
+                  itemHeight={64}
+                  height={Math.min(txs.length * 64 + 1, 480)}
+                />
                 <nav className="tx-pagination" aria-label="Transaction page navigation">
                   <button onClick={handleBack} disabled={cursors.length === 0 || loading} className="tx-page-btn" aria-label="Previous page">← Prev</button>
                   <button onClick={handleNext} disabled={!nextCursor || loading} className="tx-page-btn" aria-label="Next page">Next →</button>

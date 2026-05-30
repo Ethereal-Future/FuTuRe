@@ -17,6 +17,7 @@ import { PaymentConfirmationModal } from './components/PaymentConfirmationModal'
 import { QRScanner } from './components/QRScanner';
 import { NetworkBadge } from './components/NetworkBadge';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
+import { OfflineIndicator } from './components/OfflineIndicator';
 import { StatusMessage } from './components/StatusMessage';
 import { CopyButton } from './components/CopyButton';
 import { Spinner } from './components/Spinner';
@@ -358,6 +359,7 @@ function App() {
         reducedMotion={prefersReduced}
       />
 
+      <OfflineIndicator />
       <div className="app">
         <NetworkStatusBanner />
         <div aria-live="polite" aria-atomic="true" className="sr-only">

@@ -1,5 +1,5 @@
 import express from 'express';
-import { getSnapshot, resetMetrics } from '../monitoring/metrics.js';
+import { getSnapshot, resetMetrics, toPrometheusText } from '../monitoring/metrics.js';
 import { getWsStats } from '../services/websocket.js';
 import { getFeeBumpStats } from '../services/stellar.js';
 import { getCdnStats } from '../cdn/index.js';
@@ -7,8 +7,13 @@ import { checkShardHealth, getShardStats } from '../db/sharding.js';
 
 const router = express.Router();
 
-// GET /api/metrics — full performance snapshot
-router.get('/', (_req, res) => {
+// GET /api/metrics — full snapshot (Prometheus text if Accept: text/plain, else JSON)
+router.get('/', (req, res) => {
+  const accept = req.headers['accept'] ?? '';
+  if (accept.includes('text/plain') || accept.includes('application/openmetrics-text')) {
+    res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+    return res.send(toPrometheusText());
+  }
   res.json(getSnapshot());
 });
 
