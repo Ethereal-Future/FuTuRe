@@ -137,7 +137,9 @@ export function generateRequestId() {
  */
 export function requestIdMiddleware(req, res, next) {
   req.id = req.headers['x-request-id'] || generateRequestId();
+  req.correlationId = req.headers['x-correlation-id'] || req.id;
   res.setHeader('X-Request-ID', req.id);
+  res.setHeader('X-Correlation-ID', req.correlationId);
   next();
 }
 
@@ -146,6 +148,7 @@ export function requestIdMiddleware(req, res, next) {
  */
 export function errorLogger(err, req, res, next) {
   const requestId = req.id || 'unknown';
+  const correlationId = req.correlationId || requestId;
   const method = req.method;
   const url = req.originalUrl || req.url;
   const ip = req.ip || req.connection?.remoteAddress;
@@ -153,6 +156,7 @@ export function errorLogger(err, req, res, next) {
   
   const logContext = {
     requestId,
+    correlationId,
     method,
     url,
     ip,
@@ -190,6 +194,7 @@ export function errorLogger(err, req, res, next) {
  */
 function formatErrorResponse(err, req) {
   const requestId = req.id || 'unknown';
+  const correlationId = req.correlationId || requestId;
   const isProduction = getConfig().meta.appEnv === 'production';
   
   const response = {
@@ -198,6 +203,7 @@ function formatErrorResponse(err, req) {
       code: err.code || ErrorCodes.INTERNAL_ERROR,
       message: err.message || 'An unexpected error occurred',
       requestId,
+      correlationId,
     },
   };
 

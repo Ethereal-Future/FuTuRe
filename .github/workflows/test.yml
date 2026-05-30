@@ -21,8 +21,34 @@ jobs:
 
     - run: npm install
 
+    - name: Audit dependencies for vulnerabilities
+      run: npm audit --audit-level=high
+    - name: Type-check TypeScript
+      working-directory: frontend
+      run: npm run typecheck
+
     - name: Run tests with coverage
       run: npm run test:coverage
+
+    - name: Enforce coverage thresholds
+      run: |
+        node -e "
+          const fs = require('fs');
+          if (!fs.existsSync('./coverage/coverage-summary.json')) {
+            console.error('coverage-summary.json not found');
+            process.exit(1);
+          }
+          const s = require('./coverage/coverage-summary.json').total;
+          const thresholds = { lines: 80, statements: 80, functions: 80, branches: 75 };
+          let failed = false;
+          for (const [key, min] of Object.entries(thresholds)) {
+            const pct = s[key].pct;
+            const status = pct >= min ? 'PASS' : 'FAIL';
+            console.log(\`[\${status}] \${key}: \${pct}% (required: \${min}%)\`);
+            if (pct < min) failed = true;
+          }
+          if (failed) { console.error('Coverage thresholds not met.'); process.exit(1); }
+        "
 
     - name: Upload snapshot artifacts on failure
       uses: actions/upload-artifact@v4
@@ -47,10 +73,72 @@ jobs:
           echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
           node -e "
             const s = require('./coverage/coverage-summary.json').total;
-            console.log('| Metric | Coverage |');
-            console.log('|--------|----------|');
-            ['lines','statements','functions','branches'].forEach(k =>
-              console.log(\`| \${k} | \${s[k].pct}% |\`)
-            );
+            const thresholds = { lines: 80, statements: 80, functions: 80, branches: 75 };
+            console.log('| Metric | Coverage | Threshold | Status |');
+            console.log('|--------|----------|-----------|--------|');
+            ['lines','statements','functions','branches'].forEach(k => {
+              const pct = s[k].pct;
+              const min = thresholds[k];
+              const status = pct >= min ? '✅' : '❌';
+              console.log(\`| \${k} | \${pct}% | \${min}% | \${status} |\`);
+            });
           " >> $GITHUB_STEP_SUMMARY
         fi
+
+  migration-smoke-test:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: test_user
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+
+    - name: Install dependencies
+      run: npm install
+      working-directory: ./backend
+
+    - name: Wait for PostgreSQL
+      run: |
+        until pg_isready -h localhost -p 5432 -U test_user; do
+          echo 'Waiting for PostgreSQL...'
+          sleep 1
+        done
+      env:
+        PGPASSWORD: test_password
+
+    - name: Validate Prisma schema
+      run: npx prisma validate
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+
+    - name: Run Prisma migrations
+      run: npx prisma migrate deploy
+      working-directory: ./backend
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+
+    - name: Verify migration success
+      run: |
+        echo "✓ All migrations completed successfully"
+        echo "✓ Database schema is valid"
+      if: success()

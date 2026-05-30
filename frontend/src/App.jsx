@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { isValidStellarAddress } from './utils/validateStellarAddress';
@@ -6,7 +6,6 @@ import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
 import { formatBalanceWithAsset } from './utils/formatBalance';
 import { useWebSocket } from './hooks/useWebSocket';
-import { useNetworkStatus } from './hooks/useNetworkStatus';
 import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
@@ -21,6 +20,7 @@ import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 import { StatusMessage } from './components/StatusMessage';
 import { CopyButton } from './components/CopyButton';
 import { Spinner } from './components/Spinner';
+import { SkeletonBalance } from './components/Skeleton';
 import { TransactionHistory } from './components/TransactionHistory';
 import { StreamPayment } from './components/StreamPayment';
 import { PathPayment } from './components/PathPayment';
@@ -35,19 +35,23 @@ import { FileUpload } from './components/FileUpload';
 import { AccountCreatedCelebration } from './components/AccountCreatedCelebration';
 import { TxLookup } from './components/TxLookup';
 import { AddressBook } from './components/AddressBook';
-import { MultiSigTransactions } from './components/MultiSigTransactions';
-import { KYCForm } from './components/KYCForm';
 import { NotificationPreferences } from './components/NotificationPreferences';
 import { NotificationBell } from './components/NotificationBell';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
 import { useExchangeRate } from './hooks/useExchangeRate';
+import { useBalance, useSendPayment, useCreateAccount, useImportAccount, useKycStatus, useSaveAccountLabel, useNetworkStatusQuery } from './hooks/useQueryHooks';
 import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
-import { AccountRecovery } from './components/AccountRecovery';
 import { XLMInfoIcon } from './components/XLMInfoIcon';
-import { ComplianceDashboard } from './components/ComplianceDashboard';
-import { BackupSettings } from './components/BackupSettings';
+
+// Heavy components loaded on-demand to keep the initial bundle small
+const AMMPoolBrowser = lazy(() => import('./components/AMMPoolBrowser').then(m => ({ default: m.AMMPoolBrowser })));
+const AccountRecovery = lazy(() => import('./components/AccountRecovery').then(m => ({ default: m.AccountRecovery })));
+const MultiSigTransactions = lazy(() => import('./components/MultiSigTransactions').then(m => ({ default: m.MultiSigTransactions })));
+const KYCForm = lazy(() => import('./components/KYCForm').then(m => ({ default: m.KYCForm })));
+const ComplianceDashboard = lazy(() => import('./components/ComplianceDashboard').then(m => ({ default: m.ComplianceDashboard })));
+const BackupSettings = lazy(() => import('./components/BackupSettings').then(m => ({ default: m.BackupSettings })));
 
 const TIMEOUT_MS = 30000;
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
@@ -304,7 +308,6 @@ function App() {
 
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
-    setLoading('send');
     if (kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
       msg.error(`Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`);
       return;
@@ -330,16 +333,13 @@ function App() {
       setAmount('');
       setRecipient('');
     } catch (error) {
-      logError(error, { context: 'sendPayment' });
-      msg.error(getFriendlyError(error), { retry: confirmPayment });
-    } finally { setLoading(''); }
       dispatch({ type: A.REVERT_BALANCE });
       if (!navigator.onLine) {
         await queueOffline({ destination: payload.destination, amount: payload.amount, assetCode: payload.assetCode });
         msg.info('You are offline. Payment queued — you\'ll be prompted to re-enter your secret key when back online.');
       } else {
         logError(error, { context: 'sendPayment' });
-        msg.error(getFriendlyError(error), { retry: sendPayment });
+        msg.error(getFriendlyError(error), { retry: confirmPayment });
       }
     } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
   };
@@ -707,11 +707,14 @@ function App() {
                     aria-busy={loading === 'balance'}
                     aria-label="Check account balance"
                   >
-                    {loading === 'balance' ? <Spinner label="Checking balance…" /> : 'Check Balance'}
+                    {loading === 'balance' ? 'Checking Balance…' : 'Check Balance'}
                   </motion.button>
-                  <AnimatePresence>
-                    {balance && (
+                  <AnimatePresence mode="wait">
+                    {loading === 'balance' ? (
+                      <SkeletonBalance key="loading-balance" />
+                    ) : balance ? (
                       <motion.div
+                        key="balance-list"
                         variants={v.pop} initial="hidden" animate="visible" exit="exit"
                         style={{ marginTop: 10 }}
                         aria-label="Account balances"
@@ -797,6 +800,7 @@ function App() {
                         aria-invalid={amountTouched && !!amountError}
                         aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
                         autoComplete="transaction-amount"
+                      />
                       {amountTouched && <span className="input-icon" aria-hidden="true">{amountValid ? '✅' : '❌'}</span>}
                       <motion.button
                         type="button"
@@ -910,12 +914,16 @@ function App() {
 
                 {/* Transaction History */}
                 <motion.div variants={v.fadeSlide}>
-                  <TransactionHistory publicKey={account.publicKey} />
+                  <ErrorBoundary context="Transaction History">
+                    <TransactionHistory publicKey={account.publicKey} />
+                  </ErrorBoundary>
                 </motion.div>
 
                 {/* Stream Payments */}
                 <motion.div variants={v.fadeSlide}>
-                  <StreamPayment publicKey={account.publicKey} />
+                  <ErrorBoundary context="Stream Payments">
+                    <StreamPayment publicKey={account.publicKey} />
+                  </ErrorBoundary>
                 </motion.div>
 
                 {/* Asset Conversion Calculator */}
@@ -925,12 +933,16 @@ function App() {
 
                 {/* AMM Pool Browser */}
                 <motion.div variants={v.fadeSlide}>
-                  <AMMPoolBrowser />
+                  <Suspense fallback={<Spinner />}>
+                    <AMMPoolBrowser />
+                  </Suspense>
                 </motion.div>
 
                 {/* Account Recovery */}
                 <motion.div variants={v.fadeSlide}>
-                  <AccountRecovery />
+                  <Suspense fallback={<Spinner />}>
+                    <AccountRecovery />
+                  </Suspense>
                 {/* Settings Sections Tabs */}
                 <motion.section className="section" variants={v.fadeSlide}>
                   <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>
@@ -971,12 +983,22 @@ function App() {
                   <AnimatePresence mode="wait">
                     {activeSettingsSection === 'multisig' && (
                       <motion.div key="multisig" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                        <MultiSigTransactions publicKey={account.publicKey} />
+                        <Suspense fallback={<Spinner />}>
+                          <MultiSigTransactions publicKey={account.publicKey} />
+                        </Suspense>
+                        <ErrorBoundary context="Multi-Sig Transactions">
+                          <MultiSigTransactions publicKey={account.publicKey} />
+                        </ErrorBoundary>
                       </motion.div>
                     )}
                     {activeSettingsSection === 'kyc' && (
                       <motion.div key="kyc" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                        <KYCForm />
+                        <Suspense fallback={<Spinner />}>
+                          <KYCForm />
+                        </Suspense>
+                        <ErrorBoundary context="KYC Form">
+                          <KYCForm />
+                        </ErrorBoundary>
                       </motion.div>
                     )}
                     {activeSettingsSection === 'notifications' && (
@@ -988,7 +1010,9 @@ function App() {
                 </motion.section>
                 {/* Path Payment */}
                 <motion.div variants={v.fadeSlide}>
-                  <PathPayment account={account} />
+                  <ErrorBoundary context="Path Payment">
+                    <PathPayment account={account} />
+                  </ErrorBoundary>
                 </motion.div>
 
               </motion.div>
@@ -1094,11 +1118,18 @@ function App() {
         )}
 
         {showComplianceDashboard && (
-          <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
+          <Suspense fallback={<Spinner />}>
+            <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
+          </Suspense>
+          <ErrorBoundary context="Compliance Dashboard">
+            <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
+          </ErrorBoundary>
         )}
 
         {showBackupSettings && (
-          <BackupSettings onClose={() => setShowBackupSettings(false)} />
+          <Suspense fallback={<Spinner />}>
+            <BackupSettings onClose={() => setShowBackupSettings(false)} />
+          </Suspense>
         )}
       </div>
     </>

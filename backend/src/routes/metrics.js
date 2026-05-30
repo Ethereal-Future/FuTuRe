@@ -21,12 +21,18 @@ router.delete('/', (_req, res) => {
 // GET /api/metrics/websocket — live WebSocket analytics
 router.get('/websocket', (_req, res) => {
   res.json(getWsStats());
+});
+
 // GET /api/metrics/fee-bump — fee bump usage stats for cost tracking
 router.get('/fee-bump', (_req, res) => {
   res.json(getFeeBumpStats());
+});
+
 // GET /api/metrics/cdn — CDN analytics and config
 router.get('/cdn', (_req, res) => {
   res.json(getCdnStats());
+});
+
 // GET /api/metrics/shards — shard pool stats
 router.get('/shards', (_req, res) => {
   res.json(getShardStats());

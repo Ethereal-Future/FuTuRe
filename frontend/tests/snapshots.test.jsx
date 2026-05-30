@@ -19,6 +19,13 @@ import { ErrorBoundary } from '../src/components/ErrorBoundary';
 import { FeeDisplay } from '../src/components/FeeDisplay';
 import { CopyButton } from '../src/components/CopyButton';
 
+// Design System Components
+import { Button } from '../src/design-system/Button';
+import { Card } from '../src/design-system/Card';
+import { Input } from '../src/design-system/Input';
+import { Modal } from '../src/design-system/Modal';
+import { Badge } from '../src/design-system/Badge';
+
 // Freeze framer-motion to avoid animation noise in snapshots
 vi.mock('framer-motion', async (importOriginal) => {
   const actual = await importOriginal();
@@ -204,6 +211,254 @@ describe('FeeDisplay snapshots', () => {
   it('renders nothing when visible but fee not yet loaded', () => {
     // No axios mock — fee stays null, component returns null
     const { container } = render(<FeeDisplay amount="100" visible={true} />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Design System Components
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ─── Button ──────────────────────────────────────────────────────────────────
+
+describe('Button snapshots', () => {
+  // Primary variant
+  it('renders primary button', () => {
+    const { container } = render(<Button variant="primary">Click me</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders primary button disabled', () => {
+    const { container } = render(
+      <Button variant="primary" disabled>
+        Disabled
+      </Button>
+    );
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders primary button loading', () => {
+    const { container } = render(
+      <Button variant="primary" loading>
+        Loading...
+      </Button>
+    );
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Secondary variant
+  it('renders secondary button', () => {
+    const { container } = render(<Button variant="secondary">Secondary</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Danger variant
+  it('renders danger button', () => {
+    const { container } = render(<Button variant="danger">Delete</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Ghost variant
+  it('renders ghost button', () => {
+    const { container } = render(<Button variant="ghost">Cancel</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Sizes
+  it('renders small button', () => {
+    const { container } = render(<Button size="sm">Small</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders medium button (default)', () => {
+    const { container } = render(<Button size="md">Medium</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders large button', () => {
+    const { container } = render(<Button size="lg">Large</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Full width
+  it('renders full width button', () => {
+    const { container } = render(<Button fullWidth>Full Width</Button>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+});
+
+// ─── Card ───────────────────────────────────────────────────────────────────
+
+describe('Card snapshots', () => {
+  it('renders basic card', () => {
+    const { container } = render(<Card>Card content</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders card with header', () => {
+    const { container } = render(<Card header="Card Title">Card content</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders card with footer', () => {
+    const { container } = render(<Card footer="Card Footer">Card content</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders card with header and footer', () => {
+    const { container } = render(
+      <Card header="Title" footer="Footer">
+        Card content
+      </Card>
+    );
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  // Padding variants
+  it('renders card with small padding', () => {
+    const { container } = render(<Card padding="sm">Small padding</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders card with medium padding (default)', () => {
+    const { container } = render(<Card padding="md">Medium padding</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders card with large padding', () => {
+    const { container } = render(<Card padding="lg">Large padding</Card>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+});
+
+// ─── Input ──────────────────────────────────────────────────────────────────
+
+describe('Input snapshots', () => {
+  it('renders basic input', () => {
+    const { container } = render(<Input placeholder="Enter text" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders input with label', () => {
+    const { container } = render(<Input label="Email" type="email" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders input with hint text', () => {
+    const { container } = render(<Input label="Password" type="password" hint="At least 8 characters" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders input with error', () => {
+    const { container } = render(<Input label="Email" error="Invalid email format" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders input error state (aria-invalid)', () => {
+    const { getByRole } = render(<Input label="Email" error="Required" />);
+    expect(getByRole('textbox')).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('renders full width input', () => {
+    const { container } = render(<Input label="Name" fullWidth />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders input with custom id', () => {
+    const { container } = render(<Input label="Username" id="custom-id" />);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+});
+
+// ─── Modal ──────────────────────────────────────────────────────────────────
+
+describe('Modal snapshots', () => {
+  it('renders nothing when closed', () => {
+    const { container } = render(
+      <Modal open={false} onClose={vi.fn()} title="Dialog">
+        Modal content
+      </Modal>
+    );
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders modal when open', () => {
+    // Portal snapshots may need special handling
+    const { getByRole } = render(
+      <Modal open={true} onClose={vi.fn()} title="Dialog">
+        Modal content
+      </Modal>
+    );
+    const dialog = getByRole('dialog');
+    expect(dialog).toHaveAttribute('aria-modal', 'true');
+    expect(dialog).toMatchSnapshot();
+  });
+
+  it('renders modal with small size', () => {
+    const { getByRole } = render(
+      <Modal open={true} onClose={vi.fn()} title="Small Dialog" size="sm">
+        Content
+      </Modal>
+    );
+    expect(getByRole('dialog')).toMatchSnapshot();
+  });
+
+  it('renders modal with medium size (default)', () => {
+    const { getByRole } = render(
+      <Modal open={true} onClose={vi.fn()} title="Medium Dialog" size="md">
+        Content
+      </Modal>
+    );
+    expect(getByRole('dialog')).toMatchSnapshot();
+  });
+
+  it('renders modal with large size', () => {
+    const { getByRole } = render(
+      <Modal open={true} onClose={vi.fn()} title="Large Dialog" size="lg">
+        Content
+      </Modal>
+    );
+    expect(getByRole('dialog')).toMatchSnapshot();
+  });
+
+  it('modal title has correct id', () => {
+    const { getByText, getByRole } = render(
+      <Modal open={true} onClose={vi.fn()} title="Dialog Title">
+        Content
+      </Modal>
+    );
+    const title = getByText('Dialog Title');
+    const dialog = getByRole('dialog');
+    expect(title).toHaveAttribute('id', 'modal-title');
+    expect(dialog).toHaveAttribute('aria-labelledby', 'modal-title');
+  });
+});
+
+// ─── Badge ──────────────────────────────────────────────────────────────────
+
+describe('Badge snapshots', () => {
+  it('renders default badge', () => {
+    const { container } = render(<Badge>Default</Badge>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders success badge', () => {
+    const { container } = render(<Badge variant="success">Success</Badge>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders danger badge', () => {
+    const { container } = render(<Badge variant="danger">Error</Badge>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders warning badge', () => {
+    const { container } = render(<Badge variant="warning">Warning</Badge>);
+    expect(container.firstChild).toMatchSnapshot();
+  });
+
+  it('renders info badge', () => {
+    const { container } = render(<Badge variant="info">Info</Badge>);
     expect(container.firstChild).toMatchSnapshot();
   });
 });

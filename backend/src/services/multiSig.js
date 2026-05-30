@@ -83,7 +83,7 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
 
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
-    getNetworkPassphrase(),
+    networkPassphrase: getNetworkPassphrase(),
   })
     .addOperation(
       StellarSDK.Operation.payment({

@@ -2146,3 +2146,26 @@ kbd {
     padding: 3px 6px;
   }
 }
+
+/* Generic Skeleton Loading Styles */
+.skeleton-block {
+  display: inline-block;
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 800px 100%;
+  animation: tx-shimmer 1.4s infinite linear;
+}
+
+.theme-dark .skeleton-block,
+.dark .skeleton-block {
+  background: linear-gradient(90deg, #374151 25%, #4b5563 50%, #374151 75%);
+  background-size: 800px 100%;
+}
+
+.skeleton-text-line {
+  border-radius: 4px;
+  margin-bottom: 6px;
+}
+.skeleton-text-line:last-child {
+  margin-bottom: 0;
+}
+

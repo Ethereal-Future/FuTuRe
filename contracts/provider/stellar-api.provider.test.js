@@ -37,6 +37,22 @@ function createProviderApp() {
     });
   });
 
+  app.get('/api/stellar/account/:publicKey/transactions', (req, res) => {
+    res.json({
+      transactions: [
+        {
+          id: '123456789',
+          hash: 'abc123hash',
+          ledger: '12345',
+          created_at: '2026-01-01T00:00:00Z',
+          source_account: 'GABC123',
+          operation_count: 1,
+          successful: true,
+        },
+      ],
+    });
+  });
+
   app.post('/api/stellar/payment/send', (_req, res) => {
     res.json({ hash: 'abc123txhash', successful: true });
   });
@@ -72,6 +88,7 @@ describe('Backend Provider Verification', () => {
         'stellar service is available': async () => {},
         'server is running': async () => {},
         'account exists on testnet': async () => {},
+        'account has transaction history': async () => {},
         'source account has sufficient balance': async () => {},
       },
     }).verifyProvider();

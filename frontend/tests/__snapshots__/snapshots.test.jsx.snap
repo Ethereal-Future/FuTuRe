@@ -1,0 +1,921 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`AmountInput snapshots > renders default state 1`] = `
+<div
+  style="display: flex; gap: 8px; align-items: center;"
+>
+  <div
+    style="position: relative; flex: 1 1 0%;"
+  >
+    <input
+      aria-label="Amount"
+      inputmode="decimal"
+      placeholder="0.0000000"
+      style="padding-right: 10px;"
+      type="text"
+      value=""
+    />
+  </div>
+  <select
+    aria-label="Currency"
+    style="border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 10px 8px; font-size: 14px; background: white; cursor: pointer; min-height: 44px;"
+  >
+    <option
+      title="Stellar Lumens"
+      value="XLM"
+    >
+      XLM
+    </option>
+    <option
+      title="USD Coin"
+      value="USDC"
+    >
+      USDC
+    </option>
+    <option
+      title="Bitcoin"
+      value="BTC"
+    >
+      BTC
+    </option>
+  </select>
+</div>
+`;
+
+exports[`AmountInput snapshots > renders with USDC currency 1`] = `
+<div
+  style="display: flex; gap: 8px; align-items: center;"
+>
+  <div
+    style="position: relative; flex: 1 1 0%;"
+  >
+    <input
+      aria-label="Amount"
+      inputmode="decimal"
+      placeholder="0.0000000"
+      style="padding-right: 10px;"
+      type="text"
+      value="50"
+    />
+  </div>
+  <select
+    aria-label="Currency"
+    style="border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 10px 8px; font-size: 14px; background: white; cursor: pointer; min-height: 44px;"
+  >
+    <option
+      title="Stellar Lumens"
+      value="XLM"
+    >
+      XLM
+    </option>
+    <option
+      title="USD Coin"
+      value="USDC"
+    >
+      USDC
+    </option>
+    <option
+      title="Bitcoin"
+      value="BTC"
+    >
+      BTC
+    </option>
+  </select>
+</div>
+`;
+
+exports[`AmountInput snapshots > renders with value and available balance 1`] = `
+<div
+  style="display: flex; gap: 8px; align-items: center;"
+>
+  <div
+    style="position: relative; flex: 1 1 0%;"
+  >
+    <input
+      aria-label="Amount"
+      inputmode="decimal"
+      placeholder="0.0000000"
+      style="padding-right: 52px;"
+      type="text"
+      value="100"
+    />
+    <button
+      style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; color: rgb(0, 102, 204); border: medium; padding: 2px 4px; font-size: 11px; font-weight: 700; cursor: pointer; width: auto; min-height: unset; min-width: unset;"
+      title="Max: 500"
+      type="button"
+    >
+      MAX
+    </button>
+  </div>
+  <select
+    aria-label="Currency"
+    style="border: 1px solid rgb(221, 221, 221); border-radius: 4px; padding: 10px 8px; font-size: 14px; background: white; cursor: pointer; min-height: 44px;"
+  >
+    <option
+      title="Stellar Lumens"
+      value="XLM"
+    >
+      XLM
+    </option>
+    <option
+      title="USD Coin"
+      value="USDC"
+    >
+      USDC
+    </option>
+    <option
+      title="Bitcoin"
+      value="BTC"
+    >
+      BTC
+    </option>
+  </select>
+</div>
+`;
+
+exports[`Badge snapshots > renders danger badge 1`] = `
+<span
+  class="badge badge-danger"
+>
+  Error
+</span>
+`;
+
+exports[`Badge snapshots > renders default badge 1`] = `
+<span
+  class="badge badge-default"
+>
+  Default
+</span>
+`;
+
+exports[`Badge snapshots > renders info badge 1`] = `
+<span
+  class="badge badge-info"
+>
+  Info
+</span>
+`;
+
+exports[`Badge snapshots > renders success badge 1`] = `
+<span
+  class="badge badge-success"
+>
+  Success
+</span>
+`;
+
+exports[`Badge snapshots > renders warning badge 1`] = `
+<span
+  class="badge badge-warning"
+>
+  Warning
+</span>
+`;
+
+exports[`Button snapshots > renders danger button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-danger btn-md"
+>
+  Delete
+</button>
+`;
+
+exports[`Button snapshots > renders full width button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-md btn-full"
+>
+  Full Width
+</button>
+`;
+
+exports[`Button snapshots > renders ghost button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-ghost btn-md"
+>
+  Cancel
+</button>
+`;
+
+exports[`Button snapshots > renders large button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-lg"
+>
+  Large
+</button>
+`;
+
+exports[`Button snapshots > renders medium button (default) 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-md"
+>
+  Medium
+</button>
+`;
+
+exports[`Button snapshots > renders primary button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-md"
+>
+  Click me
+</button>
+`;
+
+exports[`Button snapshots > renders primary button disabled 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-md"
+  disabled=""
+>
+  Disabled
+</button>
+`;
+
+exports[`Button snapshots > renders primary button loading 1`] = `
+<button
+  aria-busy="true"
+  class="btn btn-primary btn-md btn-loading"
+  disabled=""
+>
+  <span
+    aria-hidden="true"
+    class="btn-spinner"
+  />
+  Loading...
+</button>
+`;
+
+exports[`Button snapshots > renders secondary button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-secondary btn-md"
+>
+  Secondary
+</button>
+`;
+
+exports[`Button snapshots > renders small button 1`] = `
+<button
+  aria-busy="false"
+  class="btn btn-primary btn-sm"
+>
+  Small
+</button>
+`;
+
+exports[`Card snapshots > renders basic card 1`] = `
+<div
+  class="card card-p-md"
+>
+  <div
+    class="card-body"
+  >
+    Card content
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with footer 1`] = `
+<div
+  class="card card-p-md"
+>
+  <div
+    class="card-body"
+  >
+    Card content
+  </div>
+  <div
+    class="card-footer"
+  >
+    Card Footer
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with header 1`] = `
+<div
+  class="card card-p-md"
+>
+  <div
+    class="card-header"
+  >
+    Card Title
+  </div>
+  <div
+    class="card-body"
+  >
+    Card content
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with header and footer 1`] = `
+<div
+  class="card card-p-md"
+>
+  <div
+    class="card-header"
+  >
+    Title
+  </div>
+  <div
+    class="card-body"
+  >
+    Card content
+  </div>
+  <div
+    class="card-footer"
+  >
+    Footer
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with large padding 1`] = `
+<div
+  class="card card-p-lg"
+>
+  <div
+    class="card-body"
+  >
+    Large padding
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with medium padding (default) 1`] = `
+<div
+  class="card card-p-md"
+>
+  <div
+    class="card-body"
+  >
+    Medium padding
+  </div>
+</div>
+`;
+
+exports[`Card snapshots > renders card with small padding 1`] = `
+<div
+  class="card card-p-sm"
+>
+  <div
+    class="card-body"
+  >
+    Small padding
+  </div>
+</div>
+`;
+
+exports[`CopyButton snapshots > renders default state 1`] = `
+<span
+  style="position: relative; display: inline-block;"
+>
+  <button
+    aria-label="Copy — press Ctrl+C when focused"
+    class="copy-btn"
+    title="Copy (Ctrl+C when focused)"
+    type="button"
+  >
+    ⎘
+  </button>
+</span>
+`;
+
+exports[`CopyButton snapshots > renders with custom label 1`] = `
+<span
+  style="position: relative; display: inline-block;"
+>
+  <button
+    aria-label="Copy address — press Ctrl+C when focused"
+    class="copy-btn"
+    title="Copy (Ctrl+C when focused)"
+    type="button"
+  >
+    ⎘
+  </button>
+</span>
+`;
+
+exports[`ErrorBoundary snapshots > renders children when no error 1`] = `
+<p>
+  Child content
+</p>
+`;
+
+exports[`ErrorBoundary snapshots > renders error UI when error is thrown 1`] = `
+<div
+  role="alert"
+  style="padding: 20px 16px; margin: 16px 0px; background: rgb(254, 242, 242); border: 1px solid rgb(252, 165, 165); border-radius: 6px; text-align: center;"
+>
+  <span
+    style="font-size: 2rem;"
+  >
+    ⚠️
+  </span>
+  <p
+    style="font-weight: 600; margin: 8px 0px 4px; color: rgb(185, 28, 28);"
+  >
+    Something went wrong
+  </p>
+  <p
+    style="font-size: 13px; color: rgb(127, 29, 29); margin-bottom: 12px; word-break: break-word;"
+  >
+    Test error
+  </p>
+  <button
+    style="background: rgb(0, 102, 204); color: rgb(255, 255, 255); border: medium; padding: 8px 20px; border-radius: 4px; cursor: pointer; font-size: 14px;"
+  >
+    Try again
+  </button>
+</div>
+`;
+
+exports[`FeeDisplay snapshots > renders nothing when not visible 1`] = `null`;
+
+exports[`FeeDisplay snapshots > renders nothing when visible but fee not yet loaded 1`] = `null`;
+
+exports[`FormField snapshots > renders validation error when touched 1`] = `
+<div
+  style="margin-bottom: 12px;"
+>
+  <label
+    style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: rgb(85, 85, 85);"
+  >
+    Email
+    <span
+      style="color: rgb(239, 68, 68); margin-left: 2px;"
+    >
+      *
+    </span>
+  </label>
+  <input
+    type="email"
+  />
+  <div
+    class="field-error"
+  >
+    Invalid email
+  </div>
+</div>
+`;
+
+exports[`FormField snapshots > renders with label and child input 1`] = `
+<div
+  style="margin-bottom: 12px;"
+>
+  <label
+    style="display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: rgb(85, 85, 85);"
+  >
+    Email
+    <span
+      style="color: rgb(239, 68, 68); margin-left: 2px;"
+    >
+      *
+    </span>
+  </label>
+  <input
+    type="email"
+  />
+</div>
+`;
+
+exports[`FormField snapshots > renders without label 1`] = `
+<div
+  style="margin-bottom: 12px;"
+>
+  <input
+    type="text"
+  />
+</div>
+`;
+
+exports[`Input snapshots > renders basic input 1`] = `
+<div
+  class="input-wrap"
+>
+  <input
+    aria-invalid="false"
+    class="input-field"
+    placeholder="Enter text"
+  />
+</div>
+`;
+
+exports[`Input snapshots > renders full width input 1`] = `
+<div
+  class="input-wrap input-full"
+>
+  <label
+    class="input-label"
+    for="name"
+  >
+    Name
+  </label>
+  <input
+    aria-invalid="false"
+    class="input-field"
+    id="name"
+  />
+</div>
+`;
+
+exports[`Input snapshots > renders input with custom id 1`] = `
+<div
+  class="input-wrap"
+>
+  <label
+    class="input-label"
+    for="custom-id"
+  >
+    Username
+  </label>
+  <input
+    aria-invalid="false"
+    class="input-field"
+    id="custom-id"
+  />
+</div>
+`;
+
+exports[`Input snapshots > renders input with error 1`] = `
+<div
+  class="input-wrap"
+>
+  <label
+    class="input-label"
+    for="email"
+  >
+    Email
+  </label>
+  <input
+    aria-describedby="email-error"
+    aria-invalid="true"
+    class="input-field input-error"
+    id="email"
+  />
+  <span
+    class="input-error-msg"
+    id="email-error"
+    role="alert"
+  >
+    Invalid email format
+  </span>
+</div>
+`;
+
+exports[`Input snapshots > renders input with hint text 1`] = `
+<div
+  class="input-wrap"
+>
+  <label
+    class="input-label"
+    for="password"
+  >
+    Password
+  </label>
+  <input
+    aria-describedby="password-hint"
+    aria-invalid="false"
+    class="input-field"
+    id="password"
+    type="password"
+  />
+  <span
+    class="input-hint"
+    id="password-hint"
+  >
+    At least 8 characters
+  </span>
+</div>
+`;
+
+exports[`Input snapshots > renders input with label 1`] = `
+<div
+  class="input-wrap"
+>
+  <label
+    class="input-label"
+    for="email"
+  >
+    Email
+  </label>
+  <input
+    aria-invalid="false"
+    class="input-field"
+    id="email"
+    type="email"
+  />
+</div>
+`;
+
+exports[`Modal snapshots > renders modal when open 1`] = `
+<div
+  aria-labelledby="modal-title"
+  aria-modal="true"
+  class="modal modal-md"
+  role="dialog"
+  tabindex="-1"
+>
+  <div
+    class="modal-header"
+  >
+    <h2
+      class="modal-title"
+      id="modal-title"
+    >
+      Dialog
+    </h2>
+    <button
+      aria-label="Close dialog"
+      class="modal-close"
+    >
+      ✕
+    </button>
+  </div>
+  <div
+    class="modal-body"
+  >
+    Modal content
+  </div>
+</div>
+`;
+
+exports[`Modal snapshots > renders modal with large size 1`] = `
+<div
+  aria-labelledby="modal-title"
+  aria-modal="true"
+  class="modal modal-lg"
+  role="dialog"
+  tabindex="-1"
+>
+  <div
+    class="modal-header"
+  >
+    <h2
+      class="modal-title"
+      id="modal-title"
+    >
+      Large Dialog
+    </h2>
+    <button
+      aria-label="Close dialog"
+      class="modal-close"
+    >
+      ✕
+    </button>
+  </div>
+  <div
+    class="modal-body"
+  >
+    Content
+  </div>
+</div>
+`;
+
+exports[`Modal snapshots > renders modal with medium size (default) 1`] = `
+<div
+  aria-labelledby="modal-title"
+  aria-modal="true"
+  class="modal modal-md"
+  role="dialog"
+  tabindex="-1"
+>
+  <div
+    class="modal-header"
+  >
+    <h2
+      class="modal-title"
+      id="modal-title"
+    >
+      Medium Dialog
+    </h2>
+    <button
+      aria-label="Close dialog"
+      class="modal-close"
+    >
+      ✕
+    </button>
+  </div>
+  <div
+    class="modal-body"
+  >
+    Content
+  </div>
+</div>
+`;
+
+exports[`Modal snapshots > renders modal with small size 1`] = `
+<div
+  aria-labelledby="modal-title"
+  aria-modal="true"
+  class="modal modal-sm"
+  role="dialog"
+  tabindex="-1"
+>
+  <div
+    class="modal-header"
+  >
+    <h2
+      class="modal-title"
+      id="modal-title"
+    >
+      Small Dialog
+    </h2>
+    <button
+      aria-label="Close dialog"
+      class="modal-close"
+    >
+      ✕
+    </button>
+  </div>
+  <div
+    class="modal-body"
+  >
+    Content
+  </div>
+</div>
+`;
+
+exports[`Modal snapshots > renders nothing when closed 1`] = `null`;
+
+exports[`NetworkBadge snapshots > renders null when no status 1`] = `null`;
+
+exports[`NetworkBadge snapshots > renders offline mainnet badge 1`] = `
+<div
+  class="net-badge-wrap"
+>
+  <button
+    aria-expanded="false"
+    aria-label="Network status"
+    class="net-badge offline"
+  >
+    <span
+      class="net-dot offline"
+    />
+    Mainnet
+     ⚠
+  </button>
+</div>
+`;
+
+exports[`NetworkBadge snapshots > renders online testnet badge 1`] = `
+<div
+  class="net-badge-wrap"
+>
+  <button
+    aria-expanded="false"
+    aria-label="Network status"
+    class="net-badge online"
+  >
+    <span
+      class="net-dot online"
+    />
+    Testnet
+  </button>
+</div>
+`;
+
+exports[`Spinner snapshots > renders with label 1`] = `
+<span
+  style="display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;"
+>
+  <div
+    style="display: inline-block;"
+  >
+    ⟳
+  </div>
+  <span>
+    Loading…
+  </span>
+</span>
+`;
+
+exports[`Spinner snapshots > renders without label 1`] = `
+<span
+  style="display: inline-flex; align-items: center; gap: 6px; margin-left: 8px;"
+>
+  <div
+    style="display: inline-block;"
+  >
+    ⟳
+  </div>
+</span>
+`;
+
+exports[`StatusMessage snapshots > renders a success message 1`] = `
+<div
+  aria-atomic="false"
+  aria-label="Notifications"
+  aria-live="polite"
+  class="sm-wrap"
+>
+  <div
+    class="sm-item sm-success"
+    role="alert"
+  >
+    <span
+      aria-hidden="true"
+      class="sm-icon"
+    >
+      ✅
+    </span>
+    <span
+      class="sm-text"
+    >
+      Payment sent
+    </span>
+    <button
+      aria-label="Dismiss: Payment sent"
+      class="sm-close"
+    >
+      ✕
+    </button>
+  </div>
+</div>
+`;
+
+exports[`StatusMessage snapshots > renders an error message 1`] = `
+<div
+  aria-atomic="false"
+  aria-label="Notifications"
+  aria-live="polite"
+  class="sm-wrap"
+>
+  <div
+    class="sm-item sm-error"
+    role="alert"
+  >
+    <span
+      aria-hidden="true"
+      class="sm-icon"
+    >
+      ⚠️
+    </span>
+    <span
+      class="sm-text"
+    >
+      Transaction failed
+    </span>
+    <button
+      aria-label="Dismiss: Transaction failed"
+      class="sm-close"
+    >
+      ✕
+    </button>
+  </div>
+</div>
+`;
+
+exports[`StatusMessage snapshots > renders empty state 1`] = `
+<div
+  aria-atomic="false"
+  aria-label="Notifications"
+  aria-live="polite"
+  class="sm-wrap"
+/>
+`;
+
+exports[`StatusMessage snapshots > renders message with retry button 1`] = `
+<div
+  aria-atomic="false"
+  aria-label="Notifications"
+  aria-live="polite"
+  class="sm-wrap"
+>
+  <div
+    class="sm-item sm-success"
+    role="alert"
+  >
+    <span
+      aria-hidden="true"
+      class="sm-icon"
+    >
+      ✅
+    </span>
+    <span
+      class="sm-text"
+    >
+      Payment sent
+    </span>
+    <button
+      aria-label="Retry action"
+      class="sm-retry"
+    >
+      Retry
+    </button>
+    <button
+      aria-label="Dismiss: Payment sent"
+      class="sm-close"
+    >
+      ✕
+    </button>
+  </div>
+</div>
+`;

@@ -85,27 +85,27 @@ export async function fundAccount(publicKey) {
   return { funded: true, publicKey };
 }
 
-export async function createAccount() {
+export async function createAccount(correlationId = null) {
   const pair = StellarSDK.Keypair.random();
   const publicKey = pair.publicKey();
-  logger.info('stellar.createAccount', { publicKey });
+  logger.info('stellar.createAccount', { publicKey, correlationId });
   
   if (isTestnet()) {
     const friendbotRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
     if (!friendbotRes.ok) {
       throw new Error(`Friendbot funding failed: ${friendbotRes.status} ${friendbotRes.statusText}`);
     }
-    logger.debug('stellar.friendbotFunded', { publicKey });
+    logger.debug('stellar.friendbotFunded', { publicKey, correlationId });
     await eventMonitor.publishEvent(publicKey, {
       type: 'AccountFunded',
-      data: { publicKey },
+      data: { publicKey, correlationId },
       version: 1
     });
   }
 
   await eventMonitor.publishEvent(publicKey, {
     type: 'AccountCreated',
-    data: { publicKey },
+    data: { publicKey, correlationId },
     version: 1
   });
 
@@ -113,7 +113,7 @@ export async function createAccount() {
     where: { publicKey },
     update: {},
     create: { publicKey },
-  }).catch(err => logger.warn('db.user.upsert.failed', { error: err.message }));
+  }).catch(err => logger.warn('db.user.upsert.failed', { error: err.message, correlationId }));
   
   return {
     publicKey,
@@ -121,24 +121,24 @@ export async function createAccount() {
   };
 }
 
-export async function getBalance(publicKey) {
-  logger.debug('stellar.getBalance', { publicKey });
+export async function getBalance(publicKey, correlationId = null) {
+  logger.debug('stellar.getBalance', { publicKey, correlationId });
   const account = await getHorizonServer().loadAccount(publicKey);
   const balances = account.balances.map(b => ({
     asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
     balance: b.balance
   }));
 
-  logger.info('stellar.balanceFetched', { publicKey, balances });
+  logger.info('stellar.balanceFetched', { publicKey, balances, correlationId });
 
   return { publicKey, balances };
 }
 
-export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = null, memoType = 'text') {
+export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = null, memoType = 'text', correlationId = null) {
   const { assetIssuer } = getConfig().stellar;
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
-  logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode, memo, memoType });
+  logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode, memo, memoType, correlationId });
 
   const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
   
@@ -202,6 +202,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
         source: sourcePublicKey,
         xlmBalance: xlmAmount,
         threshold: feeBumpThreshold,
+        correlationId,
       });
       // Track stats for cost monitoring
       feeBumpStats.total += 1;
@@ -214,7 +215,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
   try {
     result = await getHorizonServer().submitTransaction(txToSubmit);
   } catch (err) {
-    logger.error('stellar.sendPayment.failed', { source: sourcePublicKey, destination, amount, assetCode, error: err.message });
+    logger.error('stellar.sendPayment.failed', { source: sourcePublicKey, destination, amount, assetCode, error: err.message, correlationId });
     throw err;
   }
 
@@ -228,11 +229,12 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
     feeBump: usedFeeBump,
     memo,
     memoType,
+    correlationId,
   });
 
   await eventMonitor.publishEvent(sourcePublicKey, {
     type: 'PaymentSent',
-    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump, memo, memoType },
+    data: { destination, amount, hash: result.hash, feeBump: usedFeeBump, memo, memoType, correlationId },
     version: 1
   });
 
@@ -255,7 +257,7 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
         memoType: memo ? (memoType || 'text') : null,
       },
     });
-  }).catch(err => logger.warn('db.transaction.save.failed', { error: err.message }));
+  }).catch(err => logger.warn('db.transaction.save.failed', { error: err.message, correlationId }));
   
   return {
     hash: result.hash,

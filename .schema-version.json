@@ -1,0 +1,10 @@
+{
+  "version": 0,
+  "timestamp": "2026-05-29T14:14:55.995Z",
+  "migrations": [
+    {
+      "name": "test_migration",
+      "version": 1
+    }
+  ]
+}

@@ -134,6 +134,106 @@
       }
     },
     {
+      "description": "a request to get transaction history",
+      "providerStates": [
+        {
+          "name": "account has transaction history"
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "path": "/api/stellar/account/GABC1234567890ABCDEF/transactions"
+      },
+      "response": {
+        "body": {
+          "transactions": [
+            {
+              "created_at": "2026-01-01T00:00:00Z",
+              "hash": "abc123hash",
+              "id": "123456789",
+              "ledger": "12345",
+              "operation_count": 1,
+              "source_account": "GABC123",
+              "successful": true
+            }
+          ]
+        },
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "matchingRules": {
+          "body": {
+            "$.transactions": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type",
+                  "min": 1
+                }
+              ]
+            },
+            "$.transactions[*].created_at": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transactions[*].hash": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transactions[*].id": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transactions[*].ledger": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transactions[*].operation_count": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "number"
+                }
+              ]
+            },
+            "$.transactions[*].source_account": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            },
+            "$.transactions[*].successful": {
+              "combine": "AND",
+              "matchers": [
+                {
+                  "match": "type"
+                }
+              ]
+            }
+          }
+        },
+        "status": 200
+      }
+    },
+    {
       "description": "a request to send a payment",
       "providerStates": [
         {

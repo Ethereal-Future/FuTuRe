@@ -10,6 +10,7 @@ export default {
     'frontend/src/utils/formatBalance.js',
     'frontend/src/utils/errorMessages.js',
     'frontend/src/utils/validateStellarAddress.js',
+    'backend/src/services/*.js',
   ],
   vitest: {
     configFile: 'vitest.mutation.config.js',

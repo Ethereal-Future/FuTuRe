@@ -1,8 +1,6 @@
 import rateLimit from 'express-rate-limit';
 import { isWhitelisted } from '../security/ipWhitelist.js';
-import { logger } from '../utils/logger.js';
-
-export const rateLimitLogger = logger.child({ component: 'rateLimiter' });
+import logger from '../config/logger.js';
 
 function getClientIP(req) {
   const forwarded = req.headers['x-forwarded-for'];
@@ -36,16 +34,24 @@ function createRateLimiter(options = {}) {
     keyGenerator: (req) => getClientIP(req),
     handler: (req, res, next, options) => {
       const clientIP = getClientIP(req);
-      rateLimitLogger.warn({
+      const username = req.body?.username || 'unknown';
+
+      logger.warn({
         ip: clientIP,
         path: req.path,
         method: req.method,
+        username,
         whitelist: isWhitelisted(clientIP),
       }, 'Rate limit exceeded');
+      
+      // Set Retry-After header
+      const retryAfter = Math.ceil(windowMs / 1000);
+      res.set('Retry-After', retryAfter.toString());
+      
       res.status(429).json({
         error: options.message.error || message,
         statusCode: 429,
-        retryAfter: options.message.retryAfter || Math.ceil(windowMs / 1000),
+        retryAfter,
       });
     },
   });

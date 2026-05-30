@@ -108,6 +108,35 @@ describe('Frontend → Backend Contract', () => {
       });
   });
 
+  it('GET /api/stellar/account/:publicKey/transactions returns transaction history', async () => {
+    const testKey = 'GABC1234567890ABCDEF';
+    await provider
+      .addInteraction({
+        states: [{ description: 'account has transaction history' }],
+        uponReceiving: 'a request to get transaction history',
+        withRequest: { method: 'GET', path: `/api/stellar/account/${testKey}/transactions` },
+        willRespondWith: {
+          status: 200,
+          body: {
+            transactions: eachLike({
+              id: string('123456789'),
+              hash: string('abc123hash'),
+              ledger: string('12345'),
+              created_at: string('2026-01-01T00:00:00Z'),
+              source_account: string('GABC123'),
+              operation_count: MatchersV3.number(1),
+              successful: MatchersV3.boolean(true),
+            }),
+          },
+        },
+      })
+      .executeTest(async (mockServer) => {
+        const result = await apiCall(mockServer.url, 'GET', `/api/stellar/account/${testKey}/transactions`);
+        expect(result).toHaveProperty('transactions');
+        expect(Array.isArray(result.transactions)).toBe(true);
+      });
+  });
+
   it('GET /health returns ok status', async () => {
     await provider
       .addInteraction({

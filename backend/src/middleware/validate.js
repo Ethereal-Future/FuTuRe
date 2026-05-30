@@ -273,14 +273,15 @@ export const rules = {
       .matches(STELLAR_PUBLIC_KEY)
       .withMessage('Invalid expected signer public key'),
   ],
+
+  mergeAccount: [
+    body('sourceSecret')
+      .trim()
+      .matches(STELLAR_SECRET_KEY)
+      .withMessage('Invalid Stellar secret key'),
+    body('destination')
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid destination public key'),
+  ],
 };
-mergeAccount: [
-  body('sourceSecret')
-    .trim()
-    .matches(STELLAR_SECRET_KEY)
-    .withMessage('Invalid Stellar secret key'),
-  body('destination')
-    .trim()
-    .matches(STELLAR_PUBLIC_KEY)
-    .withMessage('Invalid destination public key'),
-],

@@ -30,7 +30,14 @@ cp .env.example .env
 ```
 See `backend/CONFIGURATION.md` for environment options, validation rules, and optional encrypted secrets.
 
-3. Start development servers:
+3. Configure frontend environment (optional):
+```bash
+cd frontend
+cp .env.example .env
+```
+Set `VITE_API_URL` to your production API endpoint when deploying to a CDN or different domain. Leave empty for development (Vite proxy handles `/api` requests to `localhost:3001`).
+
+4. Start development servers:
 ```bash
 npm run dev
 ```

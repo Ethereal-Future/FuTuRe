@@ -8,13 +8,15 @@
     "analyze": "vite build && open stats.html",
     "preview": "vite preview",
     "test": "vitest run",
+    "typecheck": "tsc --noEmit",
     "lint": "eslint src",
-    "format": "prettier --write \"src/**/*.{js,jsx}\"",
+    "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build"
   },
   "dependencies": {
     "@stellar/stellar-sdk": "^12.3.0",
+    "@tanstack/react-query": "^5.100.14",
     "@tanstack/react-virtual": "^3.13.23",
     "axios": "^1.7.2",
     "framer-motion": "^12.38.0",
@@ -34,11 +36,14 @@
     "@storybook/addon-a11y": "^8.0.0",
     "@storybook/addon-essentials": "^8.0.0",
     "@storybook/react-vite": "^8.0.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "prettier": "^3.3.3",
     "storybook": "^8.0.0",
+    "typescript": "^5.0.0",
     "vite": "^5.3.3"
   }
 }
