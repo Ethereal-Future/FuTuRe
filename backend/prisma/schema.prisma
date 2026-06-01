@@ -1,251 +1,38 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
 generator client {
   provider = "prisma-client-js"
 }
 
-// In Prisma 7, datasource configuration moved to prisma.config.js
-// The DATABASE_URL is configured there and passed via the adapter pattern
 datasource db {
   provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model User {
-  id                      String                   @id @default(uuid())
-  publicKey               String                   @unique
-  username                String?                  @unique
-  passwordHash            String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  deletedAt               DateTime?
-  settings                Setting?
-  sentTxs                 Transaction[]            @relation("sender")
-  receivedTxs             Transaction[]            @relation("recipient")
-  sentStreams             PaymentStream[]          @relation("streamSender")
-  receivedStreams         PaymentStream[]          @relation("streamRecipient")
-  notifications           Notification[]
-  notificationPreference  NotificationPreference?
-  kycRecord               KYCRecord?
-  amlAlerts               AMLAlert[]
-  auditLogs               AuditLog[]
-
-  @@index([deletedAt])
-
-  id                     String                  @id @default(uuid())
-  publicKey              String                  @unique
-  username               String                  @unique
-  passwordHash           String
-  createdAt              DateTime                @default(now())
-  updatedAt              DateTime                @updatedAt
-  settings               Setting?
-  sentTxs                Transaction[]           @relation("sender")
-  receivedTxs            Transaction[]           @relation("recipient")
-  sentStreams            PaymentStream[]         @relation("streamSender")
-  receivedStreams        PaymentStream[]         @relation("streamRecipient")
-  notifications          Notification[]
-  notificationPreference NotificationPreference?
-  kycRecord              KYCRecord?
-  amlAlerts              AMLAlert[]
+  id        String   @id @default(uuid())
+  email     String   @unique
+  role      String   @default("USER")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model Transaction {
-  id            String         @id @default(uuid())
-  hash          String         @unique
-  assetCode     String         @default("XLM")
-  amount        Decimal
-  ledger        Int?
-  successful    Boolean         @default(true)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  deletedAt     DateTime?
-
-  successful    Boolean        @default(true)
-  memo          String?
-  memoType      String?        // 'text' | 'id'
-  createdAt     DateTime       @default(now())
-  senderId      String
-  sender        User           @relation("sender", fields: [senderId], references: [id])
-  recipientId   String
-  recipient     User           @relation("recipient", fields: [recipientId], references: [id])
-  retryAttempts Int            @default(0)
-  retryStatus   String?
-  lastRetryAt   DateTime?
-  retryHistory  RetryAttempt[]
-
-  @@index([deletedAt])
-
-
-  @@index([deletedAt])
-  amlAlerts     AMLAlert[]
-
-  @@index([senderId, createdAt])
-  @@index([recipientId, createdAt])
-}
-
-model RetryAttempt {
-  id            String      @id @default(uuid())
-  transactionId String
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
-  attemptNumber Int
-  errorType     String
-  errorMessage  String
-  timestamp     DateTime    @default(now())
-
-  @@index([transactionId])
-}
-
-model Setting {
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  defaultAsset    String   @default("XLM")
-  notificationsOn Boolean  @default(true)
-  accountLabel    String?
-  updatedAt       DateTime @updatedAt
-}
-
-enum StreamStatus {
-  ACTIVE
-  PAUSED
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-model PaymentStream {
-  id              String       @id @default(uuid())
-  senderId        String
-  sender          User         @relation("streamSender", fields: [senderId], references: [id])
-  recipientId     String
-  recipient       User         @relation("streamRecipient", fields: [recipientId], references: [id])
-  assetCode       String       @default("XLM")
-  rateAmount      Decimal
-  intervalSeconds Int          @default(60)
-  startTime       DateTime     @default(now())
-  endTime         DateTime?
-  lastProcessedAt DateTime     @default(now())
-  totalStreamed    Decimal      @default(0)
-  status          StreamStatus @default(ACTIVE)
-  failureCount    Int          @default(0)
-  metadata        Json?
-  senderSecret    String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-
-  @@index([senderId])
-  @@index([recipientId])
-}
-
-  @@index([status, lastProcessedAt])
-}
-
-  @@index([senderId])
-  @@index([recipientId])
-}
-  @@index([status, lastProcessedAt])
-}
-model Notification {
   id        String   @id @default(uuid())
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  channel   String
-  status    String   @default("sent")
-  title     String?
-  body      String
-  read      Boolean  @default(false)
-  metadata  Json?
+  amount    String
   createdAt DateTime @default(now())
-
-  @@index([userId, createdAt])
-  @@index([userId, read])
-}
-
-model NotificationPreference {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailEnabled     Boolean  @default(true)
-  pushEnabled      Boolean  @default(true)
-  smsEnabled       Boolean  @default(false)
-  inAppEnabled     Boolean  @default(true)
-  quietHoursStart  Int      @default(22)
-  quietHoursEnd    Int      @default(7)
-  typeOverrides    Json?
-  updatedAt        DateTime @updatedAt
-
-  id              String   @id @default(uuid())
-  userId          String   @unique
-  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailEnabled    Boolean  @default(true)
-  pushEnabled     Boolean  @default(true)
-  smsEnabled      Boolean  @default(false)
-  inAppEnabled    Boolean  @default(true)
-  quietHoursStart Int      @default(22)
-  quietHoursEnd   Int      @default(7)
-  typeOverrides   Json?
-  updatedAt       DateTime @updatedAt
-}
-
-model KYCRecord {
-  id             String   @id @default(uuid())
-  userId         String   @unique
-  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  status         String   @default("PENDING")
-  fullName       String
-  dateOfBirth    DateTime
-  nationality    String
-  documentType   String
-  documentNumber String
-  address        String
-  phoneNumber    String?
-  email          String?
-  riskScore      Int?
-  riskLevel      String?
-  submittedAt    DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  @@index([status])
+  updatedAt DateTime @updatedAt
 }
 
 model AMLAlert {
-  id            String      @id @default(uuid())
-  transactionId String
-  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Restrict)
-  userId        String
-  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  ruleId        String
-  severity      String
-  description   String
-  riskScore     Int
-  riskLevel     String
-  createdAt     DateTime @default(now())
-
-  @@index([transactionId])
-  @@index([userId])
-
-  createdAt     DateTime    @default(now())
-
-  @@index([transactionId])
-  @@index([userId])
-}
-
-model AuditLog {
-  id            String   @id @default(uuid())
-  timestamp     DateTime @default(now())
-  userId        String?
-  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  actionType    String
-  resourceType  String?
-  resourceId    String?
-  details       String
-  ipAddress     String?
-  userAgent     String?
-  outcome       String   @default("SUCCESS")
-  severity      String   @default("INFO")
-
-  @@index([timestamp])
-  @@index([status, expiresAt])
-  @@index([transactionId])
-  @@index([userId])
-  @@index([actionType])
-  @@index([severity])
+  id          String   @id @default(uuid())
+  userId      String
+  rule        String
+  severity    String
+  description String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 }
