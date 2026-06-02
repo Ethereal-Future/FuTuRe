@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth as authMiddleware } from '../middleware/auth.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
-import { prisma } from '../db/client.js';
+import prisma from '../db/client.js';
 import {
   kycCollector,
   identityVerifier,

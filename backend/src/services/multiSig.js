@@ -14,11 +14,13 @@ function getNetworkPassphrase() {
 }
 
 /**
- * Create a multi-signature account by setting signers and threshold on an existing account.
+ * Convert an existing account to multi-signature by setting signers and operation thresholds.
  * @param {string} sourceSecret - Secret key of the account to convert to multi-sig
  * @param {Array<{publicKey: string, weight: number}>} signers - Additional signers to add
- * @param {object} thresholds - { low, medium, high } threshold weights
- * @param {number} masterWeight - Weight for the master key (0 to remove)
+ * @param {{low: number, medium: number, high: number}} thresholds - Operation threshold weights
+ * @param {number} [masterWeight=1] - Weight for the master key (set to 0 to remove master key)
+ * @returns {Promise<{publicKey: string, signers: Array<{publicKey: string, weight: number}>, thresholds: object, masterWeight: number, hash: string, success: boolean}>}
+ * @throws {Error} If Horizon submission fails
  */
 export async function createMultiSigAccount(sourceSecret, signers, thresholds, masterWeight = 1) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
@@ -71,7 +73,16 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
 }
 
 /**
- * Build a multi-sig transaction (XDR) without submitting — signers collect signatures separately.
+ * Build a multi-sig payment transaction as XDR without submitting it, persisting it as pending
+ * so multiple signers can add their signatures before submission. Expires in 5 minutes.
+ * @param {string} sourcePublicKey - Stellar public key of the source account
+ * @param {string} destination - Stellar public key of the recipient
+ * @param {string|number} amount - Amount to send (in asset units)
+ * @param {string} [assetCode='XLM'] - Asset code (e.g. 'XLM', 'USDC')
+ * @returns {Promise<{txId: string, txXdr: string}>} Unique transaction ID and base64-encoded XDR
+ * @throws {Error} If the asset issuer is unknown or Horizon account load fails
+ * @example
+ * const { txId, txXdr } = await buildMultiSigTransaction('GSRC...', 'GDST...', '100', 'USDC');
  */
 export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM') {
   const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
@@ -123,7 +134,11 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
 }
 
 /**
- * Add a signature to a pending multi-sig transaction.
+ * Add a signer's signature to a pending multi-sig transaction. Prevents duplicate signatures.
+ * @param {string} txId - The pending transaction ID returned by {@link buildMultiSigTransaction}
+ * @param {string} signerSecret - Secret key of the signer
+ * @returns {Promise<{txId: string, signerPublicKey: string, totalSignatures: number, signatures: Array<{publicKey: string, signedAt: string}>, txXdr: string}>}
+ * @throws {Error} If the transaction is not found, is not pending, has expired, or if the signer already signed
  */
 export async function addSignature(txId, signerSecret) {
   const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
@@ -167,7 +182,10 @@ export async function addSignature(txId, signerSecret) {
 }
 
 /**
- * Submit a fully-signed multi-sig transaction to the network.
+ * Submit a fully-signed multi-sig transaction to the Stellar network.
+ * @param {string} txId - The pending transaction ID returned by {@link buildMultiSigTransaction}
+ * @returns {Promise<{txId: string, hash: string, ledger: number, success: boolean, signatures: object[]}>}
+ * @throws {Error} If the transaction is not found, not in pending status, has expired, or if Horizon rejects it
  */
 export async function submitMultiSigTransaction(txId) {
   const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
@@ -205,7 +223,10 @@ export async function submitMultiSigTransaction(txId) {
 }
 
 /**
- * Verify that a transaction XDR has valid signatures from the expected signers.
+ * Verify that a transaction XDR has valid signatures from all expected signers.
+ * @param {string} txXdr - Base64-encoded XDR of the signed transaction
+ * @param {string[]} expectedSigners - List of Stellar public keys that must have signed
+ * @returns {{allValid: boolean, results: Array<{publicKey: string, valid: boolean}>}}
  */
 export function verifySignatures(txXdr, expectedSigners) {
   const transaction = StellarSDK.TransactionBuilder.fromXDR(txXdr, getNetworkPassphrase());
@@ -230,7 +251,10 @@ export function verifySignatures(txXdr, expectedSigners) {
 }
 
 /**
- * Get the current signers and thresholds for an account from the network.
+ * Fetch the current signers and operation thresholds for an account from Horizon.
+ * @param {string} publicKey - Stellar public key of the account
+ * @returns {Promise<{publicKey: string, signers: Array<{publicKey: string, weight: number, type: string}>, thresholds: {low: number, medium: number, high: number}, masterWeight: number}>}
+ * @throws {Error} If the account does not exist on the network
  */
 export async function getMultiSigConfig(publicKey) {
   const account = await getHorizonServer().loadAccount(publicKey);
@@ -254,7 +278,15 @@ export async function getMultiSigConfig(publicKey) {
 }
 
 /**
- * Update signers or thresholds on an existing multi-sig account.
+ * Update signers or thresholds on an existing multi-sig account in a single transaction.
+ * @param {string} sourceSecret - Secret key of the multi-sig account (must satisfy current thresholds)
+ * @param {object} updates
+ * @param {{low?: number, medium?: number, high?: number}} [updates.thresholds] - New threshold values
+ * @param {number} [updates.masterWeight] - New master key weight
+ * @param {Array<{publicKey: string, weight: number}>} [updates.addSigners] - Signers to add or update
+ * @param {string[]} [updates.removeSigners] - Public keys of signers to remove (weight set to 0)
+ * @returns {Promise<{hash: string, success: boolean}>}
+ * @throws {Error} If the transaction fails authorization or Horizon rejects it
  */
 export async function updateMultiSigConfig(sourceSecret, updates) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
@@ -310,7 +342,9 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
 }
 
 /**
- * Get all pending multi-sig transactions for a given source account.
+ * List all pending multi-sig transactions initiated by a given account.
+ * @param {string} sourcePublicKey - Stellar public key of the initiating account
+ * @returns {Promise<Array<{txId: string, destination: string, amount: string, assetCode: string, signatures: object[], status: string, createdAt: Date}>>}
  */
 export async function getPendingTransactions(sourcePublicKey) {
   const rows = await prisma.pendingMultiSigTx.findMany({ where: { sourcePublicKey } });
@@ -320,14 +354,18 @@ export async function getPendingTransactions(sourcePublicKey) {
 }
 
 /**
- * Get a specific pending transaction by ID.
+ * Fetch a single pending multi-sig transaction by its unique ID.
+ * @param {string} txId - The pending transaction ID
+ * @returns {Promise<import('@prisma/client').PendingMultiSigTx|null>} The record, or null if not found
  */
 export async function getPendingTransaction(txId) {
   return prisma.pendingMultiSigTx.findUnique({ where: { txId } });
 }
 
 /**
- * Mark all pending transactions past their expiresAt as 'expired'.
+ * Mark all pending multi-sig transactions that have passed their expiry as 'expired'.
+ * Intended to be called by a scheduled cleanup job.
+ * @returns {Promise<number>} The count of records updated
  */
 export async function expireStaleTransactions() {
   const { count } = await prisma.pendingMultiSigTx.updateMany({

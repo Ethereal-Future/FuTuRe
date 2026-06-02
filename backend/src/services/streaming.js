@@ -22,6 +22,28 @@ function getStreamEncryptionKey() {
   return key;
 }
 
+/**
+ * Create a new recurring payment stream with the sender's secret encrypted at rest.
+ * @param {object} params
+ * @param {string} params.senderPublicKey - Stellar public key of the sender
+ * @param {string} params.senderSecret - Plaintext secret key used to sign each interval payment
+ * @param {string} params.recipientPublicKey - Stellar public key of the recipient
+ * @param {string} [params.assetCode='XLM'] - Asset code to stream
+ * @param {number} params.rateAmount - Amount sent per interval
+ * @param {number} [params.intervalSeconds=60] - Seconds between each payment
+ * @param {string|null} [params.endTime] - ISO date string at which the stream stops
+ * @param {object} [params.metadata={}] - Arbitrary metadata attached to the stream record
+ * @returns {Promise<import('@prisma/client').PaymentStream>} The newly created stream record
+ * @throws {Error} If senderSecret is not provided or Prisma write fails
+ * @example
+ * const stream = await createStream({
+ *   senderPublicKey: 'GABC...',
+ *   senderSecret: 'SABC...',
+ *   recipientPublicKey: 'GXYZ...',
+ *   rateAmount: 1,
+ *   intervalSeconds: 3600,
+ * });
+ */
 export async function createStream({ senderPublicKey, senderSecret, recipientPublicKey, assetCode, rateAmount, intervalSeconds = 60, endTime, metadata }) {
   if (!senderSecret) throw new Error('senderSecret is required to create a stream');
 
@@ -62,6 +84,12 @@ export async function createStream({ senderPublicKey, senderSecret, recipientPub
   return stream;
 }
 
+/**
+ * Pause an active payment stream, halting interval payments until resumed.
+ * @param {number} id - Primary key of the PaymentStream record
+ * @returns {Promise<import('@prisma/client').PaymentStream>} Updated stream record with status 'PAUSED'
+ * @throws {Error} If the stream does not exist or the DB update fails
+ */
 export async function pauseStream(id) {
   const stream = await prisma.paymentStream.update({
     where: { id },
@@ -78,6 +106,12 @@ export async function pauseStream(id) {
   return stream;
 }
 
+/**
+ * Resume a paused payment stream.
+ * @param {number} id - Primary key of the PaymentStream record
+ * @returns {Promise<import('@prisma/client').PaymentStream>} Updated stream record with status 'ACTIVE'
+ * @throws {Error} If the stream does not exist or the DB update fails
+ */
 export async function resumeStream(id) {
   const stream = await prisma.paymentStream.update({
     where: { id },
@@ -94,6 +128,12 @@ export async function resumeStream(id) {
   return stream;
 }
 
+/**
+ * Permanently cancel a payment stream. Cancelled streams cannot be resumed.
+ * @param {number} id - Primary key of the PaymentStream record
+ * @returns {Promise<import('@prisma/client').PaymentStream>} Updated stream record with status 'CANCELLED'
+ * @throws {Error} If the stream does not exist or the DB update fails
+ */
 export async function cancelStream(id) {
   const stream = await prisma.paymentStream.update({
     where: { id },
@@ -110,6 +150,16 @@ export async function cancelStream(id) {
   return stream;
 }
 
+/**
+ * Update mutable fields of an active or paused stream.
+ * @param {number} id - Primary key of the PaymentStream record
+ * @param {object} updates
+ * @param {number} [updates.rateAmount] - New payment amount per interval
+ * @param {number} [updates.intervalSeconds] - New interval in seconds
+ * @param {string|null} [updates.endTime] - New ISO end-time string, or null to remove the end time
+ * @returns {Promise<import('@prisma/client').PaymentStream>} Updated stream record
+ * @throws {Error} If the stream is not found, or has a non-updatable status (CANCELLED/FAILED/COMPLETED)
+ */
 export async function updateStream(id, updates) {
   const stream = await prisma.paymentStream.findUnique({
     where: { id },
@@ -141,6 +191,10 @@ export async function updateStream(id, updates) {
   return updated;
 }
 
+/**
+ * Return aggregate analytics across all payment streams.
+ * @returns {Promise<{totalVolume: string, activeStreams: number, pausedStreams: number, failedStreams: number, completedStreams: number, cancelledStreams: number, totalStreams: number, topAssets: Array<{assetCode: string, count: number}>}>}
+ */
 export async function getStreamAnalytics() {
   const [statusCounts, totalVolumeResult, assets] = await Promise.all([
     prisma.paymentStream.groupBy({
@@ -175,6 +229,12 @@ export async function getStreamAnalytics() {
   };
 }
 
+/**
+ * Worker tick: find all ACTIVE streams whose interval has elapsed and execute the next payment.
+ * Streams that fail 5 consecutive times are automatically set to FAILED status.
+ * Intended to be called by a scheduled job (e.g. every 10–30 seconds).
+ * @returns {Promise<void>}
+ */
 export async function processActiveStreams() {
   const now = new Date();
   const activeStreams = await prisma.paymentStream.findMany({

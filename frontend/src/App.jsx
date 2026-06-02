@@ -337,7 +337,12 @@ function App() {
       setRecipient('');
     } catch (error) {
       dispatch({ type: A.REVERT_BALANCE });
-      if (!navigator.onLine) {
+      if (error?.response?.data?.error === 'KYC_REQUIRED') {
+        msg.error(`Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`);
+        setShowPaymentConfirmation(false);
+        setActiveSettingsSection('kyc');
+        setShowSettings(true);
+      } else if (!navigator.onLine) {
         await queueOffline({ destination: payload.destination, amount: payload.amount, assetCode: payload.assetCode });
         msg.info('You are offline. Payment queued — you\'ll be prompted to re-enter your secret key when back online.');
       } else {

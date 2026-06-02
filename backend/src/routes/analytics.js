@@ -2,6 +2,9 @@ import { Router } from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { aggregator, userBehavior, fraudDetector, patternAnalyzer, dataExporter } from '../analytics/index.js';
 
+// In-memory store for web vitals (replace with DB/time-series in production)
+const webVitalsStore = [];
+
 const router = Router();
 
 // ── Aggregation ───────────────────────────────────────────────────────────────
@@ -243,6 +246,96 @@ router.get('/export', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ── Web Vitals ────────────────────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /api/analytics/web-vitals:
+ *   post:
+ *     summary: Ingest a Web Vitals metric
+ *     tags: [Analytics]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [name, value, rating]
+ *             properties:
+ *               name:           { type: string }
+ *               value:          { type: number }
+ *               rating:         { type: string }
+ *               navigationType: { type: string }
+ *               url:            { type: string }
+ *               timestamp:      { type: number }
+ *     responses:
+ *       204: { description: Accepted }
+ *       400: { description: Invalid payload }
+ */
+router.post('/web-vitals', (req, res) => {
+  const { name, value, rating, navigationType, url, timestamp } = req.body;
+  if (!name || value == null || !rating) {
+    return res.status(400).json({ error: 'name, value, and rating are required' });
+  }
+  webVitalsStore.push({
+    name,
+    value: Number(value),
+    rating,
+    navigationType: navigationType ?? null,
+    url: url ?? null,
+    timestamp: timestamp ?? Date.now(),
+  });
+  res.status(204).end();
+});
+
+/**
+ * @swagger
+ * /api/analytics/web-vitals/dashboard:
+ *   get:
+ *     summary: p75 LCP, FID/INP, CLS aggregated over time buckets
+ *     tags: [Analytics]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema: { type: number }
+ *         description: Unix ms start
+ *       - in: query
+ *         name: to
+ *         schema: { type: number }
+ *         description: Unix ms end
+ *     responses:
+ *       200: { description: p75 aggregates per metric }
+ *       401: { description: Unauthorized }
+ */
+router.get('/web-vitals/dashboard', requireAuth, (req, res) => {
+  const from = req.query.from ? Number(req.query.from) : 0;
+  const to   = req.query.to   ? Number(req.query.to)   : Date.now();
+
+  const filtered = webVitalsStore.filter(v => v.timestamp >= from && v.timestamp <= to);
+
+  const p75 = (metricName) => {
+    const vals = filtered
+      .filter(v => v.name === metricName)
+      .map(v => v.value)
+      .sort((a, b) => a - b);
+    if (!vals.length) return null;
+    const idx = Math.ceil(vals.length * 0.75) - 1;
+    return vals[idx];
+  };
+
+  res.json({
+    LCP: p75('LCP'),
+    FID: p75('FID'),
+    INP: p75('INP'),
+    CLS: p75('CLS'),
+    FCP: p75('FCP'),
+    TTFB: p75('TTFB'),
+    sampleCount: filtered.length,
+  });
 });
 
 export default router;

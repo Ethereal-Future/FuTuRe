@@ -24,6 +24,25 @@ const BUDGETS: Record<string, number> = {
   TTFB: 800,
 };
 
+const ENDPOINT = '/api/analytics/web-vitals';
+
+function sendToBackend(metric: Metric): void {
+  const payload = JSON.stringify({
+    name:           metric.name,
+    value:          Math.round(metric.value),
+    rating:         metric.rating,
+    navigationType: (metric as { navigationType?: string }).navigationType ?? null,
+    url:            window.location.href,
+    timestamp:      Date.now(),
+  });
+
+  if (navigator.sendBeacon) {
+    navigator.sendBeacon(ENDPOINT, new Blob([payload], { type: 'application/json' }));
+  } else {
+    fetch(ENDPOINT, { method: 'POST', body: payload, headers: { 'Content-Type': 'application/json' }, keepalive: true }).catch(() => {});
+  }
+}
+
 function report(metric: Metric): void {
   const budget = BUDGETS[metric.name];
   const over = budget != null && metric.value > budget;
@@ -31,20 +50,19 @@ function report(metric: Metric): void {
   const entry: VitalEntry = {
     name:   metric.name,
     value:  Math.round(metric.value),
-    rating: metric.rating,       // 'good' | 'needs-improvement' | 'poor'
+    rating: metric.rating,
     budget,
     over,
   };
 
-  // Log to console (replace with analytics endpoint as needed)
   if (over) {
     console.warn(`[Perf] ⚠️ ${entry.name} ${entry.value} exceeds budget ${budget}`, entry);
   } else {
     console.info(`[Perf] ${entry.name} ${entry.value} (${entry.rating})`, entry);
   }
 
-  // Hook for external analytics: window.__reportVital?.(entry)
   window.__reportVital?.(entry);
+  sendToBackend(metric);
 }
 
 export function initWebVitals(): void {

@@ -76,6 +76,16 @@ Frontend runs on http://localhost:3000
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, running tests, branch naming, PR process, code style, and commit message conventions.
+## Architecture Decision Records
+
+Key technology choices are documented as ADRs in [`docs/adr/`](docs/adr/0000-index.md):
+
+| ADR | Decision |
+|---|---|
+| [ADR-0001](docs/adr/0001-stellar-blockchain.md) | Stellar as the blockchain layer |
+| [ADR-0002](docs/adr/0002-prisma-orm.md) | Prisma as the ORM |
+| [ADR-0003](docs/adr/0003-caching-strategy.md) | Multi-level caching (in-memory L1 + Redis L2) |
+| [ADR-0004](docs/adr/0004-auth-approach.md) | JWT auth with refresh token rotation |
 
 ## Resources
 

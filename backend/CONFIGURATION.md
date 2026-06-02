@@ -1,5 +1,162 @@
 # Backend Configuration
 
+## Quick Start (minimum required variables)
+
+Copy the example file and fill in the secrets marked **required** below:
+
+```bash
+cp env.example.txt .env
+```
+
+The absolute minimum to run the backend locally:
+
+| Variable | Value |
+|---|---|
+| `DATABASE_URL` | `postgresql://user:password@localhost:5432/future_remittance` |
+| `STREAM_SECRET_ENCRYPTION_KEY` | 64-char hex — `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` |
+| `JWT_SECRET` | Any non-empty string (use a strong random value in production) |
+
+Everything else has a safe default for local development.
+
+---
+
+## All Environment Variables
+
+> **Legend** — Required: ✅ always · ⚠️ production only · — optional  
+> 🔑 = must be rotated if compromised
+
+### Core
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `APP_ENV` | string | — | `development` | Runtime environment. Controls validation strictness and defaults. | `production` |
+| `CONFIG_VERSION` | integer | — | `1` | Config schema version. Must match the expected value or startup fails. | `1` |
+| `CONFIG_WATCH` | boolean | — | `false` | Reload config when `.env*` files change (ignored in `test`). | `true` |
+| `PORT` | integer | — | `3001` | TCP port the Express server listens on. | `3001` |
+
+### CORS
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `ALLOWED_ORIGINS` | CSV | ⚠️ | `http://localhost:3000,http://localhost:5173` | Comma-separated list of allowed CORS origins. Required in production. | `https://app.example.com` |
+
+### Stellar
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `STELLAR_NETWORK` | string | — | `testnet` (dev/test), `mainnet` (prod) | Stellar network. Accepts `testnet` or `mainnet` (alias `public`). | `mainnet` |
+| `HORIZON_URL` | URL | — | Auto-selected by network | Stellar Horizon API endpoint. | `https://horizon.stellar.org` |
+| `ASSET_ISSUER` | string | — | — | Default issuer for non-XLM assets. Required when sending non-XLM payments. | `GCEZ...` |
+| `PLATFORM_FEE_ACCOUNT_SECRET` 🔑 | string | — | — | Secret key of the fee-bump sponsor account. When set, low-balance senders get fee-bumped. | `SABC...` |
+| `FEE_BUMP_THRESHOLD_XLM` | number | — | `2` | XLM balance below which fee-bumping is applied. | `2` |
+| `FEE_BUMP_MULTIPLIER` | integer | — | `10` | Fee multiplier applied to `BASE_FEE` for fee-bump transactions. | `10` |
+
+### Security & Auth
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `JWT_SECRET` 🔑 | string | ✅ | `secret` (dev only) | HMAC secret for signing JWT tokens. Must not be the default in production. | `<random 64-char hex>` |
+| `MFA_ENCRYPTION_KEY` 🔑 | string | — | — | AES-256-GCM key for encrypting TOTP secrets at rest. Generate with `openssl rand -hex 32`. | `<32-byte hex>` |
+| `GOOGLE_CLIENT_ID` | string | — | — | Google OAuth2 client ID. Required to enable Google login. | `123456.apps.googleusercontent.com` |
+| `GOOGLE_CLIENT_SECRET` 🔑 | string | — | — | Google OAuth2 client secret. | `GOCSPX-...` |
+| `SERVER_BASE_URL` | URL | — | `http://localhost:3001` | Public base URL of this server (used for OAuth callbacks). | `https://api.example.com` |
+| `FRONTEND_BASE_URL` | URL | — | `http://localhost:3000` | Public base URL of the frontend (used for post-auth redirects). | `https://app.example.com` |
+| `WS_MSG_SECRET` 🔑 | string | — | — | HMAC secret for signing outbound WebSocket message envelopes. | `<random 64-char hex>` |
+| `CONFIG_ENCRYPTION_KEY` 🔑 | string | — | — | Key for decrypting `ENC(...)` values in env files (AES-256-GCM). | `<strong passphrase>` |
+| `PLATFORM_SECRET_KEY` 🔑 | string | — | — | Platform-level secret key (internal signing). | `<random hex>` |
+
+### Payment Streaming
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `STREAM_SECRET_ENCRYPTION_KEY` 🔑 | string | ✅ | — | AES-256-GCM key for encrypting per-stream sender secrets at rest. Must be a 64-char hex string. Generate: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"` | `a1b2c3...` |
+
+### Database
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `DATABASE_URL` | URL | ✅ | — | Primary PostgreSQL connection string (also used for migrations). | `postgresql://user:pass@localhost:5432/db` |
+| `DATABASE_POOL_URL` | URL | — | — | PgBouncer pooler URL for transaction pooling. When set, Prisma uses this for queries. | `postgresql://user:pass@pgbouncer:6432/db` |
+| `DB_SHARD_COUNT` | integer | — | `1` | Number of database shards (1 = no sharding). | `2` |
+| `DB_SHARD_0_URL` | URL | — | Falls back to `DATABASE_URL` | Connection URL for shard 0. | `postgresql://user:pass@shard0:5432/db` |
+| `DB_POOL_MAX` | integer | — | `10` | Max connections per Prisma pool. Recommended: 10 (dev), 25–50 (prod). | `25` |
+| `DB_QUERY_TIMEOUT_MS` | integer | — | `5000` | Query timeout in milliseconds. Applied as both `statement_timeout` and a Node.js guard. | `5000` |
+| `PRISMA_QUERY_LOG` | boolean | — | `false` | Enable Prisma query logging outside of development mode. | `true` |
+
+### Rate Limiting
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `RATE_LIMIT_WINDOW_MS` | integer | — | `60000` | Rate-limit window in milliseconds. | `60000` |
+| `RATE_LIMIT_MAX` | integer | — | `100` | Max requests per window per IP. | `100` |
+| `RATE_LIMIT_MESSAGE` | string | — | `"Too many requests..."` | Error message returned when rate-limited. | `"Slow down!"` |
+| `RATE_LIMIT_WHITELIST` | CSV | — | — | Comma-separated IPs/CIDR ranges exempt from rate limiting. | `127.0.0.1,10.0.0.0/8` |
+
+### Caching
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `REDIS_URL` | URL | — | — | Redis connection URL. Falls back to in-memory L1 cache when not set. | `redis://localhost:6379` |
+| `CACHE_TTL_BALANCE_S` | integer | — | `30` | Cache TTL (seconds) for account balance responses. | `30` |
+| `RATE_CACHE_TTL_S` | integer | — | `60` | Cache TTL (seconds) for exchange-rate responses. | `60` |
+| `CACHE_TTL_FEE_S` | integer | — | `120` | Cache TTL (seconds) for fee-stat responses. | `120` |
+
+### CDN
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `CDN_ENABLED` | boolean | — | `false` | Enable CDN integration and Cache-Control headers. | `true` |
+| `CDN_URL` | URL | — | — | Primary CDN origin URL. | `https://cdn.example.com` |
+| `CDN_SECONDARY_URL` | URL | — | — | Fallback CDN origin URL for automatic failover. | `https://cdn2.example.com` |
+| `CDN_REGIONS` | CSV | — | `us-east-1` | Comma-separated CDN edge regions. | `us-east-1,eu-west-1` |
+| `CDN_CACHE_MAX_AGE_S` | integer | — | `86400` | Default cache TTL (seconds) for API responses. | `86400` |
+
+### Performance & Observability
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `PERF_ALERT_RESPONSE_MS` | integer | — | `2000` | Alert threshold for API response time in ms. | `2000` |
+| `PERF_ALERT_ERROR_RATE` | number | — | `0.1` | Alert threshold for error rate (fraction 0–1). | `0.1` |
+| `LOG_LEVEL` | string | — | `info` | Winston log level (`error`, `warn`, `info`, `debug`). | `debug` |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL | — | — | OTLP HTTP endpoint for distributed tracing. Falls back to console when not set. | `http://localhost:4318` |
+| `NEW_RELIC_LICENSE_KEY` 🔑 | string | — | — | New Relic license key (enables APM when set). | `...` |
+| `DD_API_KEY` 🔑 | string | — | — | DataDog API key (enables APM when set). | `...` |
+
+### Notifications
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `EMAIL_HOST` | string | — | — | SMTP host. A no-op stub is used when not set. | `smtp.example.com` |
+| `EMAIL_PORT` | integer | — | — | SMTP port. | `587` |
+| `EMAIL_USER` | string | — | — | SMTP username. | `notifications@example.com` |
+| `EMAIL_PASS` 🔑 | string | — | — | SMTP password. | `...` |
+| `EMAIL_FROM` | string | — | — | From address for outbound email. | `noreply@futureremit.app` |
+| `TWILIO_ACCOUNT_SID` | string | — | — | Twilio Account SID (enables SMS when set). | `ACxxx...` |
+| `TWILIO_AUTH_TOKEN` 🔑 | string | — | — | Twilio auth token. | `...` |
+| `TWILIO_FROM_NUMBER` | string | — | — | Twilio sender phone number (E.164 format). | `+10000000000` |
+
+### Alerting
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `ALERT_EMAIL` | string | — | — | Email address for critical operational alerts. | `ops@example.com` |
+| `SLACK_WEBHOOK_URL` 🔑 | URL | — | — | Slack incoming webhook URL for notifications. | `https://hooks.slack.com/...` |
+
+### Backup & Recovery
+
+| Variable | Type | Required | Default | Description | Example |
+|---|---|---|---|---|---|
+| `BACKUP_DIR` | string | — | `./backups` | Local directory for backup files. | `/var/backups/future` |
+| `BACKUP_ENC_KEY` 🔑 | string | — | — | 64-char hex key for AES-encrypted backups (`openssl rand -hex 32`). Required for encrypted backups. | `<64-char hex>` |
+| `BACKUP_RETENTION_DAYS` | integer | — | `7` | Number of days to retain backups. | `30` |
+| `BACKUP_INTERVAL_HOURS` | integer | — | `24` | Hours between automated backup runs. | `24` |
+
+---
+
+> 🔑 **Secret rotation**: rotate these variables immediately if exposed. After rotation, redeploy all running instances to pick up the new value. For `STREAM_SECRET_ENCRYPTION_KEY`, re-encrypt stored stream secrets using the migration script in `scripts/rotate-stream-key.js` before the old key is removed.
+
+---
+
 The backend reads configuration from:
 
 1. Runtime environment variables (`process.env`)
@@ -247,3 +404,51 @@ The response includes a `scheduledPermanentDeletion` timestamp 30 days from the 
 | Anonymised user record                | 30 days after deletion request | GDPR cooling-off period        |
 | KYC documents                         | 5 years after account closure  | AML regulations                |
 | Session / refresh tokens              | 7 days (cookie `maxAge`)       | Operational necessity          |
+
+## Compliance & AML Configuration
+
+### KYC enforcement
+
+Payments above `KYC_LARGE_TRANSACTION_LIMIT` XLM are blocked at `POST /api/stellar/payment/send` unless the sender has an `APPROVED` KYC record. The middleware returns `403 { error: "KYC_REQUIRED", kycStatus: "..." }`.
+
+| Variable | Default | Description |
+|---|---|---|
+| `KYC_LARGE_TRANSACTION_LIMIT` | `1000` | XLM threshold above which KYC approval is required |
+
+### Sanctions screening (#501)
+
+Every payment screens both sender and recipient against OFAC SDN, UN, and EU sanctions lists via the configured API before the transaction is submitted to Stellar. A match returns `403 { error: "SANCTIONS_HIT", reason: "..." }` and the payment is not submitted.
+
+| Variable | Default | Description |
+|---|---|---|
+| `SANCTIONS_API_KEY` | — | API key for the sanctions screening provider (required in production) |
+| `SANCTIONS_API_URL` | `https://api.ofac-api.com/v4/search` | Screening endpoint (OFAC-API compatible) |
+| `SANCTIONS_MIN_SCORE` | `85` | Minimum fuzzy-match score (0–100) to treat as a hit |
+
+**Without `SANCTIONS_API_KEY`** the check is skipped with a console warning. This is acceptable for development but **must be configured before going to production**.
+
+Compatible providers: [OFAC-API](https://ofac-api.com), [Comply Advantage](https://complyadvantage.com), [Chainalysis](https://chainalysis.com).
+
+### AML transaction monitoring (#502)
+
+After each successful payment, `amlMonitor.screenTransaction()` runs asynchronously and creates `AMLAlert` records in the database for any triggered rules. Alerts are visible at `GET /api/compliance/aml-alerts` (admin only).
+
+| Variable | Default | Description |
+|---|---|---|
+| `AML_LARGE_TX_THRESHOLD` | `10000` | Single transaction amount that triggers `LARGE_TX` |
+| `AML_STRUCTURING_THRESHOLD` | `1000` | Per-transaction ceiling for structuring detection |
+| `AML_STRUCTURING_COUNT` | `3` | Number of sub-threshold transactions in 24 h to trigger `STRUCTURING` |
+| `AML_VELOCITY_LIMIT` | `10000` | Total sent in 24 h that triggers `VELOCITY` |
+
+Rules implemented:
+
+- **LARGE_TX** — single transaction ≥ `AML_LARGE_TX_THRESHOLD`
+- **STRUCTURING** — more than `AML_STRUCTURING_COUNT` transactions each below `AML_STRUCTURING_THRESHOLD` within 24 h
+- **VELOCITY** — cumulative 24 h send total exceeds `AML_VELOCITY_LIMIT`
+- **UNVERIFIED_USER** — sender has no approved KYC record
+
+### Web Vitals analytics (#499)
+
+Frontend metrics (LCP, CLS, INP, FCP, TTFB) are sent via `navigator.sendBeacon` to `POST /api/analytics/web-vitals` on every page load. Aggregated p75 values are available at `GET /api/analytics/web-vitals/dashboard` (requires auth).
+
+The current implementation stores metrics in memory. For production, replace `webVitalsStore` in `backend/src/routes/analytics.js` with a time-series database (e.g. InfluxDB, TimescaleDB, or a Prometheus push gateway).

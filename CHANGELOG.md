@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Deprecation Policy
+
+This project follows a **minimum 90-day deprecation notice** policy for all public API endpoints and configuration interfaces.
+
+### Process
+
+1. **Announce** — the endpoint is marked with `Deprecation: <date>` and `Sunset: <date>` response headers. The sunset date is at least 90 days after the deprecation date.
+2. **Notify** — a note is added to the relevant `[Unreleased]` section of this changelog.
+3. **Link** — a `Link: <successor>; rel="successor-version"` header points consumers to the replacement.
+4. **Remove** — on or after the sunset date the endpoint may be removed in a new major version.
+
+### Adding deprecation headers in code
+
+Use the `deprecate()` middleware from `backend/src/middleware/deprecation.js`:
+
+```js
+import { deprecate } from '../middleware/deprecation.js';
+
+router.get(
+  '/v1/old-endpoint',
+  deprecate({ sunset: '2026-10-01', link: '/api/v2/new-endpoint' }),
+  handler,
+);
+```
+
+The middleware enforces the 90-day minimum at startup (throws if the sunset date is too soon).
+
+### Current deprecated endpoints
+
+_None at this time._
+
+---
+
 ## [1.0.0] - 2026-05-28
 
 ### Added

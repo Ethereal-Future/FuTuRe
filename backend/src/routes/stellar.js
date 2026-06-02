@@ -16,6 +16,9 @@ import logger from '../config/logger.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { optionalMFA } from '../middleware/mfa.js';
+import { requireKYC } from '../middleware/kyc.js';
+import sanctionsChecker from '../compliance/sanctionsChecker.js';
+import amlMonitor from '../compliance/amlMonitor.js';
 
 const router = express.Router();
 
@@ -171,16 +174,43 @@ const paymentRateLimiter = createRateLimiter({
   message: 'Too many payment requests, please try again later.',
 });
 
-router.post('/payment/send', paymentRateLimiter, idempotencyMiddleware, rules.sendPayment, validate, async (req, res) => {
-router.post('/payment/send', paymentRateLimiter, rules.sendPayment, validate, optionalMFA, async (req, res) => {
+router.post('/payment/send', paymentRateLimiter, idempotencyMiddleware, requireKYC, rules.sendPayment, validate, optionalMFA, async (req, res) => {
   try {
     const { sourceSecret, destination, amount, assetCode, memo, memoType } = req.body;
+
+    // Sanctions screening — check sender and recipient before submitting to Stellar
+    const senderKey = StellarSDK.Keypair.fromSecret(sourceSecret).publicKey();
+    const senderKyc = await prisma.kYCRecord.findFirst({ where: { user: { publicKey: senderKey } } });
+    const senderName = senderKyc?.fullName ?? senderKey;
+
+    const [senderScreen, recipientScreen] = await Promise.all([
+      sanctionsChecker.check(senderName),
+      sanctionsChecker.check(destination),
+    ]);
+
+    if (senderScreen.hit || recipientScreen.hit) {
+      const reason = senderScreen.hit ? senderScreen.reason : recipientScreen.reason;
+      logger.warn('route.payment.sanctions_hit', { senderKey, destination, reason });
+      return res.status(403).json({ error: 'SANCTIONS_HIT', reason });
+    }
+
     const result = await StellarService.sendPayment(sourceSecret, destination, amount, assetCode, memo, memoType, req.correlationId);
+
+    // AML monitoring — run asynchronously after payment succeeds
+    const txRecord = await prisma.transaction.findUnique({ where: { hash: result.hash } });
+    if (txRecord) {
+      const history = await prisma.transaction.findMany({
+        where: { senderId: txRecord.senderId, createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } },
+        orderBy: { createdAt: 'desc' },
+      });
+      amlMonitor.screenTransaction(txRecord, history).catch((err) =>
+        logger.error('route.payment.aml_screen_failed', { hash: result.hash, error: err.message })
+      );
+    }
 
     const notification = { type: 'transaction', hash: result.hash, amount, assetCode: assetCode || 'XLM', timestamp: Date.now() };
 
     // Notify sender's updated balance + tx notification
-    const senderKey = StellarSDK.Keypair.fromSecret(sourceSecret).publicKey();
     const senderBalance = await StellarService.getBalance(senderKey, req.correlationId);
     broadcastToAccount(senderKey, { ...notification, direction: 'sent', balance: senderBalance.balances });
     dispatchEvent(senderKey, 'payment_sent', { hash: result.hash, amount, assetCode: assetCode || 'XLM', destination });

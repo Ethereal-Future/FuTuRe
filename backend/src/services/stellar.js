@@ -5,6 +5,10 @@ import { getIssuer } from '../config/assets.js';
 import logger, { withContext } from '../config/logger.js';
 import prisma from '../db/client.js';
 
+/**
+ * Retrieve aggregate fee-bump statistics from the database.
+ * @returns {Promise<{total: number, totalFeeStroops: number, uniqueAccounts: number}>}
+ */
 export async function getFeeBumpStats() {
   const row = await prisma.feeBumpStat.findUnique({ where: { id: 'singleton' } });
   return {
@@ -41,8 +45,12 @@ async function incrementFeeBumpStats(sourcePublicKey, feeStroops) {
 }
 
 /**
- * Wraps an inner transaction with a FeeBumpTransaction so the platform
- * account pays the fee instead of the buyer.
+ * Wrap an inner transaction with a FeeBumpTransaction so the platform account
+ * pays the fee instead of the buyer. Fee multiplier is read from FEE_BUMP_MULTIPLIER
+ * (default 10×).
+ * @param {import('@stellar/stellar-sdk').Transaction} innerTx - Signed inner transaction to wrap
+ * @param {string} feeAccountSecret - Secret key of the fee-sponsoring platform account
+ * @returns {import('@stellar/stellar-sdk').FeeBumpTransaction} Signed fee-bump transaction ready to submit
  */
 export function wrapWithFeeBump(innerTx, feeAccountSecret) {
   const feeKeypair = StellarSDK.Keypair.fromSecret(feeAccountSecret);
@@ -64,6 +72,10 @@ export function wrapWithFeeBump(innerTx, feeAccountSecret) {
 let horizonServerUrl;
 let horizonServer;
 
+/**
+ * Return a cached Stellar Horizon server instance, re-creating it if the URL has changed.
+ * @returns {import('@stellar/stellar-sdk').Horizon.Server}
+ */
 export function getHorizonServer() {
   const { horizonUrl } = getConfig().stellar;
   if (!horizonServer || horizonUrl !== horizonServerUrl) {
@@ -73,10 +85,20 @@ export function getHorizonServer() {
   return horizonServer;
 }
 
+/**
+ * Check whether the configured Stellar network is testnet.
+ * @returns {boolean}
+ */
 export function isTestnet() {
   return getConfig().stellar.network === 'testnet';
 }
 
+/**
+ * Fund a testnet account via Friendbot (testnet only).
+ * @param {string} publicKey - Stellar public key of the account to fund
+ * @returns {Promise<{funded: boolean, publicKey: string}>}
+ * @throws {Error} If called on mainnet or if Friendbot returns a non-OK response
+ */
 export async function fundAccount(publicKey) {
   if (!isTestnet()) throw new Error('Only available on testnet');
   const res = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
@@ -85,6 +107,14 @@ export async function fundAccount(publicKey) {
   return { funded: true, publicKey };
 }
 
+/**
+ * Generate a new Stellar keypair, fund it via Friendbot on testnet, and persist the user record.
+ * @param {string|null} [correlationId] - Optional correlation ID for request tracing
+ * @returns {Promise<{publicKey: string, secretKey: string}>} The newly created key pair
+ * @throws {Error} If Friendbot funding fails
+ * @example
+ * const { publicKey, secretKey } = await createAccount('req-abc-123');
+ */
 export async function createAccount(correlationId = null) {
   const pair = StellarSDK.Keypair.random();
   const publicKey = pair.publicKey();
@@ -121,6 +151,13 @@ export async function createAccount(correlationId = null) {
   };
 }
 
+/**
+ * Fetch all asset balances for a Stellar account from Horizon.
+ * @param {string} publicKey - Stellar public key of the account
+ * @param {string|null} [correlationId] - Optional correlation ID for request tracing
+ * @returns {Promise<{publicKey: string, balances: Array<{asset: string, balance: string}>}>}
+ * @throws {Error} If the account does not exist on the network
+ */
 export async function getBalance(publicKey, correlationId = null) {
   logger.debug('stellar.getBalance', { publicKey, correlationId });
   const account = await getHorizonServer().loadAccount(publicKey);
@@ -134,6 +171,22 @@ export async function getBalance(publicKey, correlationId = null) {
   return { publicKey, balances };
 }
 
+/**
+ * Send a payment on the Stellar network. Automatically wraps in a fee-bump when the
+ * sender's XLM balance is below FEE_BUMP_THRESHOLD_XLM and PLATFORM_FEE_ACCOUNT_SECRET is set.
+ * Persists the transaction to the database and emits a PaymentSent event.
+ * @param {string} sourceSecret - Secret key of the sending account
+ * @param {string} destination - Stellar public key of the recipient
+ * @param {string|number} amount - Amount to send (in asset units)
+ * @param {string} [assetCode='XLM'] - Asset code (e.g. 'XLM', 'USDC')
+ * @param {string|null} [memo] - Optional transaction memo value
+ * @param {'text'|'id'|'hash'|'return'} [memoType='text'] - Stellar memo type
+ * @param {string|null} [correlationId] - Optional correlation ID for request tracing
+ * @returns {Promise<{hash: string, ledger: number, success: boolean, feeBump: boolean}>}
+ * @throws {Error} If ASSET_ISSUER is missing for non-XLM assets, or if Horizon submission fails
+ * @example
+ * const result = await sendPayment(secret, 'GDEST...', '10', 'USDC', 'invoice-42');
+ */
 export async function sendPayment(sourceSecret, destination, amount, assetCode = 'XLM', memo = null, memoType = 'text', correlationId = null) {
   const { assetIssuer } = getConfig().stellar;
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
@@ -267,6 +320,13 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
   };
 }
 
+/**
+ * Create a trustline for a non-XLM asset on an account. No-ops if the trustline already exists.
+ * @param {string} sourceSecret - Secret key of the account adding the trustline
+ * @param {string} assetCode - Asset code to trust (e.g. 'USDC')
+ * @returns {Promise<{hash?: string, assetCode: string, issuer: string, alreadyExists?: boolean}>}
+ * @throws {Error} If the asset issuer is unknown or Horizon submission fails
+ */
 export async function createTrustline(sourceSecret, assetCode) {
   const issuer = getIssuer(assetCode);
   if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
@@ -316,6 +376,13 @@ export async function createTrustline(sourceSecret, assetCode) {
   return { hash: result.hash, assetCode, issuer };
 }
 
+/**
+ * Remove an existing trustline from an account. The asset balance must be zero.
+ * @param {string} sourceSecret - Secret key of the account removing the trustline
+ * @param {string} assetCode - Asset code of the trustline to remove
+ * @returns {Promise<{hash: string, assetCode: string, issuer: string}>}
+ * @throws {Error} If the trustline doesn't exist, the balance is non-zero, or submission fails
+ */
 export async function removeTrustline(sourceSecret, assetCode) {
   const issuer = getIssuer(assetCode);
   if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
@@ -367,6 +434,18 @@ export async function removeTrustline(sourceSecret, assetCode) {
   return { hash: result.hash, assetCode, issuer };
 }
 
+/**
+ * Fetch paginated transaction history for an account from Stellar Horizon.
+ * @param {string} publicKey - Stellar public key of the account
+ * @param {object} [options={}]
+ * @param {string} [options.cursor] - Paging token for cursor-based pagination
+ * @param {number} [options.limit=10] - Maximum records per page (max 200)
+ * @param {string} [options.type] - Filter by operation type (e.g. 'payment')
+ * @param {string} [options.dateFrom] - ISO date string; exclude transactions before this date
+ * @param {string} [options.dateTo] - ISO date string; exclude transactions after this date
+ * @returns {Promise<{records: object[], nextCursor: string|null, hasMore: boolean}>}
+ * @throws {Error} If the Horizon API call fails
+ */
 export async function getTransactions(publicKey, { cursor, limit = 10, type, dateFrom, dateTo } = {}) {
   let builder = getHorizonServer().transactions().forAccount(publicKey).order('desc').limit(limit);
   if (cursor) builder = builder.cursor(cursor);
@@ -416,6 +495,11 @@ export async function getTransactions(publicKey, { cursor, limit = 10, type, dat
   };
 }
 
+/**
+ * Retrieve current network fee statistics from Horizon with an XLM/USD conversion via the SDEX.
+ * @returns {Promise<{feeStroops: number, feeXLM: string, feeUsd: string|null, xlmUsd: string|null, traditionalFeeUsd: number}>}
+ * @throws {Error} If the Horizon feeStats call fails
+ */
 export async function getFeeStats() {
   const stats = await getHorizonServer().feeStats();
   const feeStroops = parseInt(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
@@ -444,6 +528,14 @@ export async function getFeeStats() {
 
 
 
+/**
+ * Look up the best ask price between two assets using the Stellar SDEX order book.
+ * @param {string} from - Source asset code (e.g. 'XLM')
+ * @param {string} to - Destination asset code (e.g. 'USDC')
+ * @returns {Promise<number|null>} Best ask price, or null if unavailable
+ * @example
+ * const rate = await getExchangeRate('XLM', 'USDC'); // e.g. 0.12
+ */
 export async function getExchangeRate(from, to) {
   if (from === to) return 1.0;
   try {
@@ -458,6 +550,10 @@ export async function getExchangeRate(from, to) {
   }
 }
 
+/**
+ * Check the configured Horizon server's liveness and return network metadata.
+ * @returns {Promise<{network: string, horizonUrl: string, online: boolean, horizonVersion?: string, networkPassphrase?: string, currentProtocolVersion?: number}>}
+ */
 export async function getNetworkStatus() {
   const { horizonUrl } = getConfig().stellar;
   try {
@@ -481,6 +577,12 @@ export async function getNetworkStatus() {
     };
   }
 }
+/**
+ * List all non-native trustlines held by an account.
+ * @param {string} publicKey - Stellar public key of the account
+ * @returns {Promise<Array<{assetCode: string, issuer: string, balance: string, limit: string, authorized: boolean}>>}
+ * @throws {Error} If the account does not exist on the network
+ */
 export async function getTrustlines(publicKey) {
   logger.debug('stellar.getTrustlines', { publicKey });
   const account = await getHorizonServer().loadAccount(publicKey);
@@ -495,6 +597,14 @@ export async function getTrustlines(publicKey) {
     }));
 }
 
+/**
+ * Merge a Stellar account into a destination account, transferring all remaining XLM and closing the source.
+ * All trustlines and non-XLM balances must be removed before merging.
+ * @param {string} sourceSecret - Secret key of the account to merge (will be closed)
+ * @param {string} destination - Stellar public key of the receiving account
+ * @returns {Promise<{hash: string, ledger: number, success: boolean}>}
+ * @throws {Error} If the account has non-zero non-XLM balances or Horizon submission fails
+ */
 export async function mergeAccount(sourceSecret, destination) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();

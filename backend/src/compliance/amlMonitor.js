@@ -1,42 +1,53 @@
-import kycCollector from './kycCollector.js';
+import prisma from '../db/client.js';
 import riskScorer from './riskScorer.js';
 import complianceAudit from './complianceAudit.js';
+import kycCollector from './kycCollector.js';
 
-// AML transaction monitoring — flags suspicious activity patterns.
+// Configurable thresholds
+const LARGE_TX_THRESHOLD      = parseFloat(process.env.AML_LARGE_TX_THRESHOLD      ?? '10000');
+const STRUCTURING_THRESHOLD   = parseFloat(process.env.AML_STRUCTURING_THRESHOLD   ?? '1000');
+const STRUCTURING_COUNT       = parseInt(  process.env.AML_STRUCTURING_COUNT        ?? '3',   10);
+const VELOCITY_LIMIT          = parseFloat(process.env.AML_VELOCITY_LIMIT           ?? '10000');
+const WINDOW_MS               = 24 * 60 * 60 * 1000; // 24 hours
+
 const AML_RULES = [
   {
     id: 'LARGE_TX',
     description: 'Single transaction exceeds reporting threshold',
-    check: (tx) => parseFloat(tx.amount) >= 10000,
     severity: 'HIGH',
-  },
-  {
-    id: 'RAPID_SUCCESSION',
-    description: 'Multiple transactions in short window (structuring)',
-    check: (tx, history) => {
-      const windowMs = 60 * 60 * 1000; // 1 hour
-      const recent = history.filter(h =>
-        h.senderId === tx.senderId &&
-        new Date(tx.createdAt) - new Date(h.createdAt) < windowMs
-      );
-      return recent.length >= 5;
-    },
-    severity: 'HIGH',
+    check: (tx) => parseFloat(tx.amount) >= LARGE_TX_THRESHOLD,
   },
   {
     id: 'STRUCTURING',
-    description: 'Transactions just below reporting threshold',
-    check: (tx) => {
-      const amount = parseFloat(tx.amount);
-      return amount >= 9000 && amount < 10000;
+    description: `More than ${STRUCTURING_COUNT} transactions below $${STRUCTURING_THRESHOLD} in 24h (structuring)`,
+    severity: 'HIGH',
+    check: (tx, history) => {
+      const windowStart = new Date(new Date(tx.createdAt) - WINDOW_MS);
+      const recent = history.filter(h =>
+        h.senderId === tx.senderId &&
+        new Date(h.createdAt) >= windowStart &&
+        parseFloat(h.amount) < STRUCTURING_THRESHOLD
+      );
+      return recent.length >= STRUCTURING_COUNT && parseFloat(tx.amount) < STRUCTURING_THRESHOLD;
     },
-    severity: 'MEDIUM',
+  },
+  {
+    id: 'VELOCITY',
+    description: `Total sent in 24h exceeds $${VELOCITY_LIMIT}`,
+    severity: 'HIGH',
+    check: (tx, history) => {
+      const windowStart = new Date(new Date(tx.createdAt) - WINDOW_MS);
+      const total = history
+        .filter(h => h.senderId === tx.senderId && new Date(h.createdAt) >= windowStart)
+        .reduce((sum, h) => sum + parseFloat(h.amount), 0);
+      return total + parseFloat(tx.amount) > VELOCITY_LIMIT;
+    },
   },
   {
     id: 'UNVERIFIED_USER',
     description: 'Transaction from unverified user',
-    check: async (tx) => !(await kycCollector.isVerified(tx.senderId)),
     severity: 'MEDIUM',
+    check: async (tx) => !(await kycCollector.isVerified(tx.senderId)),
   },
 ];
 
@@ -54,6 +65,23 @@ class AMLMonitor {
     const riskScore = await riskScorer.scoreTransaction(tx, alerts);
 
     if (alerts.length > 0) {
+      // Persist each alert to DB (requires a real transactionId)
+      if (tx.id && tx.senderId) {
+        await Promise.all(alerts.map(alert =>
+          prisma.aMLAlert.create({
+            data: {
+              transactionId: tx.id,
+              userId:        tx.senderId,
+              ruleId:        alert.ruleId,
+              severity:      alert.severity,
+              description:   alert.description,
+              riskScore:     riskScore.score ?? 0,
+              riskLevel:     riskScore.level ?? 'UNKNOWN',
+            },
+          }).catch(() => {}) // don't fail the payment if alert persistence fails
+        ));
+      }
+
       await complianceAudit.log('AML_ALERT', tx.senderId, {
         transactionId: tx.id,
         alerts,
