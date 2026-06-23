@@ -37,7 +37,7 @@ jobs:
 
       - name: Comment PR on accessibility failure
         if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             github.rest.issues.createComment({

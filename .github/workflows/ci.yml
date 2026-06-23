@@ -190,7 +190,7 @@ jobs:
     needs: [lint, unit, integration, security, build]
     steps:
       - name: Post PR summary comment
-        uses: actions/github-script@v7
+        uses: actions/github-script@v9
         with:
           script: |
             const results = {
