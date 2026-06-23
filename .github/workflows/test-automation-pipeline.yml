@@ -114,14 +114,14 @@ jobs:
         run: npm ci
 
       - name: Download unit test results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: unit-test-results-${{ github.sha }}
           path: coverage/
         continue-on-error: true
 
       - name: Download integration results
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: integration-results-${{ github.sha }}
           path: test-reports/integration/
