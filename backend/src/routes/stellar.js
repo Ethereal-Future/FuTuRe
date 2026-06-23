@@ -48,12 +48,13 @@ function logError(req, error, context = {}) {
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Account'
+ *             example:
+ *               publicKey: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
+ *               secret: SCZANGBA5RLKJNMDBJKTA7LCMNSZXJVLCMSBXOLQXGAEOP7SKNU4PX2
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         $ref: '#/components/responses/InternalServerError'
  */
 // Stricter rate limit for account creation (5 req/hour per IP) to prevent Friendbot abuse
 const accountCreateRateLimiter = createRateLimiter({
@@ -108,6 +109,7 @@ router.post('/account/import', rules.importAccount, validate, async (req, res) =
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The public key of the account to check.
  *     responses:
  *       200:
@@ -118,12 +120,19 @@ router.post('/account/import', rules.importAccount, validate, async (req, res) =
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Balance'
+ *             example:
+ *               - asset_type: native
+ *                 balance: '100.0000000'
+ *               - asset_type: credit_alphanum4
+ *                 asset_code: USDC
+ *                 asset_issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+ *                 balance: '50.0000000'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/account/:publicKey', rules.publicKeyParam, validate,
   cacheMiddleware(TTL.BALANCE, (req) => cacheKeys.balance(req.params.publicKey)),
@@ -143,7 +152,7 @@ router.get('/account/:publicKey', rules.publicKeyParam, validate,
  * /api/stellar/payment/send:
  *   post:
  *     summary: Send a payment
- *     description: Sends a payment from one Stellar account to another.
+ *     description: Sends a payment from one Stellar account to another. Requires KYC approval for amounts above the configured threshold.
  *     tags: [Stellar]
  *     requestBody:
  *       required: true
@@ -151,6 +160,12 @@ router.get('/account/:publicKey', rules.publicKeyParam, validate,
  *         application/json:
  *           schema:
  *             $ref: '#/components/schemas/PaymentRequest'
+ *           example:
+ *             sourceSecret: SCZANGBA5RLKJNMDBJKTA7LCMNSZXJVLCMSBXOLQXGAEOP7SKNU4PX2
+ *             destination: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
+ *             amount: '10.5000000'
+ *             assetCode: XLM
+ *             memo: Invoice #42
  *     responses:
  *       200:
  *         description: Payment sent successfully
@@ -158,14 +173,38 @@ router.get('/account/:publicKey', rules.publicKeyParam, validate,
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/PaymentResult'
+ *             example:
+ *               hash: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+ *               ledger: 48392011
+ *               successful: true
+ *               fee_charged: '100'
  *       400:
- *         description: Invalid request
- *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Forbidden — KYC required or sanctions hit
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
+ *             examples:
+ *               kyc_required:
+ *                 summary: KYC not approved
+ *                 value:
+ *                   error: KYC_REQUIRED
+ *                   kycStatus: PENDING
+ *               sanctions_hit:
+ *                 summary: Sanctions screening failed
+ *                 value:
+ *                   error: SANCTIONS_HIT
+ *                   reason: Match found on OFAC SDN list
+ *       422:
+ *         $ref: '#/components/responses/ValidationError'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 // Stricter rate limit for payment endpoint (10 req/min)
 const paymentRateLimiter = createRateLimiter({
@@ -254,6 +293,7 @@ router.post('/payment/send', paymentRateLimiter, idempotencyMiddleware, requireK
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: Stellar public key of the account.
  *       - in: query
  *         name: cursor
@@ -296,31 +336,27 @@ router.post('/payment/send', paymentRateLimiter, idempotencyMiddleware, requireK
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 records:
- *                   type: array
- *                   items:
- *                     $ref: '#/components/schemas/Transaction'
- *                 nextCursor:
- *                   type: string
- *                   nullable: true
- *                   description: >
- *                     Paging token to pass as `cursor` on the next request.
- *                     `null` when there are no more pages.
- *                 hasMore:
- *                   type: boolean
- *                   description: >
- *                     `true` if a subsequent page exists; `false` when this is
- *                     the last page.
+ *               $ref: '#/components/schemas/TransactionListResponse'
+ *             example:
+ *               records:
+ *                 - hash: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+ *                   type: payment
+ *                   direction: sent
+ *                   amount: '10.5000000'
+ *                   asset: XLM
+ *                   date: '2026-03-15T14:22:00Z'
+ *                   successful: true
+ *                   ledger: 48392011
+ *               nextCursor: '48392011'
+ *               hasMore: true
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
  *       422:
- *         description: Validation error
+ *         $ref: '#/components/responses/ValidationError'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         $ref: '#/components/responses/InternalServerError'
  */
 /**
  * @swagger
@@ -335,11 +371,32 @@ router.post('/payment/send', paymentRateLimiter, idempotencyMiddleware, requireK
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *     responses:
  *       200:
  *         description: Trustlines retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 trustlines:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Trustline'
+ *             example:
+ *               trustlines:
+ *                 - asset_code: USDC
+ *                   asset_issuer: GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN
+ *                   balance: '50.0000000'
+ *                   limit: '1000.0000000'
+ *                   is_authorized: true
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/account/:publicKey/trustlines', rules.publicKeyParam, validate, async (req, res) => {
   try {
@@ -386,7 +443,7 @@ router.get('/fee-stats', cacheMiddleware(TTL.FEE_STATS, () => cacheKeys.feeStats
  * /api/stellar/exchange-rate/{from}/{to}:
  *   get:
  *     summary: Get exchange rate
- *     description: Retrieves the exchange rate between two assets on the Stellar network.
+ *     description: Retrieves the best ask price between two assets on the Stellar SDEX order book.
  *     tags: [Stellar]
  *     parameters:
  *       - in: path
@@ -394,12 +451,14 @@ router.get('/fee-stats', cacheMiddleware(TTL.FEE_STATS, () => cacheKeys.feeStats
  *         required: true
  *         schema:
  *           type: string
+ *         example: XLM
  *         description: The source asset code.
  *       - in: path
  *         name: to
  *         required: true
  *         schema:
  *           type: string
+ *         example: USDC
  *         description: The target asset code.
  *     responses:
  *       200:
@@ -408,12 +467,16 @@ router.get('/fee-stats', cacheMiddleware(TTL.FEE_STATS, () => cacheKeys.feeStats
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/ExchangeRate'
+ *             example:
+ *               from: XLM
+ *               to: USDC
+ *               rate: '0.1234567'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
- *         content:
- *           application/json:
- *             schema:
- *               $ref: '#/components/schemas/Error'
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/exchange-rate/:from/:to', rules.assetCodeParams, validate,
   cacheMiddleware(TTL.RATE, (req) => cacheKeys.rate(req.params.from, req.params.to)),

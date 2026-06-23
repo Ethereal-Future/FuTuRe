@@ -601,6 +601,79 @@ const options = {
           },
         },
       },
+      responses: {
+        BadRequest: {
+          description: 'Bad Request — missing or invalid parameters.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: { error: 'Invalid or missing required parameter' },
+            },
+          },
+        },
+        Unauthorized: {
+          description: 'Unauthorized — missing or invalid JWT.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: { error: 'Authorization token missing or invalid' },
+            },
+          },
+        },
+        Forbidden: {
+          description: 'Forbidden — insufficient permissions.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: { error: 'You do not have permission to perform this action' },
+            },
+          },
+        },
+        NotFound: {
+          description: 'Not Found — the requested resource does not exist.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: { error: 'Resource not found' },
+            },
+          },
+        },
+        TooManyRequests: {
+          description: 'Too Many Requests — rate limit exceeded.',
+          content: {
+            'application/json': {
+              schema: {
+                type: 'object',
+                properties: {
+                  error: { type: 'string', example: 'Too many requests, please try again later.' },
+                  statusCode: { type: 'integer', example: 429 },
+                  retryAfter: { type: 'integer', example: 60 },
+                },
+              },
+            },
+          },
+        },
+        InternalServerError: {
+          description: 'Internal Server Error.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/Error' },
+              example: { error: 'An unexpected error occurred' },
+            },
+          },
+        },
+        ValidationError: {
+          description: 'Unprocessable Entity — validation failed.',
+          content: {
+            'application/json': {
+              schema: { $ref: '#/components/schemas/ValidationError' },
+              example: {
+                errors: [{ field: 'amount', message: 'amount must be a positive number' }],
+              },
+            },
+          },
+        },
+      },
       securitySchemes: {
         bearerAuth: {
           type: 'http',

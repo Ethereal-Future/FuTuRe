@@ -50,26 +50,37 @@ const streamRules = {
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [senderPublicKey, recipientPublicKey, rateAmount]
- *             properties:
- *               senderPublicKey: { type: string }
- *               recipientPublicKey: { type: string }
- *               assetCode: { type: string, default: XLM }
- *               rateAmount: { type: number, description: Amount per interval }
- *               intervalSeconds: { type: integer, minimum: 10, default: 60 }
- *               endTime: { type: string, format: date-time }
+ *             $ref: '#/components/schemas/CreateStreamRequest'
+ *           example:
+ *             senderPublicKey: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
+ *             recipientPublicKey: GBXGQJWVLWOYHFLVTKWV5FGHA3LNYY2JQKM7OAJAUEQFU6LPCSEFVXON
+ *             assetCode: XLM
+ *             rateAmount: 1.5
+ *             intervalSeconds: 60
+ *             endTime: '2026-12-31T23:59:59.000Z'
  *     responses:
  *       201:
- *         description: Stream created
- *       400:
- *         description: Validation error
- *       500:
- *         description: Server error
+ *         description: Stream created successfully
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/Error'
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: ACTIVE
+ *               assetCode: XLM
+ *               rateAmount: 1.5
+ *               intervalSeconds: 60
+ *               totalStreamed: 0
+ *               nextPaymentAt: '2026-03-15T14:01:00.000Z'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/', streamRules.create, validate, async (req, res) => {
   try {
@@ -85,21 +96,41 @@ router.post('/', streamRules.create, validate, async (req, res) => {
  * @swagger
  * /api/streaming:
  *   get:
- *     summary: List streaming payments for authenticated user
+ *     summary: List streaming payments for a sender
  *     tags: [Streaming]
  *     parameters:
  *       - in: query
  *         name: senderPublicKey
- *         schema: { type: string }
+ *         schema:
+ *           type: string
  *         required: true
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: Sender's public key to filter streams
  *     responses:
  *       200:
- *         description: List of streams with status, totalStreamed, and nextPaymentAt
+ *         description: List of streams
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: array
+ *               items:
+ *                 $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               - id: 550e8400-e29b-41d4-a716-446655440000
+ *                 status: ACTIVE
+ *                 assetCode: XLM
+ *                 rateAmount: 1.5
+ *                 intervalSeconds: 60
+ *                 totalStreamed: 45.0
+ *                 nextPaymentAt: '2026-03-15T14:01:00.000Z'
  *       400:
- *         description: Missing senderPublicKey parameter
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/', async (req, res) => {
   try {
@@ -130,9 +161,45 @@ router.get('/', async (req, res) => {
  *     tags: [Streaming]
  *     responses:
  *       200:
- *         description: Analytics data
+ *         description: Streaming analytics data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalVolume: { type: string }
+ *                 activeStreams: { type: integer }
+ *                 pausedStreams: { type: integer }
+ *                 failedStreams: { type: integer }
+ *                 completedStreams: { type: integer }
+ *                 cancelledStreams: { type: integer }
+ *                 totalStreams: { type: integer }
+ *                 topAssets:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       assetCode: { type: string }
+ *                       count: { type: integer }
+ *             example:
+ *               totalVolume: '12450.0000000'
+ *               activeStreams: 8
+ *               pausedStreams: 2
+ *               failedStreams: 1
+ *               completedStreams: 5
+ *               cancelledStreams: 3
+ *               totalStreams: 19
+ *               topAssets:
+ *                 - assetCode: XLM
+ *                   count: 15
+ *                 - assetCode: USDC
+ *                   count: 4
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/analytics', async (req, res) => {
   try {
@@ -154,14 +221,35 @@ router.get('/analytics', async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     responses:
  *       200:
  *         description: Stream details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: ACTIVE
+ *               assetCode: XLM
+ *               rateAmount: 1.5
+ *               intervalSeconds: 60
+ *               totalStreamed: 45.0
+ *               nextPaymentAt: '2026-03-15T14:01:00.000Z'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: Stream not found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/:id', streamRules.idParam, validate, async (req, res) => {
   try {
@@ -186,12 +274,35 @@ router.get('/:id', streamRules.idParam, validate, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     responses:
  *       200:
- *         description: Stream paused
+ *         description: Stream paused successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: PAUSED
+ *               assetCode: XLM
+ *               rateAmount: 1.5
+ *               intervalSeconds: 60
+ *               totalStreamed: 45.0
+ *               nextPaymentAt: null
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
   try {
@@ -212,12 +323,35 @@ router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     responses:
  *       200:
- *         description: Stream resumed
+ *         description: Stream resumed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: ACTIVE
+ *               assetCode: XLM
+ *               rateAmount: 1.5
+ *               intervalSeconds: 60
+ *               totalStreamed: 45.0
+ *               nextPaymentAt: '2026-03-15T14:01:00.000Z'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
   try {
@@ -238,12 +372,35 @@ router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     responses:
  *       200:
- *         description: Stream cancelled
+ *         description: Stream cancelled successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: CANCELLED
+ *               assetCode: XLM
+ *               rateAmount: 1.5
+ *               intervalSeconds: 60
+ *               totalStreamed: 45.0
+ *               nextPaymentAt: null
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
   try {
@@ -264,26 +421,45 @@ router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
  *       - in: path
  *         name: id
  *         required: true
- *         schema: { type: string, format: uuid }
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *         example: 550e8400-e29b-41d4-a716-446655440000
  *     requestBody:
  *       required: true
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             properties:
- *               rateAmount: { type: number, description: New amount per interval }
- *               intervalSeconds: { type: integer, minimum: 10, description: New interval in seconds }
- *               endTime: { type: string, format: date-time, description: New end time }
+ *             $ref: '#/components/schemas/UpdateStreamRequest'
+ *           example:
+ *             rateAmount: 2.0
+ *             intervalSeconds: 120
+ *             endTime: '2027-01-01T00:00:00.000Z'
  *     responses:
  *       200:
- *         description: Stream updated
+ *         description: Stream updated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/StreamResponse'
+ *             example:
+ *               id: 550e8400-e29b-41d4-a716-446655440000
+ *               status: ACTIVE
+ *               assetCode: XLM
+ *               rateAmount: 2.0
+ *               intervalSeconds: 120
+ *               totalStreamed: 45.0
+ *               nextPaymentAt: '2026-03-15T14:02:00.000Z'
  *       400:
- *         description: Validation error or invalid stream status
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: Stream not found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.patch('/:id', streamRules.idParam, [
   body('rateAmount').optional().isFloat({ gt: 0 }).withMessage('rateAmount must be a positive number'),

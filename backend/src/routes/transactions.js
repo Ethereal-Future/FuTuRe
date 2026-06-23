@@ -31,6 +31,7 @@ function logError(req, error, context = {}) {
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *       - in: query
  *         name: limit
@@ -78,13 +79,38 @@ function logError(req, error, context = {}) {
  *         content:
  *           application/json:
  *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/Transaction'
+ *               type: object
+ *               properties:
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Transaction'
+ *                 total: { type: integer }
+ *                 page: { type: integer }
+ *                 pageSize: { type: integer }
+ *                 nextCursor: { type: string, nullable: true }
+ *             example:
+ *               data:
+ *                 - hash: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+ *                   type: payment
+ *                   direction: sent
+ *                   amount: '10.5000000'
+ *                   asset: XLM
+ *                   date: '2026-03-15T14:22:00Z'
+ *                   successful: true
+ *                   ledger: 48392011
+ *               total: 1
+ *               page: 1
+ *               pageSize: 20
+ *               nextCursor: null
  *       400:
- *         description: Invalid request parameters
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/:accountId', rules.accountIdParam, validate, async (req, res) => {
   try {
@@ -132,13 +158,15 @@ router.get('/:accountId', rules.accountIdParam, validate, async (req, res) => {
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *       - in: query
  *         name: q
  *         required: true
  *         schema:
  *           type: string
- *         description: Search query
+ *         example: Invoice #42
+ *         description: Search query (matches hash prefix, memo, operation type, or asset)
  *       - in: query
  *         name: limit
  *         schema:
@@ -155,10 +183,23 @@ router.get('/:accountId', rules.accountIdParam, validate, async (req, res) => {
  *               type: array
  *               items:
  *                 $ref: '#/components/schemas/Transaction'
+ *             example:
+ *               - hash: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+ *                 type: payment
+ *                 direction: sent
+ *                 amount: '10.5000000'
+ *                 asset: XLM
+ *                 memo: Invoice #42
+ *                 date: '2026-03-15T14:22:00Z'
+ *                 successful: true
  *       400:
- *         description: Missing search query
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/:accountId/search', rules.accountIdParam, validate, async (req, res) => {
   try {
@@ -190,6 +231,7 @@ router.get('/:accountId/search', rules.accountIdParam, validate, async (req, res
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *       - in: query
  *         name: timeframe
@@ -204,8 +246,30 @@ router.get('/:accountId/search', rules.accountIdParam, validate, async (req, res
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/TransactionAnalytics'
+ *             example:
+ *               totalTransactions: 142
+ *               successfulTransactions: 138
+ *               failedTransactions: 4
+ *               totalVolume: 5420.75
+ *               averageFee: 0.00001
+ *               operationTypes:
+ *                 payment: 120
+ *                 create_account: 10
+ *                 change_trust: 12
+ *               dailyVolume:
+ *                 '2026-03-01': 320
+ *                 '2026-03-02': 410
+ *               assets:
+ *                 - XLM
+ *                 - USDC
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/:accountId/analytics', rules.accountIdParam, validate, async (req, res) => {
   try {
@@ -233,6 +297,7 @@ router.get('/:accountId/analytics', rules.accountIdParam, validate, async (req, 
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *     responses:
  *       200:
@@ -241,10 +306,25 @@ router.get('/:accountId/analytics', rules.accountIdParam, validate, async (req, 
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Transaction'
+ *             example:
+ *               hash: a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2
+ *               type: payment
+ *               direction: sent
+ *               amount: '10.5000000'
+ *               asset: XLM
+ *               date: '2026-03-15T14:22:00Z'
+ *               successful: true
+ *               ledger: 48392011
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: No transactions found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/:accountId/latest', rules.accountIdParam, validate, async (req, res) => {
   try {
@@ -275,12 +355,29 @@ router.get('/:accountId/latest', rules.accountIdParam, validate, async (req, res
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *     responses:
  *       200:
  *         description: Monitoring started
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *             example:
+ *               message: Transaction monitoring started
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/:accountId/monitor', rules.accountIdParam, validate, async (req, res) => {
   try {
@@ -306,12 +403,29 @@ router.post('/:accountId/monitor', rules.accountIdParam, validate, async (req, r
  *         required: true
  *         schema:
  *           type: string
+ *         example: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
  *         description: The Stellar account public key
  *     responses:
  *       200:
  *         description: Monitoring stopped
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *             example:
+ *               message: Transaction monitoring stopped
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         $ref: '#/components/responses/Forbidden'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
  *       500:
- *         description: Server error
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/:accountId/monitor', rules.accountIdParam, validate, async (req, res) => {
   try {
