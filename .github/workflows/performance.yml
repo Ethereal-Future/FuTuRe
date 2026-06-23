@@ -38,7 +38,7 @@ jobs:
 
       - name: Upload benchmark results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results
           path: backend/data/load-tests/
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload k6 results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: k6-results-${{ github.sha }}
           path: backend/data/load-tests/k6-*.json

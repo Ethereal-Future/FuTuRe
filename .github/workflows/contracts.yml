@@ -20,7 +20,7 @@ jobs:
       - name: Generate pact files
         run: npm run test:contracts:consumer
       - name: Upload pacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pact-files
           path: contracts/pacts/

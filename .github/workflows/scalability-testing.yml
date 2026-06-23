@@ -37,7 +37,7 @@ jobs:
 
       - name: Upload scalability test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scalability-results-${{ github.sha }}
           path: test-reports/
@@ -127,7 +127,7 @@ jobs:
 
       - name: Upload k6 scalability results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: scalability-k6-results-${{ github.sha }}
           path: backend/data/load-tests/scalability-*.json

@@ -42,7 +42,7 @@ jobs:
 
       - name: Upload unit test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: unit-test-results-${{ github.sha }}
           path: coverage/
@@ -89,7 +89,7 @@ jobs:
 
       - name: Upload integration results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: integration-results-${{ github.sha }}
           path: test-reports/
@@ -150,7 +150,7 @@ jobs:
 
       - name: Upload aggregated report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pipeline-aggregated-report-${{ github.sha }}
           path: |

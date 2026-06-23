@@ -51,7 +51,7 @@ jobs:
         "
 
     - name: Upload snapshot artifacts on failure
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: failure()
       with:
         name: snapshot-failures
@@ -59,7 +59,7 @@ jobs:
         retention-days: 7
 
     - name: Upload coverage reports
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       if: always()
       with:
         name: coverage-report
