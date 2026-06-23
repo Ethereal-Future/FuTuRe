@@ -29,7 +29,7 @@
     "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "react-i18next": "^14.1.2",
+    "react-i18next": "^17.0.8",
     "recharts": "^3.8.1",
     "rollup-plugin-visualizer": "^7.0.1",
     "web-vitals": "^5.1.0"
