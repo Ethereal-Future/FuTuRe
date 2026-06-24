@@ -173,3 +173,118 @@ curl -X POST http://localhost:3001/api/v1/security/incidents/<INC-ID>/action \
 - [ ] Rotate any compromised secrets (see `backend/CONFIGURATION.md` — Secret rotation).
 - [ ] Update `RATE_LIMIT_WHITELIST` or other env vars as needed and redeploy.
 - [ ] File a post-mortem within 48 hours.
+
+---
+
+## 6. Database Backup Restore Procedure
+
+The backup system is implemented in `backend/src/backup/manager.js`. Backups are compressed (`pg_dump` custom format + gzip) and optionally AES-256-GCM encrypted.
+
+### 6.1 Prerequisites
+
+- `BACKUP_DIR` — directory containing the backup files (default `./backups`)
+- `DATABASE_URL` — connection string for the **target** database
+- `BACKUP_ENC_KEY` — 32-byte hex key (required only if the backup is encrypted, i.e. file ends in `.enc`)
+- PostgreSQL client tools (`pg_restore`) installed and on `$PATH`
+
+### 6.2 List available backups
+
+```bash
+cd backend
+node --input-type=module <<'EOF'
+import { listBackups } from './src/backup/manager.js';
+const backups = await listBackups();
+backups.slice(0, 5).forEach(b => console.log(b.createdAt, b.file, `${(b.size/1e6).toFixed(1)} MB`));
+EOF
+```
+
+### 6.3 Verify a backup's integrity before restoring
+
+```bash
+cd backend
+BACKUP_FILE=/path/to/backup.dump.gz node --input-type=module <<'EOF'
+import { verifyBackup } from './src/backup/manager.js';
+const result = await verifyBackup(process.env.BACKUP_FILE);
+console.log('Valid:', result.valid);
+if (!result.valid) {
+  console.error('Checksum mismatch — do not restore this file');
+  process.exit(1);
+}
+EOF
+```
+
+### 6.4 Restore to the current database
+
+```bash
+cd backend
+DATABASE_URL="postgresql://user:password@host:5432/dbname" \
+BACKUP_ENC_KEY="<32-byte-hex-key-if-encrypted>" \
+BACKUP_FILE=/path/to/backup.dump.gz \
+node --input-type=module <<'EOF'
+import { restoreBackup } from './src/backup/manager.js';
+const result = await restoreBackup(process.env.BACKUP_FILE);
+console.log('Restore status:', result.status);
+EOF
+```
+
+### 6.5 Restore to a different database (safe restore drill)
+
+Pass `targetDatabase` to restore into a fresh database without touching production:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://future_admin:password@localhost:5432/future_restore_drill" \
+BACKUP_FILE=/path/to/backup.dump.gz \
+node --input-type=module <<'EOF'
+import { restoreBackup } from './src/backup/manager.js';
+const result = await restoreBackup(process.env.BACKUP_FILE, {
+  targetDatabase: 'future_restore_drill',
+});
+console.log(result);
+EOF
+```
+
+### 6.6 Point-in-time recovery (PITR)
+
+If WAL archiving is configured, pass `targetTime` (ISO 8601) to stop recovery at a specific moment:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://..." \
+BACKUP_FILE=/path/to/backup.dump.gz \
+TARGET_TIME="2025-06-01T12:00:00Z" \
+node --input-type=module <<'EOF'
+import { restoreBackup } from './src/backup/manager.js';
+const result = await restoreBackup(process.env.BACKUP_FILE, {
+  targetTime: process.env.TARGET_TIME,
+});
+console.log(result);
+EOF
+```
+
+### 6.7 Apply pending migrations after restore
+
+After restoring to any database, apply outstanding Prisma migrations:
+
+```bash
+cd backend
+DATABASE_URL="postgresql://user:password@host:5432/dbname" npx prisma migrate deploy
+```
+
+### 6.8 Verify the restored database
+
+Query a known table to confirm data integrity:
+
+```bash
+psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM \"User\";"
+```
+
+### 6.9 Automated weekly verification
+
+The CI workflow `.github/workflows/backup-verification.yml` runs every Sunday at 03:00 UTC. It:
+1. Seeds a source database, creates a backup via the backup manager
+2. Verifies the backup checksum
+3. Restores the backup to a fresh database instance
+4. Runs `prisma migrate deploy` against the restored database
+5. Queries the restored database for expected data
+6. Opens a GitHub issue and notifies watchers on failure

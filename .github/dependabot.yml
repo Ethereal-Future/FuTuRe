@@ -25,4 +25,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    open-pull-requests-limit: 10
     labels: [dependencies, ci]
+    # Dependabot opens PRs that update pinned SHAs to the latest commit SHA
+    # for the same semver tag. Review the tag comment in each workflow file
+    # to confirm the human-readable version before merging.

@@ -1,0 +1,110 @@
+name: Terraform Plan
+
+on:
+  pull_request:
+    paths:
+      - 'infra/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write # Required for OIDC-based AWS authentication
+
+jobs:
+  plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef7e8 # v3.1.2
+        with:
+          terraform_version: '~1.7'
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        id: init
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        id: validate
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -no-color \
+            -input=false \
+            -var="backend_image=ghcr.io/${{ github.repository }}/backend:plan-stub" \
+            -var="frontend_image=ghcr.io/${{ github.repository }}/frontend:plan-stub" \
+            2>&1 | tee /tmp/plan_output.txt
+        continue-on-error: true
+
+      - name: Post plan as PR comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('/tmp/plan_output.txt', 'utf8');
+            const truncated = planOutput.length > 60000
+              ? planOutput.slice(0, 60000) + '\n\n...(truncated — see full logs)'
+              : planOutput;
+
+            const outcome = '${{ steps.plan.outcome }}';
+            const icon    = outcome === 'success' ? '✅' : '❌';
+
+            const body = [
+              `## ${icon} Terraform Plan — ${outcome}`,
+              '',
+              '<details><summary>Show Plan</summary>',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '',
+              '</details>',
+              '',
+              `> Triggered by @${{ github.actor }} on \`${{ github.head_ref }}\``,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Terraform Plan')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
