@@ -35,7 +35,7 @@
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.3.1",
     "jsonwebtoken": "^9.0.0",
-    "pg": "^8.20.0",
+    "pg": "^8.22.0",
     "prisma": "^7.5.0",
     "qrcode": "^1.5.3",
     "speakeasy": "^2.0.0",
