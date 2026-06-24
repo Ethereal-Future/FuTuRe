@@ -61,7 +61,7 @@
     "@vitest/coverage-v8": "4.1.1",
     "@vitest/ui": "4.1.1",
     "concurrently": "^8.2.2",
-    "fast-check": "^4.6.0",
+    "fast-check": "^4.8.0",
     "jsdom": "29.0.1",
     "supertest": "^7.2.2",
     "vitest": "4.1.1"
