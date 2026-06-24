@@ -30,6 +30,20 @@ function toAsset(code, issuer) {
 // ── Path Finding ──────────────────────────────────────────────────────────────
 
 /**
+ * Path Payments
+ * A path payment allows the sender to send one asset while the recipient
+ * receives a different asset. The Stellar network automatically routes the
+ * conversion through on-chain order books or AMM liquidity pools to find the
+ * best available conversion path — no manual swap step is required.
+ * Two variants are supported:
+ *   - Strict-send (pathPaymentStrictSend): the send amount is fixed; the network
+ *     maximises how much the recipient receives.
+ *   - Strict-receive (pathPaymentStrictReceive): the destination amount is fixed;
+ *     the network minimises how much the sender must spend.
+ * @see https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-list#path-payment-strict-send
+ */
+
+/**
  * Find paths between two assets using Horizon's strict-send path-finding.
  * Returns paths sorted by best destination amount (descending).
  */

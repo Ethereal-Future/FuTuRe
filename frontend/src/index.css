@@ -4,6 +4,10 @@
   --muted: #475569;
   --primary: #0066cc;
   --primary-hover: #0052a3;
+  /* Foreground colour for text/icons placed ON a --primary background.
+     Light mode: white (15:1 on #0066cc). Dark mode overrides to near-black
+     (7.3:1 on #60a5fa) so WCAG AA is met in both themes. */
+  --on-primary: #ffffff;
   --border: #dbe2ec;
   --surface: #f8fafc;
   --card: #f0f4f9;
@@ -61,6 +65,8 @@
   --muted: #94a3b8;
   --primary: #60a5fa;
   --primary-hover: #3b82f6;
+  /* #0f172a on #60a5fa → 7.3:1; #0f172a on #3b82f6 → 5.3:1 — both pass WCAG AA */
+  --on-primary: #0f172a;
   --border: #334155;
   --surface: #111827;
   --card: #1f2937;
@@ -123,7 +129,7 @@ body {
 /* Buttons */
 button {
   background: var(--primary);
-  color: white;
+  color: var(--on-primary);
   border: 1px solid transparent;
   padding: 12px 20px;
   border-radius: 4px;
@@ -1094,6 +1100,35 @@ kbd {
   background: #fffbeb;
   border: 1px solid #fcd34d;
   color: #92400e;
+}
+.pwa-banner--install {
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  color: #166534;
+}
+.pwa-banner__text {
+  flex: 1;
+}
+.pwa-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pwa-banner__dismiss {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 6px;
+  font-size: 14px;
+  min-height: unset;
+  min-width: unset;
+  width: auto;
+  line-height: 1;
+}
+.pwa-banner__dismiss:hover {
+  opacity: 0.7;
+  background: transparent;
 }
 .pwa-banner__btn {
   background: #0066cc;

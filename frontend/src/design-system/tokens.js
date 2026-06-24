@@ -10,6 +10,13 @@ export const color = {
   // Brand
   primary: 'var(--primary)',
   primaryHover: 'var(--primary-hover)',
+  /**
+   * Foreground (text/icon) colour for content placed ON a primary-coloured
+   * background. Switches between white (light mode, 15:1 vs #0066cc) and
+   * near-black (dark mode, 7.3:1 vs #60a5fa) to meet WCAG 2.1 AA in both
+   * themes. Use wherever `background: var(--primary)` is applied.
+   */
+  onPrimary: 'var(--on-primary)',
   // Semantic
   danger: 'var(--danger)',
   success: 'var(--success)',

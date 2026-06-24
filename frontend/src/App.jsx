@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from './api/client.js';
 import { getKycStatus } from './api/compliance.js';
 import {
@@ -47,25 +48,58 @@ import { TxLookup } from './components/TxLookup';
 import { AddressBook } from './components/AddressBook';
 import { NotificationPreferences } from './components/NotificationPreferences';
 import { NotificationBell } from './components/NotificationBell';
+import { InstallBanner } from './components/InstallBanner';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
 import { useExchangeRate } from './hooks/useExchangeRate';
 import { useBalance, useSendPayment, useCreateAccount, useImportAccount, useKycStatus, useSaveAccountLabel, useNetworkStatusQuery } from './hooks/useQueryHooks';
+import {
+  useBalance,
+  useSendPayment,
+  useCreateAccount,
+  useImportAccount,
+  useKycStatus,
+  useSaveAccountLabel,
+  useNetworkStatusQuery,
+} from './hooks/useQueryHooks';
+import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { XLMInfoIcon } from './components/XLMInfoIcon';
 
 // Heavy components loaded on-demand to keep the initial bundle small
-const AMMPoolBrowser = lazy(() => import('./components/AMMPoolBrowser').then(m => ({ default: m.AMMPoolBrowser })));
-const AccountRecovery = lazy(() => import('./components/AccountRecovery').then(m => ({ default: m.AccountRecovery })));
-const MultiSigTransactions = lazy(() => import('./components/MultiSigTransactions').then(m => ({ default: m.MultiSigTransactions })));
-const KYCForm = lazy(() => import('./components/KYCForm').then(m => ({ default: m.KYCForm })));
-const ComplianceDashboard = lazy(() => import('./components/ComplianceDashboard').then(m => ({ default: m.ComplianceDashboard })));
-const BackupSettings = lazy(() => import('./components/BackupSettings').then(m => ({ default: m.BackupSettings })));
+const AMMPoolBrowser = lazy(() =>
+  import('./components/AMMPoolBrowser').then((m) => ({ default: m.AMMPoolBrowser }))
+);
+const AccountRecovery = lazy(() =>
+  import('./components/AccountRecovery').then((m) => ({ default: m.AccountRecovery }))
+);
+const MultiSigTransactions = lazy(() =>
+  import('./components/MultiSigTransactions').then((m) => ({ default: m.MultiSigTransactions }))
+);
+const KYCForm = lazy(() => import('./components/KYCForm').then((m) => ({ default: m.KYCForm })));
+const ComplianceDashboard = lazy(() =>
+  import('./components/ComplianceDashboard').then((m) => ({ default: m.ComplianceDashboard }))
+);
+const BackupSettings = lazy(() =>
+  import('./components/BackupSettings').then((m) => ({ default: m.BackupSettings }))
+);
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
 
 function App() {
-  const { account, balance, loading, recipient, amount, memo, memoType, showQR, showImportForm, showShortcuts, accountLabel } = useAppState();
+  const {
+    account,
+    balance,
+    loading,
+    recipient,
+    amount,
+    memo,
+    memoType,
+    showQR,
+    showImportForm,
+    showShortcuts,
+    accountLabel,
+  } = useAppState();
   const dispatch = useAppDispatch();
 
   // Local state not in store
@@ -84,8 +118,18 @@ function App() {
   const [showBackupSettings, setShowBackupSettings] = useState(false);
   const [userRole, setUserRole] = useState(null);
 
+  const { t } = useTranslation();
   const msg = useMessages();
-  const { canInstall, install, updateAvailable, applyUpdate, pushEnabled, enablePush } = usePWA();
+  const {
+    canInstall,
+    install,
+    isDismissed,
+    dismissInstall,
+    updateAvailable,
+    applyUpdate,
+    pushEnabled,
+    enablePush,
+  } = usePWA();
   const { queue: queueOffline, dequeue, pendingItems, pendingCount } = useOfflineQueue();
   const [showTxLookup, setShowTxLookup] = useState(false);
   const [deepLinkHash, setDeepLinkHash] = useState('');
@@ -98,16 +142,20 @@ function App() {
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
 
-  const handleWsMessage = useCallback((wsMsg) => {
-    setLastWsMessage(wsMsg);
-    if (wsMsg.type === 'transaction') {
-      const text = wsMsg.direction === 'received'
-        ? `📥 Received ${wsMsg.amount} ${wsMsg.assetCode} — tx: ${wsMsg.hash?.slice(0, 8)}…`
-        : `📤 Sent ${wsMsg.amount} ${wsMsg.assetCode} — tx: ${wsMsg.hash?.slice(0, 8)}…`;
-      msg.info(text);
-      if (wsMsg.balance) dispatch({ type: A.SET_BALANCE, payload: { balances: wsMsg.balance } });
-    }
-  }, [msg, dispatch]);
+  const handleWsMessage = useCallback(
+    (wsMsg) => {
+      setLastWsMessage(wsMsg);
+      if (wsMsg.type === 'transaction') {
+        const text =
+          wsMsg.direction === 'received'
+            ? `📥 Received ${wsMsg.amount} ${wsMsg.assetCode} — tx: ${wsMsg.hash?.slice(0, 8)}…`
+            : `📤 Sent ${wsMsg.amount} ${wsMsg.assetCode} — tx: ${wsMsg.hash?.slice(0, 8)}…`;
+        msg.info(text);
+        if (wsMsg.balance) dispatch({ type: A.SET_BALANCE, payload: { balances: wsMsg.balance } });
+      }
+    },
+    [msg, dispatch]
+  );
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatusQuery();
@@ -152,6 +200,19 @@ function App() {
     if (account?.publicKey && !accountLabel) loadLabel(account.publicKey);
   }, [account?.publicKey, accountLabel, loadLabel]);
 
+  // Update document.title based on the active section
+  useEffect(() => {
+    if (showSettings) {
+      document.title = t('page.settings');
+    } else if (showTxLookup) {
+      document.title = t('page.txLookup');
+    } else if (showComplianceDashboard) {
+      document.title = t('page.compliance');
+    } else {
+      document.title = t('page.dashboard');
+    }
+  }, [showSettings, showTxLookup, showComplianceDashboard, t]);
+
   // Deep-link: open tx lookup when URL contains #tx=<hash>
   useEffect(() => {
     const match = window.location.hash.match(/^#tx=(.+)$/);
@@ -163,11 +224,17 @@ function App() {
 
   const resetForm = () => dispatch({ type: A.RESET_FORM });
   const clearForm = () => {
-    if (recipient || amount) { setConfirmClear(true); return; }
+    if (recipient || amount) {
+      setConfirmClear(true);
+      return;
+    }
     resetForm();
   };
-  const confirmClearYes = () => { setConfirmClear(false); resetForm(); };
-  const confirmClearNo  = () => setConfirmClear(false);
+  const confirmClearYes = () => {
+    setConfirmClear(false);
+    resetForm();
+  };
+  const confirmClearNo = () => setConfirmClear(false);
 
   const replayQueued = async () => {
     if (!replaySecret) return;
@@ -189,7 +256,10 @@ function App() {
     }
     setReplaySecret('');
     if (anyFailed) msg.error('Some queued payments failed to send. Please retry.');
-    else { msg.success('All queued payments sent.'); checkBalance(); }
+    else {
+      msg.success('All queued payments sent.');
+      checkBalance();
+    }
   };
 
   const loadLabel = useCallback(async (publicKey) => {
@@ -198,6 +268,17 @@ function App() {
       dispatch({ type: A.SET_LABEL, payload: fetchedLabel });
     } catch { /* non-critical */ }
   }, [dispatch]);
+  const loadLabel = useCallback(
+    async (publicKey) => {
+      try {
+        const accountLabel = await getAccountLabel(publicKey);
+        dispatch({ type: A.SET_LABEL, payload: accountLabel });
+      } catch {
+        /* non-critical */
+      }
+    },
+    [dispatch]
+  );
 
   const fetchKycStatus = useCallback(async () => {
     if (!account?.publicKey) {
@@ -261,6 +342,10 @@ function App() {
     } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   // eslint-disable-next-line react-hooks/exhaustive-deps
+    } finally {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dispatch, msg]);
 
   const importAccount = async (secretKey) => {
@@ -274,7 +359,9 @@ function App() {
     } catch (error) {
       logError(error, { context: 'importAccount' });
       msg.error(getFriendlyError(error));
-    } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
+    } finally {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    }
   };
 
   const checkBalance = useCallback(async () => {
@@ -289,15 +376,20 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
   // eslint-disable-next-line react-hooks/exhaustive-deps
+    } finally {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, dispatch, msg]);
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
-  const xlmBalance = balance?.balances?.find(b => b.asset === 'XLM')?.balance ?? null;
+  const xlmBalance = balance?.balances?.find((b) => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
   const amountError = validateAmount(amount, xlmBalance !== null ? parseFloat(xlmBalance) : null);
   const amountValid = amountTouched && !amountError;
-  const largeTransactionBlocked = amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+  const largeTransactionBlocked =
+    amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
   const handleSendMax = () => {
     if (xlmBalance === null) return;
@@ -313,17 +405,31 @@ function App() {
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
-      msg.error(`Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`);
+      msg.error(
+        `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
+      );
       return;
     }
 
     dispatch({ type: A.SET_LOADING, payload: 'send' });
-    const payload = { sourceSecret: account.secretKey, destination: recipient, amount, assetCode: 'XLM', memo: memo || undefined, memoType: memo ? memoType : undefined };
+    const payload = {
+      sourceSecret: account.secretKey,
+      destination: recipient,
+      amount,
+      assetCode: 'XLM',
+      memo: memo || undefined,
+      memoType: memo ? memoType : undefined,
+    };
 
     // Optimistic balance update
     if (xlmBalance !== null) {
-      const optimisticBalances = balance.balances.map(b =>
-        b.asset === 'XLM' ? { ...b, balance: String((parseFloat(b.balance) - parseFloat(amount) - 0.00001).toFixed(7)) } : b
+      const optimisticBalances = balance.balances.map((b) =>
+        b.asset === 'XLM'
+          ? {
+              ...b,
+              balance: String((parseFloat(b.balance) - parseFloat(amount) - 0.00001).toFixed(7)),
+            }
+          : b
       );
       dispatch({ type: A.SET_BALANCE_OPTIMISTIC, payload: { balances: optimisticBalances } });
     }
@@ -337,23 +443,35 @@ function App() {
     } catch (error) {
       dispatch({ type: A.REVERT_BALANCE });
       if (error?.response?.data?.error === 'KYC_REQUIRED') {
-        msg.error(`Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`);
+        msg.error(
+          `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
+        );
         setShowPaymentConfirmation(false);
         setActiveSettingsSection('kyc');
         setShowSettings(true);
       } else if (!navigator.onLine) {
-        await queueOffline({ destination: payload.destination, amount: payload.amount, assetCode: payload.assetCode });
-        msg.info('You are offline. Payment queued — you\'ll be prompted to re-enter your secret key when back online.');
+        await queueOffline({
+          destination: payload.destination,
+          amount: payload.amount,
+          assetCode: payload.assetCode,
+        });
+        msg.info(
+          "You are offline. Payment queued — you'll be prompted to re-enter your secret key when back online."
+        );
       } else {
         logError(error, { context: 'sendPayment' });
         msg.error(getFriendlyError(error), { retry: confirmPayment });
       }
-    } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
+    } finally {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    }
   };
 
   return (
     <>
-      <a href="#main-content" className="skip-link">Skip to main content</a>
+      <a href="#main-content" className="skip-link">
+        Skip to main content
+      </a>
 
       {/* Account creation celebration overlay */}
       <AccountCreatedCelebration
@@ -378,574 +496,984 @@ function App() {
         {/* PWA banners */}
         <AnimatePresence>
           {updateAvailable && (
-            <motion.div className="pwa-banner pwa-banner--update" role="status" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+            <motion.div
+              className="pwa-banner pwa-banner--update"
+              role="status"
+              variants={v.fadeSlide}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+            >
               <span>A new version is available.</span>
-              <button type="button" className="pwa-banner__btn" onClick={applyUpdate}>Update now</button>
+              <button type="button" className="pwa-banner__btn" onClick={applyUpdate}>
+                Update now
+              </button>
             </motion.div>
           )}
-        </AnimatePresence>
-      {/* Keyboard shortcuts panel */}
-      <AnimatePresence>
-        {showShortcuts && (
-          <motion.div className="shortcuts-panel" role="dialog" aria-modal="true" aria-label="Keyboard shortcuts" variants={v.pop} initial="hidden" animate="visible" exit="exit">
-            <div className="shortcuts-panel__header">
-              <strong>Keyboard Shortcuts</strong>
-              <button type="button" className="qr-close" onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: false })} aria-label="Close">✕</button>
-            </div>
-            <ul className="shortcuts-list">
-              <li><kbd>Ctrl+N</kbd> Create new account</li>
-              <li><kbd>Ctrl+B</kbd> Check balance</li>
-              <li><kbd>Ctrl+C</kbd> Copy key (when copy button focused)</li>
-              <li><kbd>Escape</kbd> Close modals</li>
-              <li><kbd>?</kbd> Toggle this help</li>
-              <li><kbd>Tab</kbd> Navigate between fields</li>
-              <li><kbd>Enter</kbd> Submit focused form</li>
-            </ul>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Create / Import Account */}
-      <motion.div className="section" variants={v.fadeSlide} initial="hidden" animate="visible">
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <motion.button onClick={createAccount} {...tap} disabled={loading === 'create'} title="Create account (Ctrl+N)">
-            {loading === 'create' ? <Spinner label="Creating account..." /> : 'Create Account'}
-          </motion.button>
-          <motion.button
-            onClick={() => dispatch({ type: A.SET_SHOW_IMPORT, payload: !showImportForm })}
-            {...tap}
-            style={{ background: '#6366f1' }}
-          >
-            {showImportForm ? 'Cancel Import' : 'Import Account'}
-          </motion.button>
-        </div>
-        <AnimatePresence>
-          {pendingCount > 0 && (
-            <motion.div className="pwa-banner pwa-banner--queue" role="status" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-              {pendingCount} payment{pendingCount > 1 ? 's' : ''} queued offline — will sync when back online.
-            </motion.div>
+          {canInstall && !isDismissed && (
+            <InstallBanner onInstall={install} onDismiss={dismissInstall} />
           )}
         </AnimatePresence>
-
-        <header>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div>
-              <h1>Stellar Remittance Platform</h1>
-              {account && (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                  {editingLabel ? (
-                    <>
-                      <input
-                        type="text"
-                        value={labelDraft}
-                        onChange={(e) => setLabelDraft(e.target.value.slice(0, 50))}
-                        onKeyDown={(e) => { if (e.key === 'Enter') saveLabel(); if (e.key === 'Escape') setEditingLabel(false); }}
-                        placeholder="Add a nickname…"
-                        maxLength={50}
-                        aria-label="Account nickname"
-                        style={{ fontSize: '0.85rem', padding: '2px 6px' }}
-                        autoFocus
-                      />
-                      <button type="button" onClick={saveLabel} style={{ fontSize: '0.8rem' }} aria-label="Save nickname">Save</button>
-                      <button type="button" onClick={() => setEditingLabel(false)} style={{ fontSize: '0.8rem' }} aria-label="Cancel editing nickname">Cancel</button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => { setLabelDraft(accountLabel); setEditingLabel(true); }}
-                      style={{ fontSize: '0.85rem', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'inherit', textDecoration: 'underline dotted' }}
-                      aria-label={accountLabel ? `Account nickname: ${accountLabel}. Click to edit.` : 'Add account nickname'}
-                    >
-                      {accountLabel || `${account.publicKey.slice(0, 6)}…${account.publicKey.slice(-4)}`}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <button
-                type="button"
-                className="theme-toggle-btn"
-                onClick={toggleTheme}
-                aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-                title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-              >
-                {isDark ? '☀️ Light' : '🌙 Dark'}
-              </button>
-              <LanguageSelector />
-              {canInstall && (
-                <button type="button" className="pwa-install-btn" onClick={install} aria-label="Install app" title="Install app">
-                  ⬇ Install
-                </button>
-              )}
-              {!pushEnabled && 'Notification' in window && (
-                <button type="button" className="pwa-install-btn" onClick={() => enablePush(account?.publicKey)} aria-label="Enable push notifications" title="Enable push notifications">
-                  🔔 Notify
-                </button>
-              )}
-              <button
-                type="button"
-                className="shortcuts-help-btn"
-                onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: !showShortcuts })}
-                aria-label="Show keyboard shortcuts"
-                title="Show keyboard shortcuts"
-                aria-expanded={showShortcuts}
-                aria-controls="shortcuts-panel"
-              >
-                ⌨
-              </button>
-              <button
-                type="button"
-                className="shortcuts-help-btn"
-                onClick={() => { setDeepLinkHash(''); setShowTxLookup(true); }}
-                aria-label="Look up transaction by hash"
-                title="Look up transaction by hash"
-              >
-                🔍
-              </button>
-              <NotificationBell />
-              {account && (
-                <button
-                  type="button"
-                  className="shortcuts-help-btn"
-                  onClick={() => setShowSettings(true)}
-                  aria-label="Account settings"
-                  title="Account settings"
-                >
-                  ⚙️
-                </button>
-              )}
-              <NetworkBadge status={networkStatus} />
-              <motion.span
-                animate={{ opacity: [0.6, 1, 0.6] }}
-                transition={{ repeat: Infinity, duration: 2 }}
-                style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
-                aria-label={`WebSocket status: ${wsStatus}`}
-                role="status"
-              >
-                <span style={{ width: 10, height: 10, borderRadius: '50%', background: `var(--ws-${wsStatus})`, display: 'inline-block' }} aria-hidden="true" />
-                <span aria-hidden="true">{wsStatus}</span>
-              </motion.span>
-            </div>
-          </div>
-
-          <AnimatePresence>
-            {updateAvailable && (
-              <motion.div className="pwa-banner pwa-banner--update" role="status" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                <span>A new version is available.</span>
-                <button type="button" className="pwa-banner__btn" onClick={applyUpdate}>Update now</button>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </header>
-
+        {/* Keyboard shortcuts panel */}
         <AnimatePresence>
           {showShortcuts && (
             <motion.div
-              id="shortcuts-panel"
               className="shortcuts-panel"
               role="dialog"
               aria-modal="true"
-              aria-labelledby="shortcuts-title"
-              variants={v.pop} initial="hidden" animate="visible" exit="exit"
+              aria-label="Keyboard shortcuts"
+              variants={v.pop}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
             >
               <div className="shortcuts-panel__header">
-                <strong id="shortcuts-title">Keyboard Shortcuts</strong>
-                <button type="button" className="qr-close" onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: false })} aria-label="Close keyboard shortcuts">✕</button>
+                <strong>Keyboard Shortcuts</strong>
+                <button
+                  type="button"
+                  className="qr-close"
+                  onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: false })}
+                  aria-label="Close"
+                >
+                  ✕
+                </button>
               </div>
               <ul className="shortcuts-list">
-                <li><kbd>Ctrl+N</kbd> Create new account</li>
-                <li><kbd>Ctrl+B</kbd> Check balance</li>
-                <li><kbd>Ctrl+C</kbd> Copy key (when copy button focused)</li>
-                <li><kbd>Escape</kbd> Close modals</li>
-                <li><kbd>?</kbd> Toggle this help</li>
-                <li><kbd>Tab</kbd> Navigate between fields</li>
-                <li><kbd>Enter</kbd> Submit focused form</li>
+                <li>
+                  <kbd>Ctrl+N</kbd> Create new account
+                </li>
+                <li>
+                  <kbd>Ctrl+B</kbd> Check balance
+                </li>
+                <li>
+                  <kbd>Ctrl+C</kbd> Copy key (when copy button focused)
+                </li>
+                <li>
+                  <kbd>Escape</kbd> Close modals
+                </li>
+                <li>
+                  <kbd>?</kbd> Toggle this help
+                </li>
+                <li>
+                  <kbd>Tab</kbd> Navigate between fields
+                </li>
+                <li>
+                  <kbd>Enter</kbd> Submit focused form
+                </li>
               </ul>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <main id="main-content">
-          {/* Create / Import Account */}
-          <motion.section className="section" aria-labelledby="account-heading" variants={v.fadeSlide} initial="hidden" animate="visible">
-            <h2 id="account-heading" className="sr-only">Account</h2>
-            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-              <motion.button
-                onClick={createAccount}
-                {...tap}
-                disabled={loading === 'create'}
-                aria-busy={loading === 'create'}
-                aria-label="Create new Stellar account (Ctrl+N)"
+        {/* Create / Import Account */}
+        <motion.div className="section" variants={v.fadeSlide} initial="hidden" animate="visible">
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <motion.button
+              onClick={createAccount}
+              {...tap}
+              disabled={loading === 'create'}
+              title="Create account (Ctrl+N)"
+            >
+              {loading === 'create' ? <Spinner label="Creating account..." /> : 'Create Account'}
+            </motion.button>
+            <motion.button
+              onClick={() => dispatch({ type: A.SET_SHOW_IMPORT, payload: !showImportForm })}
+              {...tap}
+              style={{ background: '#6366f1' }}
+            >
+              {showImportForm ? 'Cancel Import' : 'Import Account'}
+            </motion.button>
+          </div>
+          <AnimatePresence>
+            {pendingCount > 0 && (
+              <motion.div
+                className="pwa-banner pwa-banner--queue"
+                role="status"
+                variants={v.fadeSlide}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
               >
-                {loading === 'create' ? <Spinner label="Creating account…" /> : 'Create Account'}
-              </motion.button>
-              <motion.button
-                onClick={() => dispatch({ type: A.SET_SHOW_IMPORT, payload: !showImportForm })}
-                {...tap}
-                style={{ background: '#6366f1' }}
-                aria-expanded={showImportForm}
-                aria-controls="import-form"
-              >
-                {showImportForm ? 'Cancel Import' : 'Import Account'}
-              </motion.button>
+                {pendingCount} payment{pendingCount > 1 ? 's' : ''} queued offline — will sync when
+                back online.
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <header>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h1>Stellar Remittance Platform</h1>
+                {account && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    {editingLabel ? (
+                      <>
+                        <input
+                          type="text"
+                          value={labelDraft}
+                          onChange={(e) => setLabelDraft(e.target.value.slice(0, 50))}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') saveLabel();
+                            if (e.key === 'Escape') setEditingLabel(false);
+                          }}
+                          placeholder="Add a nickname…"
+                          maxLength={50}
+                          aria-label="Account nickname"
+                          style={{ fontSize: '0.85rem', padding: '2px 6px' }}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={saveLabel}
+                          style={{ fontSize: '0.8rem' }}
+                          aria-label="Save nickname"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setEditingLabel(false)}
+                          style={{ fontSize: '0.8rem' }}
+                          aria-label="Cancel editing nickname"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setLabelDraft(accountLabel);
+                          setEditingLabel(true);
+                        }}
+                        style={{
+                          fontSize: '0.85rem',
+                          background: 'none',
+                          border: 'none',
+                          cursor: 'pointer',
+                          padding: 0,
+                          color: 'inherit',
+                          textDecoration: 'underline dotted',
+                        }}
+                        aria-label={
+                          accountLabel
+                            ? `Account nickname: ${accountLabel}. Click to edit.`
+                            : 'Add account nickname'
+                        }
+                      >
+                        {accountLabel ||
+                          `${account.publicKey.slice(0, 6)}…${account.publicKey.slice(-4)}`}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <button
+                  type="button"
+                  className="theme-toggle-btn"
+                  onClick={toggleTheme}
+                  aria-label={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+                  title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
+                >
+                  {isDark ? '☀️ Light' : '🌙 Dark'}
+                </button>
+                <LanguageSelector />
+                {!pushEnabled && 'Notification' in window && (
+                  <button
+                    type="button"
+                    className="pwa-install-btn"
+                    onClick={() => enablePush(account?.publicKey)}
+                    aria-label="Enable push notifications"
+                    title="Enable push notifications"
+                  >
+                    🔔 Notify
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="shortcuts-help-btn"
+                  onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: !showShortcuts })}
+                  aria-label="Show keyboard shortcuts"
+                  title="Show keyboard shortcuts"
+                  aria-expanded={showShortcuts}
+                  aria-controls="shortcuts-panel"
+                >
+                  ⌨
+                </button>
+                <button
+                  type="button"
+                  className="shortcuts-help-btn"
+                  onClick={() => {
+                    setDeepLinkHash('');
+                    setShowTxLookup(true);
+                  }}
+                  aria-label="Look up transaction by hash"
+                  title="Look up transaction by hash"
+                >
+                  🔍
+                </button>
+                <NotificationBell />
+                {account && (
+                  <button
+                    type="button"
+                    className="shortcuts-help-btn"
+                    onClick={() => setShowSettings(true)}
+                    aria-label="Account settings"
+                    title="Account settings"
+                  >
+                    ⚙️
+                  </button>
+                )}
+                <NetworkBadge status={networkStatus} />
+                <motion.span
+                  animate={{ opacity: [0.6, 1, 0.6] }}
+                  transition={{ repeat: Infinity, duration: 2 }}
+                  style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
+                  aria-label={`WebSocket status: ${wsStatus}`}
+                  role="status"
+                >
+                  <span
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      background: `var(--ws-${wsStatus})`,
+                      display: 'inline-block',
+                    }}
+                    aria-hidden="true"
+                  />
+                  <span aria-hidden="true">{wsStatus}</span>
+                </motion.span>
+              </div>
             </div>
 
             <AnimatePresence>
-              {showImportForm && (
-                <motion.div id="import-form" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                  <ImportAccountForm onImport={importAccount} loading={loading} />
+              {updateAvailable && (
+                <motion.div
+                  className="pwa-banner pwa-banner--update"
+                  role="status"
+                  variants={v.fadeSlide}
+                  initial="hidden"
+                  animate="visible"
+                  exit="exit"
+                >
+                  <span>A new version is available.</span>
+                  <button type="button" className="pwa-banner__btn" onClick={applyUpdate}>
+                    Update now
+                  </button>
                 </motion.div>
               )}
             </AnimatePresence>
-            {/* Send Payment */}
-            <motion.div className="section" variants={v.fadeSlide}>
-              <ErrorBoundary context="send-payment">
-                <h3>Send Payment</h3>
-                <div className="input-wrap">
-                  <input
-                    type="text"
-                    placeholder="Recipient Public Key"
-                    value={recipient}
-                    onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
-                    onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
-                    style={{ border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
-                    aria-label="Recipient public key"
-                  />
-                  {recipientTouched && <span className="input-icon">{recipientValid ? '✅' : '❌'}</span>}
+          </header>
+
+          <AnimatePresence>
+            {showShortcuts && (
+              <motion.div
+                id="shortcuts-panel"
+                className="shortcuts-panel"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="shortcuts-title"
+                variants={v.pop}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+              >
+                <div className="shortcuts-panel__header">
+                  <strong id="shortcuts-title">Keyboard Shortcuts</strong>
+                  <button
+                    type="button"
+                    className="qr-close"
+                    onClick={() => dispatch({ type: A.SET_SHOW_SHORTCUTS, payload: false })}
+                    aria-label="Close keyboard shortcuts"
+                  >
+                    ✕
+                  </button>
                 </div>
-                <AnimatePresence>
-                  {recipientTouched && !recipientValid && (
-                    <motion.p className="field-error" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                      Invalid Stellar address format (must start with G and be 56 characters)
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-                <div className="input-wrap">
-                  <input
-                    type="text"
-                    placeholder="Amount (XLM)"
-                    value={amount}
-                    onChange={(e) => dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })}
-                    onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
-                    style={{ border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
-                    aria-label="Payment amount in XLM"
-                  />
-                  {amountTouched && <span className="input-icon">{amountValid ? '✅' : '❌'}</span>}
-                </div>
-                <AnimatePresence>
-                  {amountTouched && amountError && (
-                    <motion.p className="field-error" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                      {amountError}
-                    </motion.p>
-                  )}
-                </AnimatePresence>
-                <FeeDisplay amount={amount} visible={amountValid} />
-                {amountValid && (xlmUsdRate
-                  ? <p className="rate-estimate" aria-live="polite">
-                      ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
-                      <span className="rate-source"> · live rate</span>
-                    </p>
-                  : rateLoading && <p className="rate-estimate rate-estimate--loading" aria-live="polite">Loading rate…</p>
+                <ul className="shortcuts-list">
+                  <li>
+                    <kbd>Ctrl+N</kbd> Create new account
+                  </li>
+                  <li>
+                    <kbd>Ctrl+B</kbd> Check balance
+                  </li>
+                  <li>
+                    <kbd>Ctrl+C</kbd> Copy key (when copy button focused)
+                  </li>
+                  <li>
+                    <kbd>Escape</kbd> Close modals
+                  </li>
+                  <li>
+                    <kbd>?</kbd> Toggle this help
+                  </li>
+                  <li>
+                    <kbd>Tab</kbd> Navigate between fields
+                  </li>
+                  <li>
+                    <kbd>Enter</kbd> Submit focused form
+                  </li>
+                </ul>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <main id="main-content">
+            {/* Create / Import Account */}
+            <motion.section
+              className="section"
+              aria-labelledby="account-heading"
+              variants={v.fadeSlide}
+              initial="hidden"
+              animate="visible"
+            >
+              <h2 id="account-heading" className="sr-only">
+                Account
+              </h2>
+              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                <motion.button
+                  onClick={createAccount}
+                  {...tap}
+                  disabled={loading === 'create'}
+                  aria-busy={loading === 'create'}
+                  aria-label="Create new Stellar account (Ctrl+N)"
+                >
+                  {loading === 'create' ? <Spinner label="Creating account…" /> : 'Create Account'}
+                </motion.button>
+                <motion.button
+                  onClick={() => dispatch({ type: A.SET_SHOW_IMPORT, payload: !showImportForm })}
+                  {...tap}
+                  style={{ background: '#6366f1' }}
+                  aria-expanded={showImportForm}
+                  aria-controls="import-form"
+                >
+                  {showImportForm ? 'Cancel Import' : 'Import Account'}
+                </motion.button>
+              </div>
+
+              <AnimatePresence>
+                {showImportForm && (
+                  <motion.div
+                    id="import-form"
+                    variants={v.fadeSlide}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                  >
+                    <ImportAccountForm onImport={importAccount} loading={loading} />
+                  </motion.div>
                 )}
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <motion.button onClick={sendPayment} {...tap} disabled={!recipientValid || !amountValid || loading === 'send'}>
-                    {loading === 'send' ? <Spinner label="Sending payment..." /> : 'Send'}
-                  </motion.button>
-                  {confirmClear ? (
-                    <span className="confirm-clear" role="group" aria-label="Confirm clear form">
-                      <span className="confirm-clear__label">Clear form?</span>
-                      <button type="button" className="confirm-clear__yes" onClick={confirmClearYes} aria-label="Yes, clear the form">Yes</button>
-                      <button type="button" className="confirm-clear__no"  onClick={confirmClearNo}  aria-label="No, keep the form">No</button>
-                    </span>
-                  ) : (
+              </AnimatePresence>
+              {/* Send Payment */}
+              <motion.div className="section" variants={v.fadeSlide}>
+                <ErrorBoundary context="send-payment">
+                  <h3>Send Payment</h3>
+                  <div className="input-wrap">
+                    <input
+                      type="text"
+                      placeholder="Recipient Public Key"
+                      value={recipient}
+                      onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
+                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      style={{
+                        border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
+                      }}
+                      aria-label="Recipient public key"
+                    />
+                    {recipientTouched && (
+                      <span className="input-icon">{recipientValid ? '✅' : '❌'}</span>
+                    )}
+                  </div>
+                  <AnimatePresence>
+                    {recipientTouched && !recipientValid && (
+                      <motion.p
+                        className="field-error"
+                        variants={v.fadeSlide}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                      >
+                        Invalid Stellar address format (must start with G and be 56 characters)
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                  <div className="input-wrap">
+                    <input
+                      type="text"
+                      placeholder="Amount (XLM)"
+                      value={amount}
+                      onChange={(e) =>
+                        dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
+                      }
+                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      style={{
+                        border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
+                      }}
+                      aria-label="Payment amount in XLM"
+                    />
+                    {amountTouched && (
+                      <span className="input-icon">{amountValid ? '✅' : '❌'}</span>
+                    )}
+                  </div>
+                  <AnimatePresence>
+                    {amountTouched && amountError && (
+                      <motion.p
+                        className="field-error"
+                        variants={v.fadeSlide}
+                        initial="hidden"
+                        animate="visible"
+                        exit="exit"
+                      >
+                        {amountError}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                  <FeeDisplay amount={amount} visible={amountValid} />
+                  {amountValid &&
+                    (xlmUsdRate ? (
+                      <p className="rate-estimate" aria-live="polite">
+                        ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                        <span className="rate-source"> · live rate</span>
+                      </p>
+                    ) : (
+                      rateLoading && (
+                        <p className="rate-estimate rate-estimate--loading" aria-live="polite">
+                          Loading rate…
+                        </p>
+                      )
+                    ))}
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <motion.button
-                      className="btn-clear"
-                      onClick={clearForm}
+                      onClick={sendPayment}
                       {...tap}
-                      disabled={loading === 'send' || (!recipient && !amount)}
-                      aria-label="Clear payment form"
+                      disabled={!recipientValid || !amountValid || loading === 'send'}
                     >
-                      Clear
+                      {loading === 'send' ? <Spinner label="Sending payment..." /> : 'Send'}
                     </motion.button>
-                  )}
-                </div>
-              </ErrorBoundary>
-            </motion.div>
+                    {confirmClear ? (
+                      <span className="confirm-clear" role="group" aria-label="Confirm clear form">
+                        <span className="confirm-clear__label">Clear form?</span>
+                        <button
+                          type="button"
+                          className="confirm-clear__yes"
+                          onClick={confirmClearYes}
+                          aria-label="Yes, clear the form"
+                        >
+                          Yes
+                        </button>
+                        <button
+                          type="button"
+                          className="confirm-clear__no"
+                          onClick={confirmClearNo}
+                          aria-label="No, keep the form"
+                        >
+                          No
+                        </button>
+                      </span>
+                    ) : (
+                      <motion.button
+                        className="btn-clear"
+                        onClick={clearForm}
+                        {...tap}
+                        disabled={loading === 'send' || (!recipient && !amount)}
+                        aria-label="Clear payment form"
+                      >
+                        Clear
+                      </motion.button>
+                    )}
+                  </div>
+                </ErrorBoundary>
+              </motion.div>
+
+              <AnimatePresence>
+                {account && (
+                  <motion.div
+                    className="account-info"
+                    variants={v.pop}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    aria-label="Account details"
+                  >
+                    <div className="key-row">
+                      <span className="key-label">Public Key:</span>
+                      <span className="key-value">{account.publicKey}</span>
+                      <CopyButton text={account.publicKey} label="Copy public key" />
+                    </div>
+                    {account.secretKey && (
+                      <div className="key-row">
+                        <span className="key-label">Secret Key:</span>
+                        <span className="key-value">{account.secretKey}</span>
+                        <CopyButton text={account.secretKey} label="Copy secret key" />
+                      </div>
+                    )}
+                    <motion.button
+                      className="qr-trigger"
+                      onClick={() => dispatch({ type: A.SET_SHOW_QR, payload: true })}
+                      {...tap}
+                      aria-label="Show QR code for this account"
+                    >
+                      🔲 Show QR Code
+                    </motion.button>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </motion.section>
 
             <AnimatePresence>
               {account && (
-                <motion.div className="account-info" variants={v.pop} initial="hidden" animate="visible" exit="exit" aria-label="Account details">
-                  <div className="key-row">
-                    <span className="key-label">Public Key:</span>
-                    <span className="key-value">{account.publicKey}</span>
-                    <CopyButton text={account.publicKey} label="Copy public key" />
-                  </div>
-                  {account.secretKey && (
-                    <div className="key-row">
-                      <span className="key-label">Secret Key:</span>
-                      <span className="key-value">{account.secretKey}</span>
-                      <CopyButton text={account.secretKey} label="Copy secret key" />
-                    </div>
-                  )}
-                  <motion.button
-                    className="qr-trigger"
-                    onClick={() => dispatch({ type: A.SET_SHOW_QR, payload: true })}
-                    {...tap}
-                    aria-label="Show QR code for this account"
+                <motion.div variants={v.stagger} initial="hidden" animate="visible" exit="exit">
+                  {/* Balance */}
+                  <motion.section
+                    className="section"
+                    aria-labelledby="balance-heading"
+                    variants={v.fadeSlide}
                   >
-                    🔲 Show QR Code
-                  </motion.button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.section>
+                    <h2 id="balance-heading" className="sr-only">
+                      Balance
+                    </h2>
+                    <motion.button
+                      onClick={checkBalance}
+                      {...tap}
+                      disabled={loading === 'balance'}
+                      aria-busy={loading === 'balance'}
+                      aria-label="Check account balance"
+                    >
+                      {loading === 'balance' ? 'Checking Balance…' : 'Check Balance'}
+                    </motion.button>
+                    <AnimatePresence mode="wait">
+                      {loading === 'balance' ? (
+                        <SkeletonBalance key="loading-balance" />
+                      ) : balance ? (
+                        <motion.div
+                          key="balance-list"
+                          variants={v.pop}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                          style={{ marginTop: 10 }}
+                          aria-label="Account balances"
+                          role="list"
+                        >
+                          {balance.balances.map((b, i) => (
+                            <motion.p
+                              key={i}
+                              variants={v.fadeSlide}
+                              className="balance-row"
+                              role="listitem"
+                            >
+                              <span className="balance-asset">
+                                {b.asset}
+                                {b.asset === 'XLM' && <XLMInfoIcon />}
+                              </span>
+                              <span className="balance-amount">
+                                {formatBalanceWithAsset(b.balance, b.asset)}
+                              </span>
+                            </motion.p>
+                          ))}
+                        </motion.div>
+                      ) : null}
+                    </AnimatePresence>
+                  </motion.section>
 
-          <AnimatePresence>
-            {account && (
-              <motion.div variants={v.stagger} initial="hidden" animate="visible" exit="exit">
-
-                {/* Balance */}
-                <motion.section className="section" aria-labelledby="balance-heading" variants={v.fadeSlide}>
-                  <h2 id="balance-heading" className="sr-only">Balance</h2>
-                  <motion.button
-                    onClick={checkBalance}
-                    {...tap}
-                    disabled={loading === 'balance'}
-                    aria-busy={loading === 'balance'}
-                    aria-label="Check account balance"
+                  {/* Send Payment */}
+                  <motion.section
+                    className="section"
+                    aria-labelledby="send-heading"
+                    variants={v.fadeSlide}
                   >
-                    {loading === 'balance' ? 'Checking Balance…' : 'Check Balance'}
-                  </motion.button>
-                  <AnimatePresence mode="wait">
-                    {loading === 'balance' ? (
-                      <SkeletonBalance key="loading-balance" />
-                    ) : balance ? (
-                      <motion.div
-                        key="balance-list"
-                        variants={v.pop} initial="hidden" animate="visible" exit="exit"
-                        style={{ marginTop: 10 }}
-                        aria-label="Account balances"
-                        role="list"
-                      >
-                        {balance.balances.map((b, i) => (
-                          <motion.p key={i} variants={v.fadeSlide} className="balance-row" role="listitem">
-                            <span className="balance-asset">
-                              {b.asset}
-                              {b.asset === 'XLM' && <XLMInfoIcon />}
-                            </span>
-                            <span className="balance-amount">{formatBalanceWithAsset(b.balance, b.asset)}</span>
-                          </motion.p>
-                        ))}
-                      </motion.div>
-                    ) : null}
-                  </AnimatePresence>
-                </motion.section>
-
-                {/* Send Payment */}
-                <motion.section className="section" aria-labelledby="send-heading" variants={v.fadeSlide}>
-                  <ErrorBoundary context="send-payment">
-                    <h2 id="send-heading">Send Payment</h2>
-                    <AddressBook
-                      onSelect={(address) => dispatch({ type: A.SET_RECIPIENT, payload: address })}
-                      prefillAddress={recipient}
-                    />
-                    <div className="input-wrap">
-                      <label htmlFor="recipient-input" className="sr-only">Recipient public key</label>
-                      <input
-                        id="recipient-input"
-                        type="text"
-                        placeholder="Recipient Public Key"
-                        value={recipient}
-                        onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
-                        onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
-                        style={{ border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
-                        aria-invalid={recipientTouched && !recipientValid}
-                        aria-describedby={recipientTouched && !recipientValid ? 'recipient-error' : undefined}
-                        autoComplete="off"
+                    <ErrorBoundary context="send-payment">
+                      <h2 id="send-heading">Send Payment</h2>
+                      <AddressBook
+                        onSelect={(address) =>
+                          dispatch({ type: A.SET_RECIPIENT, payload: address })
+                        }
+                        prefillAddress={recipient}
                       />
-                      {recipientTouched && <span className="input-icon" aria-hidden="true">{recipientValid ? '✅' : '❌'}</span>}
-                      <button
-                        type="button"
-                        className="qr-scan-btn"
-                        onClick={() => setShowScanner(true)}
-                        aria-label="Scan QR code to fill recipient address"
-                        title="Scan QR"
-                      >
-                        📷
-                      </button>
-                    </div>
-                    <AnimatePresence>
-                      {showScanner && (
-                        <QRScanner
-                          onScan={(address) => {
-                            dispatch({ type: A.SET_RECIPIENT, payload: address });
-                            setShowScanner(false);
-                          }}
-                          onClose={() => setShowScanner(false)}
-                        />
-                      )}
-                    </AnimatePresence>
-                    <AnimatePresence>
-                      {recipientTouched && !recipientValid && (
-                        <motion.p id="recipient-error" className="field-error" role="alert" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                          Invalid Stellar address format (must start with G and be 56 characters)
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-
-                    <div className="input-wrap">
-                      <label htmlFor="amount-input" className="sr-only">Payment amount in XLM</label>
-                      <input
-                        id="amount-input"
-                        type="text"
-                        inputMode="decimal"
-                        placeholder="Amount (XLM)"
-                        value={amount}
-                        onChange={(e) => dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })}
-                        onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
-                        style={{ border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
-                        aria-invalid={amountTouched && !!amountError}
-                        aria-describedby={amountTouched && amountError ? 'amount-error' : undefined}
-                        autoComplete="transaction-amount"
-                      />
-                      {amountTouched && <span className="input-icon" aria-hidden="true">{amountValid ? '✅' : '❌'}</span>}
-                      <motion.button
-                        type="button"
-                        className="btn-send-max"
-                        onClick={handleSendMax}
-                        {...tap}
-                        disabled={xlmBalance === null || loading === 'send'}
-                        aria-label="Send maximum available amount"
-                      >
-                        Max
-                      </motion.button>
-                    </div>
-                    <div style={{ fontSize: '13px', color: 'var(--muted)', marginTop: '-8px', marginBottom: '8px' }}>
-                      <XLMInfoIcon /> XLM is the native Stellar currency
-                    </div>
-                    <AnimatePresence>
-                      {amountTouched && amountError && (
-                        <motion.p id="amount-error" className="field-error" role="alert" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                          {amountError}
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-
-                    <div className="input-wrap memo-wrap">
-                      <label htmlFor="memo-type-select" className="sr-only">Memo type</label>
-                      <select
-                        id="memo-type-select"
-                        value={memoType}
-                        onChange={(e) => dispatch({ type: A.SET_MEMO_TYPE, payload: e.target.value })}
-                        aria-label="Memo type"
-                      >
-                        <option value="text">Text</option>
-                        <option value="id">ID (exchange)</option>
-                      </select>
-                      <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
-                        <label htmlFor="memo-input" className="sr-only">
-                          {memoType === 'id' ? 'Numeric memo ID (required for exchange deposits)' : 'Payment memo (optional, max 28 characters)'}
+                      <div className="input-wrap">
+                        <label htmlFor="recipient-input" className="sr-only">
+                          Recipient public key
                         </label>
                         <input
-                          id="memo-input"
-                          type={memoType === 'id' ? 'number' : 'text'}
-                          inputMode={memoType === 'id' ? 'numeric' : undefined}
-                          placeholder={memoType === 'id' ? 'Numeric memo ID (exchange deposit)' : 'Memo (optional, max 28 chars)'}
-                          value={memo}
-                          onChange={(e) => {
-                            const val = memoType === 'id'
-                              ? e.target.value.replace(/\D/g, '').slice(0, 20)
-                              : e.target.value.slice(0, 28);
-                            dispatch({ type: A.SET_MEMO, payload: val });
-                          }}
+                          id="recipient-input"
+                          type="text"
+                          placeholder="Recipient Public Key"
+                          value={recipient}
+                          onChange={(e) =>
+                            dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })
+                          }
                           onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
-                          aria-label={memoType === 'id' ? 'Numeric memo ID for exchange deposit' : 'Payment memo (optional)'}
-                          maxLength={memoType === 'id' ? 20 : 28}
-                          style={{ paddingRight: memo && memoType === 'text' ? '50px' : '10px' }}
+                          style={{
+                            border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
+                          }}
+                          aria-invalid={recipientTouched && !recipientValid}
+                          aria-describedby={
+                            recipientTouched && !recipientValid ? 'recipient-error' : undefined
+                          }
+                          autoComplete="off"
                         />
-                        {memo && memoType === 'text' && <span className="input-icon" aria-hidden="true">{memo.length}/28</span>}
-                      </div>
-                    </div>
-
-                    <FeeDisplay amount={amount} visible={amountValid} />
-                    {amountValid && (xlmUsdRate
-                      ? <p className="rate-estimate" aria-live="polite">
-                          ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
-                          <span className="rate-source"> · live rate</span>
-                        </p>
-                      : rateLoading && <p className="rate-estimate rate-estimate--loading" aria-live="polite">Loading rate…</p>
-                    )}
-                    <div className="payment-form-actions">
-                      <motion.button
-                        onClick={() => setShowConfirm(true)}
-                        {...tap}
-                        disabled={!recipientValid || !amountValid || loading === 'send' || largeTransactionBlocked}
-                        aria-busy={loading === 'send'}
-                        aria-label="Send XLM payment"
-                      >
-                        {loading === 'send' ? <Spinner label="Sending payment…" /> : 'Send'}
-                      </motion.button>
-                      <InlineConfirmation
-                        isVisible={confirmClear}
-                        message="Clear form?"
-                        onConfirm={confirmClearYes}
-                        onCancel={confirmClearNo}
-                        confirmText="Yes"
-                        cancelText="No"
-                      />
-                      {!confirmClear && (
-                        <motion.button
-                          className="btn-clear"
-                          onClick={clearForm}
-                          {...tap}
-                          disabled={loading === 'send' || (!recipient && !amount)}
-                          aria-label="Clear payment form"
+                        {recipientTouched && (
+                          <span className="input-icon" aria-hidden="true">
+                            {recipientValid ? '✅' : '❌'}
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          className="qr-scan-btn"
+                          onClick={() => setShowScanner(true)}
+                          aria-label="Scan QR code to fill recipient address"
+                          title="Scan QR"
                         >
-                          Clear
+                          📷
+                        </button>
+                      </div>
+                      <AnimatePresence>
+                        {showScanner && (
+                          <QRScanner
+                            onScan={(address) => {
+                              dispatch({ type: A.SET_RECIPIENT, payload: address });
+                              setShowScanner(false);
+                            }}
+                            onClose={() => setShowScanner(false)}
+                          />
+                        )}
+                      </AnimatePresence>
+                      <AnimatePresence>
+                        {recipientTouched && !recipientValid && (
+                          <motion.p
+                            id="recipient-error"
+                            className="field-error"
+                            role="alert"
+                            variants={v.fadeSlide}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                          >
+                            Invalid Stellar address format (must start with G and be 56 characters)
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+
+                      <div className="input-wrap">
+                        <label htmlFor="amount-input" className="sr-only">
+                          Payment amount in XLM
+                        </label>
+                        <input
+                          id="amount-input"
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="Amount (XLM)"
+                          value={amount}
+                          onChange={(e) =>
+                            dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
+                          }
+                          onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
+                          style={{
+                            border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
+                          }}
+                          aria-invalid={amountTouched && !!amountError}
+                          aria-describedby={
+                            amountTouched && amountError ? 'amount-error' : undefined
+                          }
+                          autoComplete="transaction-amount"
+                        />
+                        {amountTouched && (
+                          <span className="input-icon" aria-hidden="true">
+                            {amountValid ? '✅' : '❌'}
+                          </span>
+                        )}
+                        <motion.button
+                          type="button"
+                          className="btn-send-max"
+                          onClick={handleSendMax}
+                          {...tap}
+                          disabled={xlmBalance === null || loading === 'send'}
+                          aria-label="Send maximum available amount"
+                        >
+                          Max
                         </motion.button>
+                      </div>
+                      <div
+                        style={{
+                          fontSize: '13px',
+                          color: 'var(--muted)',
+                          marginTop: '-8px',
+                          marginBottom: '8px',
+                        }}
+                      >
+                        <XLMInfoIcon /> XLM is the native Stellar currency
+                      </div>
+                      <AnimatePresence>
+                        {amountTouched && amountError && (
+                          <motion.p
+                            id="amount-error"
+                            className="field-error"
+                            role="alert"
+                            variants={v.fadeSlide}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                          >
+                            {amountError}
+                          </motion.p>
+                        )}
+                      </AnimatePresence>
+
+                      <div className="input-wrap memo-wrap">
+                        <label htmlFor="memo-type-select" className="sr-only">
+                          Memo type
+                        </label>
+                        <select
+                          id="memo-type-select"
+                          value={memoType}
+                          onChange={(e) =>
+                            dispatch({ type: A.SET_MEMO_TYPE, payload: e.target.value })
+                          }
+                          aria-label="Memo type"
+                        >
+                          <option value="text">Text</option>
+                          <option value="id">ID (exchange)</option>
+                        </select>
+                        <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
+                          <label htmlFor="memo-input" className="sr-only">
+                            {memoType === 'id'
+                              ? 'Numeric memo ID (required for exchange deposits)'
+                              : 'Payment memo (optional, max 28 characters)'}
+                          </label>
+                          <input
+                            id="memo-input"
+                            type={memoType === 'id' ? 'number' : 'text'}
+                            inputMode={memoType === 'id' ? 'numeric' : undefined}
+                            placeholder={
+                              memoType === 'id'
+                                ? 'Numeric memo ID (exchange deposit)'
+                                : 'Memo (optional, max 28 chars)'
+                            }
+                            value={memo}
+                            onChange={(e) => {
+                              const val =
+                                memoType === 'id'
+                                  ? e.target.value.replace(/\D/g, '').slice(0, 20)
+                                  : e.target.value.slice(0, 28);
+                              dispatch({ type: A.SET_MEMO, payload: val });
+                            }}
+                            onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
+                            aria-label={
+                              memoType === 'id'
+                                ? 'Numeric memo ID for exchange deposit'
+                                : 'Payment memo (optional)'
+                            }
+                            maxLength={memoType === 'id' ? 20 : 28}
+                            style={{ paddingRight: memo && memoType === 'text' ? '50px' : '10px' }}
+                          />
+                          {memo && memoType === 'text' && (
+                            <span className="input-icon" aria-hidden="true">
+                              {memo.length}/28
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <FeeDisplay amount={amount} visible={amountValid} />
+                      {amountValid &&
+                        (xlmUsdRate ? (
+                          <p className="rate-estimate" aria-live="polite">
+                            ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                            <span className="rate-source"> · live rate</span>
+                          </p>
+                        ) : (
+                          rateLoading && (
+                            <p className="rate-estimate rate-estimate--loading" aria-live="polite">
+                              Loading rate…
+                            </p>
+                          )
+                        ))}
+                      <div className="payment-form-actions">
+                        <motion.button
+                          onClick={() => setShowConfirm(true)}
+                          {...tap}
+                          disabled={
+                            !recipientValid ||
+                            !amountValid ||
+                            loading === 'send' ||
+                            largeTransactionBlocked
+                          }
+                          aria-busy={loading === 'send'}
+                          aria-label="Send XLM payment"
+                        >
+                          {loading === 'send' ? <Spinner label="Sending payment…" /> : 'Send'}
+                        </motion.button>
+                        <InlineConfirmation
+                          isVisible={confirmClear}
+                          message="Clear form?"
+                          onConfirm={confirmClearYes}
+                          onCancel={confirmClearNo}
+                          confirmText="Yes"
+                          cancelText="No"
+                        />
+                        {!confirmClear && (
+                          <motion.button
+                            className="btn-clear"
+                            onClick={clearForm}
+                            {...tap}
+                            disabled={loading === 'send' || (!recipient && !amount)}
+                            aria-label="Clear payment form"
+                          >
+                            Clear
+                          </motion.button>
+                        )}
+                      </div>
+                      {largeTransactionBlocked && (
+                        <p className="kyc-warning">
+                          Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM
+                          <XLMInfoIcon /> require approved KYC.
+                        </p>
                       )}
+                    </ErrorBoundary>
+                  </motion.section>
+
+                  {/* File Upload */}
+                  <motion.section className="section" variants={v.fadeSlide}>
+                    <h2 className="sr-only">File Upload</h2>
+                    <FileUpload />
+                  </motion.section>
+
+                  {/* Transaction History */}
+                  <motion.div variants={v.fadeSlide}>
+                    <ErrorBoundary context="Transaction History">
+                      <TransactionHistory publicKey={account.publicKey} />
+                    </ErrorBoundary>
+                  </motion.div>
+
+                  {/* Stream Payments */}
+                  <motion.div variants={v.fadeSlide}>
+                    <ErrorBoundary context="Stream Payments">
+                      <StreamPayment publicKey={account.publicKey} />
+                    </ErrorBoundary>
+                  </motion.div>
+
+                  {/* Asset Conversion Calculator */}
+                  <motion.div variants={v.fadeSlide}>
+                    <ConvertWidget />
+                  </motion.div>
+
+                  {/* AMM Pool Browser */}
+                  <motion.div variants={v.fadeSlide}>
+                    <Suspense fallback={<Spinner />}>
+                      <AMMPoolBrowser />
+                    </Suspense>
+                  </motion.div>
+
+                  {/* Account Recovery */}
+                  <motion.div variants={v.fadeSlide}>
+                    <Suspense fallback={<Spinner />}>
+                      <AccountRecovery />
+                    </Suspense>
+                  </motion.div>
+                  {/* Settings Sections Tabs */}
+                  <motion.section className="section" variants={v.fadeSlide}>
+                    <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                      {[
+                        { id: 'multisig', label: '🔐 Multi-Sig' },
+                        { id: 'kyc', label: '📋 KYC' },
+                        { id: 'notifications', label: '🔔 Notifications' },
+                        {
+                          id: 'backup',
+                          label: '💾 Backup',
+                          action: () => setShowBackupSettings(true),
+                        },
+                        ...(userRole === 'admin'
+                          ? [
+                              {
+                                id: 'compliance',
+                                label: '🛡️ Compliance',
+                                action: () => setShowComplianceDashboard(true),
+                              },
+                            ]
+                          : []),
+                      ].map((section) => (
+                        <button
+                          key={section.id}
+                          type="button"
+                          onClick={() => {
+                            if (section.action) {
+                              section.action();
+                            } else {
+                              setActiveSettingsSection(
+                                activeSettingsSection === section.id ? null : section.id
+                              );
+                            }
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            background:
+                              activeSettingsSection === section.id ? '#2563eb' : '#f3f4f6',
+                            color: activeSettingsSection === section.id ? '#fff' : '#333',
+                            border: 'none',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {section.label}
+                        </button>
+                      ))}
                     </div>
-                    {largeTransactionBlocked && (
-                      <p className="kyc-warning">
-                        Large transactions above {KYC_LARGE_TRANSACTION_LIMIT} XLM<XLMInfoIcon /> require approved KYC.
-                      </p>
-                    )}
-                  </ErrorBoundary>
-                </motion.section>
 
-                {/* File Upload */}
-                <motion.section className="section" variants={v.fadeSlide}>
-                  <h2 className="sr-only">File Upload</h2>
-                  <FileUpload />
-                </motion.section>
-
-                {/* Transaction History */}
-                <motion.div variants={v.fadeSlide}>
-                  <ErrorBoundary context="Transaction History">
-                    <TransactionHistory publicKey={account.publicKey} />
-                  </ErrorBoundary>
-                </motion.div>
-
-                {/* Stream Payments */}
-                <motion.div variants={v.fadeSlide}>
-                  <ErrorBoundary context="Stream Payments">
-                    <StreamPayment publicKey={account.publicKey} />
-                  </ErrorBoundary>
-                </motion.div>
-
-                {/* Asset Conversion Calculator */}
-                <motion.div variants={v.fadeSlide}>
-                  <ConvertWidget />
-                </motion.div>
-
-                {/* AMM Pool Browser */}
-                <motion.div variants={v.fadeSlide}>
-                  <Suspense fallback={<Spinner />}>
-                    <AMMPoolBrowser />
-                  </Suspense>
-                </motion.div>
-
+                    <AnimatePresence mode="wait">
+                      {activeSettingsSection === 'multisig' && (
+                        <motion.div
+                          key="multisig"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <Suspense fallback={<Spinner />}>
+                            <MultiSigTransactions publicKey={account.publicKey} />
+                          </Suspense>
+                          <ErrorBoundary context="Multi-Sig Transactions">
+                            <MultiSigTransactions publicKey={account.publicKey} />
+                          </ErrorBoundary>
+                        </motion.div>
+                      )}
+                      {activeSettingsSection === 'kyc' && (
+                        <motion.div
+                          key="kyc"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <Suspense fallback={<Spinner />}>
+                            <KYCForm />
+                          </Suspense>
+                          <ErrorBoundary context="KYC Form">
+                            <KYCForm />
+                          </ErrorBoundary>
+                        </motion.div>
+                      )}
+                      {activeSettingsSection === 'notifications' && (
+                        <motion.div
+                          key="notifications"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <NotificationPreferences />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.section>
+                  {/* Path Payment */}
+                  <motion.div variants={v.fadeSlide}>
+                    <ErrorBoundary context="Path Payment">
+                      <PathPayment account={account} />
+                    </ErrorBoundary>
+                  </motion.div>
                 {/* Account Recovery */}
                 <motion.div variants={v.fadeSlide}>
                   <Suspense fallback={<Spinner />}>
@@ -957,15 +1485,18 @@ function App() {
                   <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
                     {[
-                      { id: 'multisig', label: '🔐 Multi-Sig' },
-                      { id: 'kyc', label: '📋 KYC' },
-                      { id: 'notifications', label: '🔔 Notifications' },
-                      { id: 'backup', label: '💾 Backup', action: () => setShowBackupSettings(true) },
-                      ...(userRole === 'admin' ? [{ id: 'compliance', label: '🛡️ Compliance', action: () => setShowComplianceDashboard(true) }] : []),
+                      { id: 'multisig', label: '🔐 Multi-Sig', ariaLabel: 'Toggle multi-signature transactions panel' },
+                      { id: 'kyc', label: '📋 KYC', ariaLabel: 'Toggle KYC identity verification panel' },
+                      { id: 'notifications', label: '🔔 Notifications', ariaLabel: 'Toggle notification preferences panel' },
+                      { id: 'backup', label: '💾 Backup', ariaLabel: 'Open backup settings', action: () => setShowBackupSettings(true) },
+                      ...(userRole === 'admin' ? [{ id: 'compliance', label: '🛡️ Compliance', ariaLabel: 'Open compliance dashboard', action: () => setShowComplianceDashboard(true) }] : []),
                     ].map((section) => (
                       <button
                         key={section.id}
                         type="button"
+                        aria-label={section.ariaLabel}
+                        aria-expanded={!section.action ? activeSettingsSection === section.id : undefined}
+                        aria-controls={!section.action ? `advanced-section-${section.id}` : undefined}
                         onClick={() => {
                           if (section.action) {
                             section.action();
@@ -991,7 +1522,7 @@ function App() {
 
                   <AnimatePresence mode="wait">
                     {activeSettingsSection === 'multisig' && (
-                      <motion.div key="multisig" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+                      <motion.div id="advanced-section-multisig" key="multisig" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
                         <Suspense fallback={<Spinner />}>
                           <MultiSigTransactions publicKey={account.publicKey} />
                         </Suspense>
@@ -1001,7 +1532,7 @@ function App() {
                       </motion.div>
                     )}
                     {activeSettingsSection === 'kyc' && (
-                      <motion.div key="kyc" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+                      <motion.div id="advanced-section-kyc" key="kyc" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
                         <Suspense fallback={<Spinner />}>
                           <KYCForm />
                         </Suspense>
@@ -1011,7 +1542,7 @@ function App() {
                       </motion.div>
                     )}
                     {activeSettingsSection === 'notifications' && (
-                      <motion.div key="notifications" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+                      <motion.div id="advanced-section-notifications" key="notifications" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
                         <NotificationPreferences />
                       </motion.div>
                     )}
@@ -1023,118 +1554,130 @@ function App() {
                     <PathPayment account={account} />
                   </ErrorBoundary>
                 </motion.div>
+              )}
+            </AnimatePresence>
+          </main>
 
+          <StatusMessage
+            messages={msg.messages}
+            history={msg.history}
+            onRemove={msg.remove}
+            showHistory={true}
+          />
+
+          <AnimatePresence>
+            {showQR && account && (
+              <QRCodeModal
+                publicKey={account.publicKey}
+                onClose={() => dispatch({ type: A.SET_SHOW_QR, payload: false })}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Offline replay prompt */}
+          <AnimatePresence>
+            {showReplayPrompt && pendingCount > 0 && (
+              <motion.div
+                className="replay-modal-overlay"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="replay-title"
+                variants={v.pop}
+                initial="hidden"
+                animate="visible"
+                exit="exit"
+              >
+                <div className="replay-modal">
+                  <h2 id="replay-title">Send queued payments</h2>
+                  <p>
+                    You have {pendingCount} queued payment{pendingCount > 1 ? 's' : ''} waiting to
+                    be sent. Enter your secret key to authorise {pendingCount > 1 ? 'them' : 'it'}.
+                  </p>
+                  <label htmlFor="replay-secret" className="sr-only">
+                    Secret key
+                  </label>
+                  <input
+                    id="replay-secret"
+                    type="password"
+                    placeholder="Secret key (S…)"
+                    value={replaySecret}
+                    onChange={(e) => setReplaySecret(e.target.value)}
+                    autoComplete="off"
+                    aria-describedby="replay-secret-hint"
+                  />
+                  <p id="replay-secret-hint" className="replay-modal__hint">
+                    Your key is used only in memory to sign these transactions and is never stored.
+                  </p>
+                  <div className="replay-modal__actions">
+                    <button
+                      type="button"
+                      onClick={replayQueued}
+                      disabled={!replaySecret}
+                      aria-label="Send queued payments"
+                    >
+                      Send now
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-clear"
+                      onClick={() => {
+                        setShowReplayPrompt(false);
+                        setReplaySecret('');
+                      }}
+                      aria-label="Dismiss, send later"
+                    >
+                      Later
+                    </button>
+                  </div>
+                </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </main>
 
-        <StatusMessage
-          messages={msg.messages}
-          history={msg.history}
-          onRemove={msg.remove}
-          showHistory={true}
-        />
-
-        <AnimatePresence>
-          {showQR && account && (
-            <QRCodeModal publicKey={account.publicKey} onClose={() => dispatch({ type: A.SET_SHOW_QR, payload: false })} />
-          )}
-        </AnimatePresence>
-
-        {/* Offline replay prompt */}
-        <AnimatePresence>
-          {showReplayPrompt && pendingCount > 0 && (
-            <motion.div
-              className="replay-modal-overlay"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="replay-title"
-              variants={v.pop} initial="hidden" animate="visible" exit="exit"
-            >
-              <div className="replay-modal">
-                <h2 id="replay-title">Send queued payments</h2>
-                <p>
-                  You have {pendingCount} queued payment{pendingCount > 1 ? 's' : ''} waiting to be sent.
-                  Enter your secret key to authorise {pendingCount > 1 ? 'them' : 'it'}.
-                </p>
-                <label htmlFor="replay-secret" className="sr-only">Secret key</label>
-                <input
-                  id="replay-secret"
-                  type="password"
-                  placeholder="Secret key (S…)"
-                  value={replaySecret}
-                  onChange={(e) => setReplaySecret(e.target.value)}
-                  autoComplete="off"
-                  aria-describedby="replay-secret-hint"
-                />
-                <p id="replay-secret-hint" className="replay-modal__hint">
-                  Your key is used only in memory to sign these transactions and is never stored.
-                </p>
-                <div className="replay-modal__actions">
-                  <button type="button" onClick={replayQueued} disabled={!replaySecret} aria-label="Send queued payments">
-                    Send now
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-clear"
-                    onClick={() => { setShowReplayPrompt(false); setReplaySecret(''); }}
-                    aria-label="Dismiss, send later"
-                  >
-                    Later
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        <ConfirmSendDialog
-          open={showConfirm}
-          recipient={recipient}
-          amount={amount}
-          asset="XLM"
-          onConfirm={() => { setShowConfirm(false); sendPayment(); }}
-          onCancel={() => setShowConfirm(false)}
-        />
-
-        <AnimatePresence>
-          {showTxLookup && (
-            <TxLookup
-              initialHash={deepLinkHash}
-              accountPublicKey={account?.publicKey ?? ''}
-              onClose={() => { setShowTxLookup(false); setDeepLinkHash(''); }}
-            />
-          )}
-        </AnimatePresence>
-
-      {/* Payment Confirmation Modal */}
-      <AnimatePresence>
-        {showPaymentConfirmation && (
-          <PaymentConfirmationModal
-            isOpen={showPaymentConfirmation}
-            onClose={() => setShowPaymentConfirmation(false)}
-            onConfirm={confirmPayment}
+          <ConfirmSendDialog
+            open={showConfirm}
             recipient={recipient}
             amount={amount}
-            estimatedFee="0.00001"
-            loading={loading === 'send'}
+            asset="XLM"
+            onConfirm={() => {
+              setShowConfirm(false);
+              sendPayment();
+            }}
+            onCancel={() => setShowConfirm(false)}
           />
-        )}
-        {showSettings && account && (
-          <AccountSettings
-            publicKey={account.publicKey}
-            onClose={() => setShowSettings(false)}
-          />
-        )}
 
-        {showComplianceDashboard && (
-          <ErrorBoundary context="Compliance Dashboard">
-            <Suspense fallback={<Spinner />}>
-              <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
-            </Suspense>
-          </ErrorBoundary>
-        )}
+          <AnimatePresence>
+            {showTxLookup && (
+              <TxLookup
+                initialHash={deepLinkHash}
+                accountPublicKey={account?.publicKey ?? ''}
+                onClose={() => {
+                  setShowTxLookup(false);
+                  setDeepLinkHash('');
+                }}
+              />
+            )}
+          </AnimatePresence>
+
+          {/* Payment Confirmation Modal */}
+          <AnimatePresence>
+            {showPaymentConfirmation && (
+              <PaymentConfirmationModal
+                isOpen={showPaymentConfirmation}
+                onClose={() => setShowPaymentConfirmation(false)}
+                onConfirm={confirmPayment}
+                recipient={recipient}
+                amount={amount}
+                estimatedFee="0.00001"
+                loading={loading === 'send'}
+              />
+            )}
+            {showSettings && account && (
+              <AccountSettings
+                publicKey={account.publicKey}
+                onClose={() => setShowSettings(false)}
+              />
+            )}
 
         {showBackupSettings && (
           <Suspense fallback={<Spinner />}>
@@ -1145,6 +1688,23 @@ function App() {
     </motion.div>
     </div>
   </>
+            {showComplianceDashboard && (
+              <ErrorBoundary context="Compliance Dashboard">
+                <Suspense fallback={<Spinner />}>
+                  <ComplianceDashboard onClose={() => setShowComplianceDashboard(false)} />
+                </Suspense>
+              </ErrorBoundary>
+            )}
+
+            {showBackupSettings && (
+              <Suspense fallback={<Spinner />}>
+                <BackupSettings onClose={() => setShowBackupSettings(false)} />
+              </Suspense>
+            )}
+          </AnimatePresence>
+        </motion.div>
+      </div>
+    </>
   );
 }
 

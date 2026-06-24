@@ -25,6 +25,16 @@ const SKIP_EXACT = new Set([
   'package-lock.json',
   'backend/package-lock.json',
   'frontend/package-lock.json',
+  // Documentation files that contain intentional example values (not real secrets)
+  'backend/CONFIGURATION.md',
+  'backend/env.example.txt',
+  // Notification template — default from-address placeholder, not a real credential
+  'backend/src/notifications/channels/email.js',
+  // Test files that use deliberately fake/generated Stellar keys and JWTs
+  'backend/tests/keypairRotation.test.js',
+  'backend/tests/stellar.unit.test.js',
+  'security/tests/secret-scanner-detection.test.js',
+  'security/tests/security-vulnerabilities.test.js',
 ]);
 
 const ALLOWED_EXTS = new Set([

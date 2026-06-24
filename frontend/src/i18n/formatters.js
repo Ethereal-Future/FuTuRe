@@ -79,6 +79,23 @@ export function formatRelativeTime(value, locale = currentLocale()) {
 }
 
 /**
+ * Format an XLM amount for use in input fields.
+ * Always uses '.' as the decimal separator, regardless of locale, so that
+ * the raw value fed into blockchain APIs is never ambiguous.
+ * @param {number|string} value
+ * @returns {string}
+ */
+export function formatXLMInput(value) {
+  const num = Number(value);
+  if (isNaN(num)) return String(value);
+  return new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 7,
+    useGrouping: false,
+  }).format(num);
+}
+
+/**
  * Map a locale code to its preferred currency code.
  * Falls back to USD for unknown locales.
  */

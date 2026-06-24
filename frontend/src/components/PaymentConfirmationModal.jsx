@@ -1,21 +1,25 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
-export function PaymentConfirmationModal({ 
-  isOpen, 
-  onClose, 
-  onConfirm, 
-  recipient, 
-  amount, 
+export function PaymentConfirmationModal({
+  isOpen,
+  onClose,
+  onConfirm,
+  recipient,
+  amount,
   estimatedFee = '0.00001',
-  loading = false 
+  loading = false
 }) {
+  const modalRef = useRef(null);
   const isLargeAmount = parseFloat(amount) > 100;
+
+  useFocusTrap(modalRef, isOpen);
 
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (!isOpen) return;
-      
+
       if (e.key === 'Escape') {
         onClose();
       } else if (e.key === 'Enter' && !loading) {
@@ -40,6 +44,7 @@ export function PaymentConfirmationModal({
       onClick={onClose}
     >
       <motion.div
+        ref={modalRef}
         className="payment-confirmation-modal"
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
@@ -47,24 +52,25 @@ export function PaymentConfirmationModal({
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
-        aria-label="Payment Confirmation"
+        aria-labelledby="payment-confirm-title"
+        aria-describedby="payment-confirm-desc"
       >
         <div className="payment-confirmation-header">
-          <h3>Confirm Payment</h3>
-          <button 
-            className="payment-confirmation-close" 
-            onClick={onClose} 
-            aria-label="Close"
+          <h3 id="payment-confirm-title">Confirm Payment</h3>
+          <button
+            className="payment-confirmation-close"
+            onClick={onClose}
+            aria-label="Close payment confirmation dialog"
             disabled={loading}
           >
             ✕
           </button>
         </div>
 
-        <div className="payment-confirmation-content">
+        <div id="payment-confirm-desc" className="payment-confirmation-content">
           <div className="transaction-summary">
             <h4>Transaction Details</h4>
-            
+
             <div className="summary-row">
               <label>Recipient:</label>
               <div className="recipient-address">
@@ -91,13 +97,14 @@ export function PaymentConfirmationModal({
           </div>
 
           {isLargeAmount && (
-            <motion.div 
+            <motion.div
               className="large-amount-warning"
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.2 }}
+              role="alert"
             >
-              <span className="warning-icon">⚠️</span>
+              <span className="warning-icon" aria-hidden="true">⚠️</span>
               <div>
                 <strong>Large Amount Warning</strong>
                 <p>You are sending over 100 XLM. Please double-check the recipient address.</p>
@@ -107,17 +114,20 @@ export function PaymentConfirmationModal({
         </div>
 
         <div className="payment-confirmation-actions">
-          <button 
+          <button
             className="cancel-button"
             onClick={onClose}
             disabled={loading}
+            aria-label="Cancel payment"
           >
             Cancel
           </button>
-          <button 
+          <button
             className="confirm-button"
             onClick={onConfirm}
             disabled={loading}
+            aria-label={loading ? 'Sending payment, please wait' : 'Confirm and send payment'}
+            aria-busy={loading}
           >
             {loading ? (
               <>
@@ -126,6 +136,7 @@ export function PaymentConfirmationModal({
                   animate={{ rotate: 360 }}
                   transition={{ repeat: Infinity, duration: 0.7, ease: 'linear' }}
                   style={{ display: 'inline-block', marginLeft: 8 }}
+                  aria-hidden="true"
                 >
                   ⟳
                 </motion.span>

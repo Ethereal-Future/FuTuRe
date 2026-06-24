@@ -1,7 +1,14 @@
 {
   "app": {
     "title": "פלטפורמת העברות Stellar",
+    "description": "שלח וקבל תשלומי XLM בצורה מאובטחת ברשת Stellar",
     "loading": "טוען…"
+  },
+  "page": {
+    "dashboard": "לוח בקרה | Stellar",
+    "settings": "הגדרות חשבון | Stellar",
+    "txLookup": "חיפוש עסקה | Stellar",
+    "compliance": "ציות | Stellar"
   },
   "nav": {
     "switchToLight": "עבור למצב בהיר",

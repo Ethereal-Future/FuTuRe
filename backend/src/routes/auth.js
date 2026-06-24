@@ -67,27 +67,41 @@ const userRules = [
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [username, password]
- *             properties:
- *               username:
- *                 type: string
- *                 minLength: 3
- *                 maxLength: 32
- *               password:
- *                 type: string
- *                 minLength: 8
+ *             $ref: '#/components/schemas/RegisterRequest'
+ *           example:
+ *             username: alice
+ *             password: S3cur3P@ss!
  *     responses:
  *       201:
  *         description: User created
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 user:
+ *                   $ref: '#/components/schemas/UserProfile'
+ *             example:
+ *               user:
+ *                 id: usr_01HX
+ *                 username: alice
+ *                 createdAt: '2026-01-15T10:00:00.000Z'
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
  *       409:
  *         description: Username already taken
  *         content:
  *           application/json:
  *             schema:
  *               $ref: '#/components/schemas/Error'
+ *             example:
+ *               error: Username already taken
  *       422:
- *         description: Validation error
+ *         $ref: '#/components/responses/ValidationError'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/register', authRateLimiter, userRules, validateBody, async (req, res) => {
   try {
@@ -112,29 +126,48 @@ router.post('/register', authRateLimiter, userRules, validateBody, async (req, r
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [username, password]
- *             properties:
- *               username:
- *                 type: string
- *               password:
- *                 type: string
+ *             $ref: '#/components/schemas/LoginRequest'
+ *           example:
+ *             username: alice
+ *             password: S3cur3P@ss!
  *     responses:
  *       200:
  *         description: Tokens issued
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 accessToken: { type: string }
- *                 recovered: { type: boolean }
+ *               $ref: '#/components/schemas/LoginResponse'
+ *             example:
+ *               accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+ *               recovered: false
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
  *       401:
  *         description: Invalid credentials
- *       423:
- *         description: Account locked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             example:
+ *               error: Invalid credentials
  *       422:
- *         description: Validation error
+ *         $ref: '#/components/responses/ValidationError'
+ *       423:
+ *         description: Account temporarily locked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 error: { type: string }
+ *                 retryAfter: { type: integer }
+ *             example:
+ *               error: Account is temporarily locked due to too many failed login attempts
+ *               retryAfter: 900
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 const loginRateLimiter = createRateLimiter({
   windowMs: 60000,
@@ -201,19 +234,33 @@ router.post('/login', loginRateLimiter, userRules, validateBody, async (req, res
  * /api/auth/refresh:
  *   post:
  *     summary: Refresh access token
+ *     description: Uses the HttpOnly `refreshToken` cookie to issue a new access token and rotate the refresh token.
  *     tags: [Auth]
  *     security: []
  *     responses:
  *       200:
- *         description: New access token
+ *         description: New access token issued
  *         content:
  *           application/json:
  *             schema:
  *               type: object
  *               properties:
- *                 accessToken: { type: string }
+ *                 accessToken:
+ *                   type: string
+ *             example:
+ *               accessToken: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
  *       401:
  *         description: Invalid or expired refresh token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/Error'
+ *             example:
+ *               error: Invalid or expired refresh token
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/refresh', (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
@@ -232,15 +279,27 @@ router.post('/refresh', (req, res) => {
  * @swagger
  * /api/auth/logout:
  *   post:
- *     summary: Log out (client should discard tokens)
+ *     summary: Log out (clears refresh token cookie)
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Logged out
+ *         description: Logged out successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *             example:
+ *               message: Logged out successfully
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/Unauthorized'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/logout', requireAuth, (_req, res) => {
   res.json({ message: 'Logged out successfully' });
@@ -260,15 +319,19 @@ router.post('/logout', requireAuth, (_req, res) => {
  *         content:
  *           application/json:
  *             schema:
- *               type: object
- *               properties:
- *                 id: { type: string }
- *                 username: { type: string }
- *                 createdAt: { type: string, format: date-time }
+ *               $ref: '#/components/schemas/UserProfile'
+ *             example:
+ *               id: usr_01HX
+ *               username: alice
+ *               createdAt: '2026-01-15T10:00:00.000Z'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: User not found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/profile', requireAuth, (req, res) => {
   const user = getUserById(req.user.sub);
@@ -280,7 +343,7 @@ router.get('/profile', requireAuth, (req, res) => {
  * @swagger
  * /api/auth/admin/unlock:
  *   post:
- *     summary: Admin endpoint to manually unlock an account
+ *     summary: Admin endpoint to manually unlock a locked account
  *     tags: [Auth]
  *     security:
  *       - bearerAuth: []
@@ -294,13 +357,29 @@ router.get('/profile', requireAuth, (req, res) => {
  *             properties:
  *               username:
  *                 type: string
+ *           example:
+ *             username: alice
  *     responses:
  *       200:
  *         description: Account unlocked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *             example:
+ *               message: Account alice has been unlocked
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/Unauthorized'
  *       403:
- *         description: Forbidden (not admin)
+ *         $ref: '#/components/responses/Forbidden'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.post('/admin/unlock', requireAuth, async (req, res) => {
   const { username } = req.body;
@@ -366,6 +445,10 @@ router.post('/mfa/verify', requireAuth, (req, res) => {
  *     responses:
  *       302:
  *         description: Redirect to Google OAuth2 consent screen
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/oauth/google', (req, res) => {
   const clientId = getConfig().oauth.googleClientId;
@@ -401,7 +484,11 @@ router.get('/oauth/google', (req, res) => {
  *       302:
  *         description: Redirect to frontend with tokens
  *       400:
- *         description: Invalid state or authorization code
+ *         $ref: '#/components/responses/BadRequest'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/oauth/google/callback', async (req, res) => {
   const { code, state } = req.query;
@@ -458,11 +545,24 @@ router.get('/oauth/google/callback', async (req, res) => {
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: JSON file containing all user data
+ *         description: JSON file attachment containing all user data (profile, KYC, transactions, notifications)
+ *         content:
+ *           application/json:
+ *             example:
+ *               exportedAt: '2026-06-23T12:00:00.000Z'
+ *               data:
+ *                 id: usr_01HX
+ *                 username: alice
+ *                 publicKey: GCEZWKCA5VLDNRLN3RPRJMRZOX3Z6G5CHCGZWM9CQJHD9QDNHXHXN
+ *                 createdAt: '2026-01-15T10:00:00.000Z'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: User not found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.get('/data-export', requireAuth, async (req, res) => {
   const userId = req.user.sub;
@@ -529,11 +629,25 @@ router.get('/data-export', requireAuth, async (req, res) => {
  *       - bearerAuth: []
  *     responses:
  *       200:
- *         description: Account soft-deleted and data anonymised; permanent deletion in 30 days
+ *         description: Account soft-deleted and data anonymised; permanent deletion scheduled in 30 days
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *                 scheduledPermanentDeletion: { type: string, format: date-time }
+ *             example:
+ *               message: Account scheduled for deletion. Personal data has been anonymised.
+ *               scheduledPermanentDeletion: '2026-07-23T12:00:00.000Z'
  *       401:
- *         description: Unauthorized
+ *         $ref: '#/components/responses/Unauthorized'
  *       404:
- *         description: User not found
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
  */
 router.delete('/account', requireAuth, async (req, res) => {
   const userId = req.user.sub;

@@ -1,7 +1,14 @@
 {
   "app": {
     "title": "Stellar Remittance Platform",
+    "description": "Send and receive XLM payments securely on the Stellar network",
     "loading": "Loading…"
+  },
+  "page": {
+    "dashboard": "Dashboard | Stellar Remittance",
+    "settings": "Account Settings | Stellar Remittance",
+    "txLookup": "Transaction Lookup | Stellar Remittance",
+    "compliance": "Compliance | Stellar Remittance"
   },
   "nav": {
     "switchToLight": "Switch to light mode",

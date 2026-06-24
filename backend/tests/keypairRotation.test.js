@@ -28,17 +28,17 @@ import prisma from '../src/db/client.js';
 import { auditLogger } from '../src/security/index.js';
 import { sendNotification } from '../src/notifications/service.js';
 
-const OLD_PUBLIC  = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const OLD_SECRET  = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-const NEW_PUBLIC  = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
-const NEW_SECRET  = 'SBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
-const MERGE_HASH  = 'abc123mergehash';
+const OLD_PUBLIC = 'GAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const OLD_SECRET = 'SAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const NEW_PUBLIC = 'GBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+const NEW_SECRET = 'SBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';
+const MERGE_HASH = 'abc123mergehash';
 
 const BASE_OPTS = {
   oldPublicKey: OLD_PUBLIC,
   oldSecretKey: OLD_SECRET,
   userId: 'user-1',
-  adminEmail: 'admin@clinic.com',
+  adminEmail: 'admin@example.com',
   correlationId: 'corr-1',
 };
 
@@ -47,7 +47,7 @@ describe('rotateKeypair', () => {
     vi.clearAllMocks();
     createAccount.mockResolvedValue({ publicKey: NEW_PUBLIC, secretKey: NEW_SECRET });
     mergeAccount.mockResolvedValue({ hash: MERGE_HASH, ledger: 100, successful: true });
-    prisma.$transaction.mockImplementation(fn => fn(prisma));
+    prisma.$transaction.mockImplementation((fn) => fn(prisma));
     prisma.user = { update: vi.fn().mockResolvedValue({}) };
     auditLogger.logSecurityEvent.mockResolvedValue({});
     sendNotification.mockResolvedValue({});
@@ -56,7 +56,11 @@ describe('rotateKeypair', () => {
   it('returns new keypair and merge hash on success', async () => {
     const result = await rotateKeypair(BASE_OPTS);
 
-    expect(result).toEqual({ newPublicKey: NEW_PUBLIC, newSecretKey: NEW_SECRET, mergeHash: MERGE_HASH });
+    expect(result).toEqual({
+      newPublicKey: NEW_PUBLIC,
+      newSecretKey: NEW_SECRET,
+      mergeHash: MERGE_HASH,
+    });
   });
 
   it('calls createAccount then mergeAccount with correct args', async () => {
@@ -82,7 +86,11 @@ describe('rotateKeypair', () => {
     expect(auditLogger.logSecurityEvent).toHaveBeenCalledWith(
       'KEYPAIR_ROTATE',
       'user-1',
-      expect.objectContaining({ oldPublicKey: OLD_PUBLIC, newPublicKey: NEW_PUBLIC, mergeHash: MERGE_HASH })
+      expect.objectContaining({
+        oldPublicKey: OLD_PUBLIC,
+        newPublicKey: NEW_PUBLIC,
+        mergeHash: MERGE_HASH,
+      })
     );
   });
 
@@ -90,7 +98,7 @@ describe('rotateKeypair', () => {
     await rotateKeypair(BASE_OPTS);
 
     expect(sendNotification).toHaveBeenCalledWith(
-      expect.objectContaining({ email: 'admin@clinic.com', channels: ['email'] })
+      expect.objectContaining({ email: 'admin@example.com', channels: ['email'] })
     );
   });
 
@@ -105,7 +113,9 @@ describe('rotateKeypair', () => {
   it('throws and does NOT update DB if mergeAccount fails (rollback)', async () => {
     mergeAccount.mockRejectedValue(new Error('tx failed'));
 
-    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow('Balance transfer failed — rotation rolled back');
+    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow(
+      'Balance transfer failed — rotation rolled back'
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
     expect(auditLogger.logSecurityEvent).not.toHaveBeenCalled();
   });
@@ -113,7 +123,9 @@ describe('rotateKeypair', () => {
   it('throws with critical message if DB update fails after successful merge', async () => {
     prisma.$transaction.mockRejectedValue(new Error('DB connection lost'));
 
-    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow('DB update failed after successful balance transfer');
+    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow(
+      'DB update failed after successful balance transfer'
+    );
   });
 
   it('does not throw if audit log fails (non-fatal)', async () => {

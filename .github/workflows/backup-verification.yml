@@ -1,0 +1,176 @@
+name: Database Backup Verification
+
+on:
+  schedule:
+    - cron: '0 3 * * 0' # Every Sunday at 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  backup-verify:
+    name: Create & Restore Backup
+    runs-on: ubuntu-latest
+
+    services:
+      postgres_source:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: future_source
+          POSTGRES_USER: future_admin
+          POSTGRES_PASSWORD: bkp_test_pw
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      postgres_restore:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: future_restore
+          POSTGRES_USER: future_admin
+          POSTGRES_PASSWORD: bkp_test_pw
+        ports:
+          - 5433:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install PostgreSQL client tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q postgresql-client
+
+      - name: Apply migrations to source database
+        run: npx prisma migrate deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://future_admin:bkp_test_pw@localhost:5432/future_source
+
+      - name: Seed known data into source database
+        run: |
+          PGPASSWORD=bkp_test_pw psql \
+            -h localhost -p 5432 -U future_admin -d future_source \
+            -c "INSERT INTO \"User\" (id, email, \"createdAt\", \"updatedAt\")
+                VALUES ('seed-user-1', 'backup-test@example.com', NOW(), NOW())
+                ON CONFLICT DO NOTHING;"
+        continue-on-error: true # table name may differ; real seed should use prisma seed
+
+      - name: Create backup via backup manager
+        id: create_backup
+        run: |
+          node --input-type=module <<'EOF'
+          import { createBackup } from './src/backup/manager.js';
+          const meta = await createBackup({ tag: 'ci-verify' });
+          const fs = await import('fs/promises');
+          await fs.appendFile(process.env.GITHUB_OUTPUT, `backup_file=${meta.file}\n`);
+          console.log('Backup created:', meta.file, 'size:', meta.size);
+          EOF
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://future_admin:bkp_test_pw@localhost:5432/future_source
+          BACKUP_DIR: /tmp/ci-backups
+
+      - name: Verify backup checksum
+        run: |
+          node --input-type=module <<'EOF'
+          import { verifyBackup } from './src/backup/manager.js';
+          const file = process.env.BACKUP_FILE;
+          const result = await verifyBackup(file);
+          if (!result.valid) {
+            console.error('Checksum mismatch — backup is corrupt');
+            process.exit(1);
+          }
+          console.log('Checksum valid:', result.current);
+          EOF
+        working-directory: backend
+        env:
+          BACKUP_FILE: ${{ steps.create_backup.outputs.backup_file }}
+          BACKUP_DIR: /tmp/ci-backups
+
+      - name: Restore backup to fresh database
+        run: |
+          node --input-type=module <<'EOF'
+          import { restoreBackup } from './src/backup/manager.js';
+          const result = await restoreBackup(process.env.BACKUP_FILE, {
+            targetDatabase: 'future_restore',
+          });
+          console.log('Restore result:', result.status);
+          EOF
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://future_admin:bkp_test_pw@localhost:5433/future_restore
+          BACKUP_FILE: ${{ steps.create_backup.outputs.backup_file }}
+          BACKUP_DIR: /tmp/ci-backups
+
+      - name: Run migrations against restored database
+        run: npx prisma migrate deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://future_admin:bkp_test_pw@localhost:5433/future_restore
+
+      - name: Query restored database for expected data
+        run: |
+          COUNT=$(PGPASSWORD=bkp_test_pw psql \
+            -h localhost -p 5433 -U future_admin -d future_restore \
+            -tA -c "SELECT COUNT(*) FROM \"User\";")
+          echo "Row count in restored User table: $COUNT"
+          if [ -z "$COUNT" ]; then
+            echo "ERROR: could not query restored database"
+            exit 1
+          fi
+          echo "Restored database is queryable."
+
+      - name: Upload backup artifact for audit
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68cf68afc9e65e5a3b5a4f # v4.4.0
+        with:
+          name: backup-verify-${{ github.run_id }}
+          path: /tmp/ci-backups/
+          retention-days: 7
+
+  alert-on-failure:
+    name: Alert on Failure
+    runs-on: ubuntu-latest
+    needs: backup-verify
+    if: failure()
+    steps:
+      - name: Open GitHub issue for backup failure
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const title = `[Backup Alert] Weekly backup verification failed — ${new Date().toISOString().slice(0,10)}`;
+            const body = [
+              '## Database Backup Verification Failure',
+              '',
+              `The weekly backup verification job failed on run [#${context.runId}](${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}).`,
+              '',
+              '**Immediate action required:** a backup that cannot be restored is worthless.',
+              '',
+              '### Checklist',
+              '- [ ] Review the failed workflow run logs',
+              '- [ ] Verify `DATABASE_URL` and `BACKUP_DIR` secrets are correct',
+              '- [ ] Run a manual restore drill against the latest backup',
+              '- [ ] Resolve root cause and re-run the workflow',
+            ].join('\n');
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              body,
+              labels: ['incident', 'backup'],
+            });

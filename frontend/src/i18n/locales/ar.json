@@ -1,7 +1,14 @@
 {
   "app": {
     "title": "منصة التحويلات المالية Stellar",
+    "description": "أرسل واستقبل مدفوعات XLM بأمان على شبكة Stellar",
     "loading": "جارٍ التحميل…"
+  },
+  "page": {
+    "dashboard": "لوحة التحكم | Stellar",
+    "settings": "إعدادات الحساب | Stellar",
+    "txLookup": "البحث عن معاملة | Stellar",
+    "compliance": "الامتثال | Stellar"
   },
   "nav": {
     "switchToLight": "التبديل إلى الوضع الفاتح",
@@ -9,10 +16,17 @@
     "light": "☀️ فاتح",
     "dark": "🌙 داكن",
     "install": "⬇ تثبيت",
-    "shortcuts": "اختصارات لوحة المفاتيح (?)"
+    "installLabel": "تثبيت التطبيق",
+    "shortcuts": "اختصارات لوحة المفاتيح (?)",
+    "shortcutsLabel": "عرض اختصارات لوحة المفاتيح",
+    "txLookup": "البحث عن معاملة",
+    "txLookupLabel": "البحث عن معاملة بالرمز",
+    "notifications": "تفعيل الإشعارات",
+    "notificationsLabel": "تفعيل إشعارات الدفع"
   },
   "account": {
     "create": "إنشاء حساب",
+    "createLabel": "إنشاء حساب Stellar جديد (Ctrl+N)",
     "creating": "جارٍ إنشاء الحساب...",
     "import": "استيراد حساب",
     "cancelImport": "إلغاء الاستيراد",
@@ -21,12 +35,21 @@
     "copyPublicKey": "نسخ المفتاح العام",
     "copySecretKey": "نسخ المفتاح السري",
     "showQR": "🔲 عرض رمز QR",
+    "showQRLabel": "عرض رمز QR لهذا الحساب",
     "created": "تم إنشاء الحساب! احفظ مفتاحك السري بأمان.",
-    "imported": "تم استيراد الحساب بنجاح!"
+    "imported": "تم استيراد الحساب بنجاح!",
+    "nickname": "اللقب",
+    "addNickname": "إضافة لقب للحساب",
+    "saveNickname": "حفظ اللقب",
+    "cancelNickname": "إلغاء تعديل اللقب",
+    "settings": "إعدادات الحساب",
+    "details": "تفاصيل الحساب"
   },
   "balance": {
     "check": "التحقق من الرصيد",
-    "checking": "جارٍ التحقق من الرصيد..."
+    "checkLabel": "التحقق من رصيد الحساب",
+    "checking": "جارٍ التحقق من الرصيد...",
+    "balances": "أرصدة الحساب"
   },
   "payment": {
     "title": "إرسال دفعة",
@@ -34,13 +57,80 @@
     "recipientLabel": "المفتاح العام للمستلم",
     "amountPlaceholder": "المبلغ (XLM)",
     "amountLabel": "مبلغ الدفع بـ XLM",
+    "memoLabel": "ملاحظة الدفعة (اختياري)",
+    "memoIdLabel": "معرّف الملاحظة الرقمي (إيداع في البورصة)",
+    "memoType": "نوع الملاحظة",
+    "scanQR": "مسح رمز QR لملء عنوان المستلم",
+    "sendMax": "إرسال الحد الأقصى من المبلغ المتاح",
     "send": "إرسال",
+    "sendLabel": "إرسال دفعة XLM",
     "sending": "جارٍ إرسال الدفعة...",
     "clear": "مسح",
+    "clearLabel": "مسح نموذج الدفع",
     "clearConfirm": "مسح نموذج الدفع؟",
+    "clearYes": "نعم، مسح النموذج",
+    "clearNo": "لا، إبقاء النموذج",
     "sent": "تم إرسال الدفعة! الرمز: {{hash}}",
     "queued": "أنت غير متصل. تم وضع الدفعة في قائمة الانتظار وستتم المزامنة تلقائياً.",
-    "largeWarning": "⚠️ يرجى مراجعة وتأكيد تحذير المعاملة الكبيرة أدناه."
+    "largeWarning": "⚠️ يرجى مراجعة وتأكيد تحذير المعاملة الكبيرة أدناه.",
+    "kycRequired": "المعاملات الكبيرة التي تتجاوز {{limit}} XLM تستلزم موافقة KYC."
+  },
+  "confirmation": {
+    "title": "تأكيد الدفعة",
+    "close": "إغلاق نافذة تأكيد الدفعة",
+    "details": "تفاصيل المعاملة",
+    "recipient": "المستلم:",
+    "amount": "المبلغ:",
+    "fee": "الرسوم التقديرية:",
+    "total": "الإجمالي:",
+    "confirm": "تأكيد الدفعة",
+    "confirmLabel": "تأكيد وإرسال الدفعة",
+    "cancel": "إلغاء",
+    "cancelLabel": "إلغاء الدفعة",
+    "sending": "جارٍ الإرسال، يرجى الانتظار",
+    "largeWarning": "تحذير: مبلغ كبير",
+    "largeWarningDesc": "أنت ترسل أكثر من 100 XLM. يرجى التحقق من عنوان المستلم.",
+    "keyboardHint": "اضغط Enter للتأكيد، Escape للإلغاء"
+  },
+  "qr": {
+    "title": "رمز QR",
+    "closeLabel": "إغلاق نافذة رمز QR",
+    "amountLabel": "مبلغ الدفع لتضمينه في رمز QR",
+    "amountPlaceholder": "تضمين المبلغ (اختياري)",
+    "hint": "يُشفِّر رمز QR طلب دفع لـ {{amount}} XLM",
+    "download": "⬇ تحميل PNG",
+    "downloadLabel": "تحميل رمز QR كصورة PNG",
+    "codeFor": "رمز QR لعنوان Stellar {{key}}"
+  },
+  "security": {
+    "title": "أفضل ممارسات الأمان",
+    "closeLabel": "إغلاق نافذة أفضل ممارسات الأمان",
+    "understand": "لقد فهمت",
+    "understandLabel": "لقد فهمت — إغلاق نافذة أفضل ممارسات الأمان",
+    "tabs": "مواضيع الأمان",
+    "overview": "نظرة عامة على الأمان",
+    "keys": "إدارة المفاتيح السرية",
+    "transactions": "المعاملات الآمنة",
+    "network": "الوعي بالشبكة",
+    "recovery": "في حال حدوث مشكلة"
+  },
+  "advanced": {
+    "title": "الميزات المتقدمة",
+    "multisig": "🔐 توقيع متعدد",
+    "multisigLabel": "تبديل لوحة معاملات التوقيع المتعدد",
+    "kyc": "📋 KYC",
+    "kycLabel": "تبديل لوحة التحقق من الهوية KYC",
+    "notifications": "🔔 الإشعارات",
+    "notificationsLabel": "تبديل لوحة تفضيلات الإشعارات",
+    "backup": "💾 نسخ احتياطي",
+    "backupLabel": "فتح إعدادات النسخ الاحتياطي",
+    "compliance": "🛡️ الامتثال",
+    "complianceLabel": "فتح لوحة الامتثال"
+  },
+  "amountInput": {
+    "label": "المبلغ",
+    "currency": "العملة",
+    "maxLabel": "إرسال الحد الأقصى المتاح: {{amount}}"
   },
   "validation": {
     "invalidAddress": "تنسيق عنوان Stellar غير صالح (يجب أن يبدأ بـ G ويكون 56 حرفاً)"
@@ -51,10 +141,23 @@
     "queued_one": "{{count}} دفعة في قائمة الانتظار — ستتم المزامنة عند الاتصال.",
     "queued_other": "{{count}} دفعات في قائمة الانتظار — ستتم المزامنة عند الاتصال."
   },
+  "replay": {
+    "title": "إرسال الدفعات المعلّقة",
+    "description": "لديك {{count}} دفعة معلّقة في قائمة الانتظار. أدخل مفتاحك السري للتفويض.",
+    "secretLabel": "المفتاح السري",
+    "secretPlaceholder": "المفتاح السري (S…)",
+    "secretHint": "يُستخدم مفتاحك في الذاكرة فقط لتوقيع هذه المعاملات ولا يُخزَّن أبداً.",
+    "sendNow": "إرسال الآن",
+    "sendNowLabel": "إرسال الدفعات المعلّقة",
+    "later": "لاحقاً",
+    "laterLabel": "تجاهل، إرسال لاحقاً"
+  },
   "shortcuts": {
     "title": "اختصارات لوحة المفاتيح",
     "close": "إغلاق",
+    "closeLabel": "إغلاق اختصارات لوحة المفاتيح",
     "createAccount": "إنشاء حساب جديد",
+    "checkBalance": "التحقق من الرصيد",
     "copyKey": "نسخ المفتاح (عند تركيز زر النسخ)",
     "escape": "إغلاق النوافذ",
     "help": "تبديل هذه المساعدة",
@@ -64,10 +167,13 @@
   "network": {
     "connected": "متصل",
     "disconnected": "غير متصل",
-    "reconnecting": "جارٍ إعادة الاتصال"
+    "reconnecting": "جارٍ إعادة الاتصال",
+    "wsStatus": "حالة WebSocket: {{status}}"
   },
   "errors": {
-    "timeout": "انتهت مهلة الطلب. يرجى المحاولة مرة أخرى."
+    "timeout": "انتهت مهلة الطلب. يرجى المحاولة مرة أخرى.",
+    "sendFailed": "فشل إرسال الدفعة. يرجى المحاولة مرة أخرى.",
+    "labelSave": "فشل حفظ اللقب."
   },
   "language": {
     "select": "اللغة",

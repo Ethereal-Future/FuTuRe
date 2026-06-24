@@ -267,6 +267,35 @@ Before starting:
 
 ---
 
+## GitHub Actions Pinning Policy
+
+All `uses:` references in `.github/workflows/` **must** be pinned to a full commit SHA rather than a mutable version tag.
+
+**Why:** A tag like `actions/checkout@v4` can be silently moved to a different commit by the action author (intentionally or after a supply-chain compromise). If that commit contains malicious code it will execute with access to repository secrets. A pinned SHA is immutable — the exact code that was reviewed is the exact code that runs.
+
+### Adding a new action
+
+1. Find the commit SHA for the version you want:
+   ```bash
+   # Using gh CLI
+   gh api repos/<owner>/<action>/git/refs/tags/<tag> --jq '.object.sha'
+   # If the tag points to an annotated tag object, resolve it:
+   gh api repos/<owner>/<action>/git/tags/<sha> --jq '.object.sha'
+   ```
+2. Use the SHA in the workflow file with a human-readable comment:
+   ```yaml
+   uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+   ```
+3. Dependabot (configured in `.github/dependabot.yml`) will open PRs automatically when a new version is available, updating the SHA to the latest commit for the tag. Review the tag comment to confirm the version before merging.
+
+### Reviewing a Dependabot action bump PR
+
+- Check the action's CHANGELOG / release notes for the new version.
+- Confirm the SHA in the PR matches the tag it claims (spot-check via `gh api`).
+- Never approve a SHA update without verifying the tag it corresponds to.
+
+---
+
 ## Dependency Vulnerability Management
 
 ### Automated scanning

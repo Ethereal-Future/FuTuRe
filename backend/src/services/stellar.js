@@ -45,6 +45,13 @@ async function incrementFeeBumpStats(sourcePublicKey, feeStroops) {
 }
 
 /**
+ * Fee Bump Transaction
+ * A fee bump allows a third-party sponsor (e.g. the platform account) to pay the
+ * transaction fee on behalf of the source account. This is useful when users have
+ * low XLM balances and cannot cover fees themselves — the inner transaction is
+ * signed by the original sender, then wrapped so the sponsor covers the fee.
+ * @see https://developers.stellar.org/docs/learn/fundamentals/transactions/fee-bumps
+ *
  * Wrap an inner transaction with a FeeBumpTransaction so the platform account
  * pays the fee instead of the buyer. Fee multiplier is read from FEE_BUMP_MULTIPLIER
  * (default 10×).
@@ -193,9 +200,14 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
   const sourcePublicKey = sourceKeypair.publicKey();
   logger.info('stellar.sendPayment.start', { source: sourcePublicKey, destination, amount, assetCode, memo, memoType, correlationId });
 
+  // Sequence Numbers
+  // loadAccount fetches the current on-chain sequence number for the source account.
+  // Every Stellar transaction must include a sequence number exactly one greater than
+  // the account's last committed transaction. This guarantees transactions execute in
+  // the intended order and prevents replay attacks (an old signed transaction cannot
+  // be resubmitted once the sequence number has advanced).
+  // @see https://developers.stellar.org/docs/learn/fundamentals/transactions/signals#sequence-number
   const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
-  
-  if (assetCode !== 'XLM' && !assetIssuer) {
     throw new Error('ASSET_ISSUER is required for non-XLM payments');
   }
 
@@ -319,6 +331,14 @@ export async function sendPayment(sourceSecret, destination, amount, assetCode =
 }
 
 /**
+ * Trustlines
+ * A trustline is an explicit opt-in by an account to hold, send, or receive a
+ * specific non-native asset (e.g. USDC). Without a trustline, an account cannot
+ * receive that asset. This protects users from receiving unwanted or spam tokens
+ * without their consent. The Operation.changeTrust call below creates or updates
+ * the trustline; setting limit to '0' removes it.
+ * @see https://developers.stellar.org/docs/learn/fundamentals/stellar-data-structures/accounts#trustlines
+ *
  * Create a trustline for a non-XLM asset on an account. No-ops if the trustline already exists.
  * @param {string} sourceSecret - Secret key of the account adding the trustline
  * @param {string} assetCode - Asset code to trust (e.g. 'USDC')
@@ -431,6 +451,20 @@ export async function removeTrustline(sourceSecret, assetCode) {
 
   return { hash: result.hash, assetCode, issuer };
 }
+
+/**
+ * Path Payments
+ * A path payment lets the sender specify one asset to send while the recipient
+ * receives a different asset. The Stellar network automatically routes the
+ * conversion through on-chain order books or AMM liquidity pools to find the
+ * best available exchange rate — no manual swap step required. This is ideal
+ * for cross-currency remittances (e.g. send USDC, recipient receives EUR stablecoin).
+ * Two variants exist: strict-send (fix the send amount, maximise what arrives)
+ * and strict-receive (fix what the recipient gets, minimise what is sent).
+ * Path payment logic for this platform lives in pathPayment.js (sendPathPayment,
+ * findPaths, findPathsStrictReceive).
+ * @see https://developers.stellar.org/docs/learn/fundamentals/transactions/operations-list#path-payment-strict-send
+ */
 
 /**
  * Fetch paginated transaction history for an account from Stellar Horizon.

@@ -3,17 +3,21 @@ import { SUPPORTED_LANGUAGES, RTL_LANGUAGES } from '../i18n';
 
 /**
  * LanguageSelector — dropdown to switch the active language.
- * Automatically updates <html dir> and <html lang> on change.
+ * Updates <html lang>, <html dir>, document.title, and the meta description.
  */
 export function LanguageSelector({ className = '' }) {
   const { i18n, t } = useTranslation();
 
   const handleChange = (e) => {
     const lang = e.target.value;
-    i18n.changeLanguage(lang);
-    const htmlRoot = document.documentElement;
-    htmlRoot.lang = lang;
-    htmlRoot.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
+    i18n.changeLanguage(lang).then(() => {
+      const htmlRoot = document.documentElement;
+      htmlRoot.lang = lang;
+      htmlRoot.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
+      document.title = i18n.t('page.dashboard');
+      const metaDesc = document.querySelector('meta[name="description"]');
+      if (metaDesc) metaDesc.setAttribute('content', i18n.t('app.description'));
+    });
   };
 
   return (
@@ -25,7 +29,9 @@ export function LanguageSelector({ className = '' }) {
       title={t('language.select')}
     >
       {SUPPORTED_LANGUAGES.map(({ code, name }) => (
-        <option key={code} value={code}>{name}</option>
+        <option key={code} value={code}>
+          {name}
+        </option>
       ))}
     </select>
   );

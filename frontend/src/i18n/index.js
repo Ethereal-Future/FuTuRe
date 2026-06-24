@@ -15,13 +15,13 @@ export const RTL_LANGUAGES = new Set(['ar', 'he']);
 
 /** All supported locales with their display metadata */
 export const SUPPORTED_LANGUAGES = [
-  { code: 'en', name: 'English',    dir: 'ltr' },
-  { code: 'ar', name: 'العربية',    dir: 'rtl' },
-  { code: 'he', name: 'עברית',      dir: 'rtl' },
-  { code: 'fr', name: 'Français',   dir: 'ltr' },
-  { code: 'es', name: 'Español',    dir: 'ltr' },
-  { code: 'zh', name: '中文',        dir: 'ltr' },
-  { code: 'pt', name: 'Português',  dir: 'ltr' },
+  { code: 'en', name: 'English', dir: 'ltr' },
+  { code: 'ar', name: 'العربية', dir: 'rtl' },
+  { code: 'he', name: 'עברית', dir: 'rtl' },
+  { code: 'fr', name: 'Français', dir: 'ltr' },
+  { code: 'es', name: 'Español', dir: 'ltr' },
+  { code: 'zh', name: '中文', dir: 'ltr' },
+  { code: 'pt', name: 'Português', dir: 'ltr' },
 ];
 
 i18n
@@ -41,6 +41,9 @@ i18n
     const lang = i18n.language?.split('-')[0] ?? 'en';
     document.documentElement.lang = lang;
     document.documentElement.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
+    document.title = i18n.t('page.dashboard');
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc) metaDesc.setAttribute('content', i18n.t('app.description'));
   });
 
 export default i18n;

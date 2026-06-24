@@ -1,0 +1,239 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1 — Lint & Format
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint & Format
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint backend
+        run: npm run lint
+        working-directory: backend
+
+      - name: Lint frontend
+        run: npm run lint
+        working-directory: frontend
+
+      - name: Typecheck frontend
+        run: npm run typecheck
+        working-directory: frontend
+
+  # ---------------------------------------------------------------------------
+  # Job 2 — Unit Tests
+  # ---------------------------------------------------------------------------
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Backend unit tests
+        run: npx vitest run backend/tests/stellar.unit.test.js
+        env:
+          NODE_ENV: test
+          STELLAR_NETWORK: testnet
+          HORIZON_URL: https://horizon-testnet.stellar.org
+          JWT_SECRET: test-secret
+
+      - name: Frontend unit tests
+        run: npm run test
+        working-directory: frontend
+
+  # ---------------------------------------------------------------------------
+  # Job 3 — Integration Tests (requires Postgres + Redis)
+  # ---------------------------------------------------------------------------
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_DB: future_test
+          POSTGRES_USER: future_admin
+          POSTGRES_PASSWORD: test_password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Run Prisma migrations
+        run: npx prisma migrate deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://future_admin:test_password@localhost:5432/future_test
+
+      - name: Backend integration tests
+        run: npm run test:integration:all
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://future_admin:test_password@localhost:5432/future_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-secret
+          STELLAR_NETWORK: testnet
+          HORIZON_URL: https://horizon-testnet.stellar.org
+          STREAM_SECRET_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+
+  # ---------------------------------------------------------------------------
+  # Job 4 — Security Audit
+  # ---------------------------------------------------------------------------
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: npm audit (root)
+        run: npm audit --audit-level=high
+        continue-on-error: true
+
+      - name: npm audit (backend)
+        run: npm audit --audit-level=high
+        working-directory: backend
+        continue-on-error: true
+
+      - name: npm audit (frontend)
+        run: npm audit --audit-level=high
+        working-directory: frontend
+        continue-on-error: true
+
+      - name: Security test suite
+        run: npx vitest run backend/tests/security.test.js backend/tests/security-pipeline.test.js
+        env:
+          NODE_ENV: test
+          STELLAR_NETWORK: testnet
+          HORIZON_URL: https://horizon-testnet.stellar.org
+          JWT_SECRET: test-secret
+
+  # ---------------------------------------------------------------------------
+  # Job 5 — Build Verification
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_URL: http://localhost:3001
+
+  # ---------------------------------------------------------------------------
+  # Summary — posts a PR comment with the outcome of every job
+  # ---------------------------------------------------------------------------
+  summary:
+    name: CI Summary
+    runs-on: ubuntu-latest
+    if: always() && github.event_name == 'pull_request'
+    needs: [lint, unit, integration, security, build]
+    steps:
+      - name: Post PR summary comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const results = {
+              'Lint & Format':      '${{ needs.lint.result }}',
+              'Unit Tests':         '${{ needs.unit.result }}',
+              'Integration Tests':  '${{ needs.integration.result }}',
+              'Security Audit':     '${{ needs.security.result }}',
+              'Build Verification': '${{ needs.build.result }}',
+            };
+            const icon = r => r === 'success' ? '✅' : r === 'skipped' ? '⏭️' : '❌';
+            const allPassed = Object.values(results).every(r => r === 'success');
+            const rows = Object.entries(results)
+              .map(([name, r]) => `| ${icon(r)} | ${name} | ${r} |`)
+              .join('\n');
+            const body = [
+              `## CI Result — ${allPassed ? '✅ All checks passed' : '❌ Some checks failed'}`,
+              '',
+              '| | Job | Status |',
+              '|---|---|---|',
+              rows,
+              '',
+              `> Commit: ${context.sha.slice(0, 7)}`,
+            ].join('\n');
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('CI Result')
+            );
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
