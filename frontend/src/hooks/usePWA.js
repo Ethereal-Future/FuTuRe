@@ -1,6 +1,117 @@
 import { useEffect, useState, useCallback } from 'react';
 import { subscribePushNotification } from '../api/stellar.js';
 
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+async function webAuthnPost(path, body) {
+  const res = await fetch(`${API_BASE}/api/mobile/auth/webauthn/${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'WebAuthn request failed');
+  return data;
+}
+
+/**
+ * WebAuthn registration and authentication for mobile PWA.
+ * Falls back gracefully when the Web Authentication API is not available.
+ *
+ * @param {string} userId - The authenticated user ID
+ * @returns {{ isSupported, registerBiometric, loginWithBiometric, webAuthnError }}
+ */
+export function useWebAuthn(userId) {
+  const isSupported =
+    typeof window !== 'undefined' &&
+    typeof window.PublicKeyCredential !== 'undefined' &&
+    typeof navigator.credentials?.create === 'function';
+
+  const [webAuthnError, setWebAuthnError] = useState(null);
+
+  const registerBiometric = useCallback(
+    async (deviceName) => {
+      if (!isSupported) throw new Error('WebAuthn is not supported on this device');
+      setWebAuthnError(null);
+      try {
+        // Phase 1: get registration options from server
+        const options = await webAuthnPost('register', { userId, deviceName });
+
+        // Convert base64url challenge to ArrayBuffer for the browser API
+        const challengeBuffer = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+        const userIdBuffer = Uint8Array.from(atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+
+        const credential = await navigator.credentials.create({
+          publicKey: {
+            ...options,
+            challenge: challengeBuffer,
+            user: { ...options.user, id: userIdBuffer },
+          },
+        });
+
+        if (!credential) throw new Error('Credential creation was cancelled');
+
+        // Encode the public key for transmission
+        const publicKey = btoa(String.fromCharCode(...new Uint8Array(credential.response.getPublicKey?.() ?? [])));
+
+        // Phase 2: send credential to server for storage
+        return await webAuthnPost('register', {
+          userId,
+          challengeId: options.challengeId,
+          credential: { id: credential.id, publicKey },
+          deviceName,
+        });
+      } catch (err) {
+        setWebAuthnError(err.message);
+        throw err;
+      }
+    },
+    [userId, isSupported]
+  );
+
+  const loginWithBiometric = useCallback(
+    async () => {
+      if (!isSupported) throw new Error('WebAuthn is not supported on this device');
+      setWebAuthnError(null);
+      try {
+        // Phase 1: get authentication options from server
+        const options = await webAuthnPost('authenticate', { userId });
+
+        const challengeBuffer = Uint8Array.from(atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+        const allowCredentials = (options.allowCredentials || []).map((c) => ({
+          ...c,
+          id: Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), (ch) => ch.charCodeAt(0)),
+        }));
+
+        const assertion = await navigator.credentials.get({
+          publicKey: {
+            ...options,
+            challenge: challengeBuffer,
+            allowCredentials,
+          },
+        });
+
+        if (!assertion) throw new Error('Authentication was cancelled');
+
+        const signature = btoa(String.fromCharCode(...new Uint8Array(assertion.response.signature)));
+
+        // Phase 2: verify assertion with server
+        return await webAuthnPost('authenticate', {
+          userId,
+          challengeId: options.challengeId,
+          assertion: { credentialId: assertion.id, signature },
+        });
+      } catch (err) {
+        setWebAuthnError(err.message);
+        throw err;
+      }
+    },
+    [userId, isSupported]
+  );
+
+  return { isSupported, registerBiometric, loginWithBiometric, webAuthnError };
+}
+
 const DISMISS_KEY = 'pwa_install_dismissed_at';
 const DISMISS_DAYS = 7;
 

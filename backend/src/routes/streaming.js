@@ -88,6 +88,9 @@ router.post('/', streamRules.create, validate, async (req, res) => {
     res.status(201).json(withNextPaymentAt(stream));
   } catch (error) {
     logger.error('streaming.route.create.failed', { error: error.message });
+    if (error.code === 'STREAM_LIMIT_EXCEEDED') {
+      return res.status(429).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -358,6 +361,43 @@ router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
     const stream = await StreamingService.resumeStream(req.params.id);
     res.json(withNextPaymentAt(stream));
   } catch (error) {
+    const statusCode = error.message.includes('not found') ? 404 : 400;
+    res.status(statusCode).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/streaming/{id}/failures:
+ *   get:
+ *     summary: Get failure history for a payment stream
+ *     tags: [Streaming]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: List of failure records for the stream
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/:id/failures', streamRules.idParam, validate, async (req, res) => {
+  try {
+    const stream = await StreamingService.prisma.paymentStream.findUnique({
+      where: { id: req.params.id },
+    });
+    if (!stream) return res.status(404).json({ error: 'Stream not found' });
+
+    const failures = await StreamingService.getStreamFailures(req.params.id);
+    res.json(failures);
+  } catch (error) {
+    logger.error('streaming.route.failures.failed', { error: error.message });
     res.status(500).json({ error: error.message });
   }
 });

@@ -26,6 +26,7 @@ model User {
   kycRecord               KYCRecord?
   amlAlerts               AMLAlert[]
   auditLogs               AuditLog[]
+  webAuthnCredentials     WebAuthnCredential[]
 
   @@index([deletedAt])
 }
@@ -88,28 +89,39 @@ enum StreamStatus {
 }
 
 model PaymentStream {
-  id              String       @id @default(uuid())
+  id              String         @id @default(uuid())
   senderId        String
-  sender          User         @relation("streamSender", fields: [senderId], references: [id])
+  sender          User           @relation("streamSender", fields: [senderId], references: [id])
   recipientId     String
-  recipient       User         @relation("streamRecipient", fields: [recipientId], references: [id])
-  assetCode       String       @default("XLM")
+  recipient       User           @relation("streamRecipient", fields: [recipientId], references: [id])
+  assetCode       String         @default("XLM")
   rateAmount      Decimal
-  intervalSeconds Int          @default(60)
-  startTime       DateTime     @default(now())
+  intervalSeconds Int            @default(60)
+  startTime       DateTime       @default(now())
   endTime         DateTime?
-  lastProcessedAt DateTime     @default(now())
-  totalStreamed    Decimal      @default(0)
-  status          StreamStatus @default(ACTIVE)
-  failureCount    Int          @default(0)
+  lastProcessedAt DateTime       @default(now())
+  totalStreamed    Decimal        @default(0)
+  status          StreamStatus   @default(ACTIVE)
+  failureCount    Int            @default(0)
   metadata        Json?
   senderSecret    String?
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  failures        StreamFailure[]
 
   @@index([senderId])
   @@index([recipientId])
   @@index([status, lastProcessedAt])
+}
+
+model StreamFailure {
+  id        String        @id @default(uuid())
+  streamId  String
+  stream    PaymentStream @relation(fields: [streamId], references: [id], onDelete: Cascade)
+  reason    String
+  createdAt DateTime      @default(now())
+
+  @@index([streamId, createdAt])
 }
 
 model Notification {
@@ -178,6 +190,19 @@ model AMLAlert {
   createdAt     DateTime    @default(now())
 
   @@index([transactionId])
+  @@index([userId])
+}
+
+model WebAuthnCredential {
+  id           String   @id @default(uuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentialId String   @unique
+  publicKey    String
+  counter      BigInt   @default(0)
+  deviceName   String?
+  createdAt    DateTime @default(now())
+
   @@index([userId])
 }
 
