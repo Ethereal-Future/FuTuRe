@@ -833,4 +833,67 @@ router.post('/account/merge', rules.mergeAccount, validate, async (req, res) => 
   }
 });
 
+// POST /api/stellar/trustline/create - Create trustline for non-native asset
+router.post('/trustline/create', [
+  body('sourceSecret').notEmpty(),
+  body('assetCode').notEmpty().isString().isLength({ min: 1, max: 12 }),
+], validate, async (req, res) => {
+  try {
+    const { sourceSecret, assetCode } = req.body;
+    
+    if (assetCode === 'XLM') {
+      return res.status(400).json({ error: 'XLM is native and does not require a trustline' });
+    }
+
+    const issuer = getIssuer(assetCode);
+    if (!issuer) {
+      return res.status(400).json({ error: `No issuer found for asset code: ${assetCode}` });
+    }
+
+    const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+    const sourcePublicKey = sourceKeypair.publicKey();
+    
+    // Load account and create trustline transaction
+    const sourceAccount = await StellarService.getHorizonServer().loadAccount(sourcePublicKey);
+    const asset = new StellarSDK.Asset(assetCode, issuer);
+
+    const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
+      fee: StellarSDK.BASE_FEE,
+      networkPassphrase: StellarService.isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+    }).addOperation(
+      StellarSDK.Operation.changeTrust({
+        asset,
+      })
+    ).setTimeout(30);
+
+    const transaction = txBuilder.build();
+    transaction.sign(sourceKeypair);
+
+    const result = await StellarService.getHorizonServer().submitTransaction(transaction);
+    
+    res.json({
+      success: true,
+      hash: result.hash,
+      assetCode,
+      issuer,
+      ledger: result.ledger,
+    });
+  } catch (error) {
+    logError(req, error, { assetCode: req.body.assetCode });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/stellar/account/:publicKey/balances - Get all asset balances (cached)
+router.get('/account/:publicKey/balances', cacheMiddleware(cacheKeys.balance, TTL.balance), async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const balances = await StellarService.getBalance(publicKey);
+    res.json(balances);
+  } catch (error) {
+    logError(req, error, { publicKey: req.params.publicKey });
+    res.status(500).json({ error: error.message });
+  }
+});
+
 export default router;

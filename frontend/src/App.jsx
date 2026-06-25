@@ -93,6 +93,7 @@ function App() {
     loading,
     recipient,
     amount,
+    assetCode,
     memo,
     memoType,
     showQR,
@@ -400,16 +401,18 @@ function App() {
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
+  const selectedBalance = balance?.balances?.find((b) => b.asset === assetCode)?.balance ?? null;
   const xlmBalance = balance?.balances?.find((b) => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
-  const amountError = validateAmount(amount, xlmBalance !== null ? parseFloat(xlmBalance) : null);
+  const amountError = validateAmount(amount, selectedBalance !== null ? parseFloat(selectedBalance) : null);
   const amountValid = amountTouched && !amountError;
   const largeTransactionBlocked =
-    amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+    amountValid && kycStatus !== 'APPROVED' && assetCode === 'XLM' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
   const handleSendMax = () => {
-    if (xlmBalance === null) return;
-    const maxSendable = Math.max(0, parseFloat(xlmBalance) - 1 - 0.00001);
+    if (selectedBalance === null) return;
+    const fee = assetCode === 'XLM' ? 1.00001 : 0; // fee only applies to XLM
+    const maxSendable = Math.max(0, parseFloat(selectedBalance) - fee);
     dispatch({ type: A.SET_AMOUNT, payload: maxSendable.toFixed(7).replace(/\.?0+$/, '') });
   };
 
@@ -420,7 +423,7 @@ function App() {
 
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
-    if (kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
+    if (assetCode === 'XLM' && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
       msg.error(
         `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
       );
@@ -432,18 +435,19 @@ function App() {
       sourceSecret: account.secretKey,
       destination: recipient,
       amount,
-      assetCode: 'XLM',
+      assetCode,
       memo: memo || undefined,
       memoType: memo ? memoType : undefined,
     };
 
     // Optimistic balance update
-    if (xlmBalance !== null) {
+    if (selectedBalance !== null) {
+      const fee = assetCode === 'XLM' ? 0.00001 : 0;
       const optimisticBalances = balance.balances.map((b) =>
-        b.asset === 'XLM'
+        b.asset === assetCode
           ? {
               ...b,
-              balance: String((parseFloat(b.balance) - parseFloat(amount) - 0.00001).toFixed(7)),
+              balance: String((parseFloat(b.balance) - parseFloat(amount) - fee).toFixed(7)),
             }
           : b
       );
@@ -913,10 +917,33 @@ function App() {
                       </motion.p>
                     )}
                   </AnimatePresence>
+                  {/* Asset Selector */}
+                  <div className="input-wrap">
+                    <label htmlFor="asset-select" style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: 4, display: 'block' }}>Asset</label>
+                    <select
+                      id="asset-select"
+                      value={assetCode}
+                      onChange={(e) => dispatch({ type: A.SET_ASSET_CODE, payload: e.target.value })}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '2px solid #ccc',
+                        borderRadius: '4px',
+                        fontSize: '1rem',
+                      }}
+                      aria-label="Select asset to send"
+                    >
+                      {balance?.balances && balance.balances.map((b) => (
+                        <option key={b.asset} value={b.asset}>
+                          {b.asset} - {formatBalanceWithAsset(b.balance, b.asset)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   <div className="input-wrap">
                     <input
                       type="text"
-                      placeholder="Amount (XLM)"
+                      placeholder={`Amount (${assetCode})`}
                       value={amount}
                       onChange={(e) =>
                         dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
@@ -925,7 +952,7 @@ function App() {
                       style={{
                         border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
-                      aria-label="Payment amount in XLM"
+                      aria-label={`Payment amount in ${assetCode}`}
                     />
                     {amountTouched && (
                       <span className="input-icon">{amountValid ? '✅' : '❌'}</span>
