@@ -64,6 +64,12 @@ vi.mock('../src/db/client.js', () => {
           const stream = mockStreams.find(s => s.id === where.id);
           return Promise.resolve(stream ? { ...stream, sender: mockUsers[0], recipient: mockUsers[1] } : null);
         }),
+        count: vi.fn(({ where } = {}) => {
+          let results = mockStreams;
+          if (where?.senderId) results = results.filter(s => s.senderId === where.senderId);
+          if (where?.status) results = results.filter(s => s.status === where.status);
+          return Promise.resolve(results.length);
+        }),
         groupBy: vi.fn(() => Promise.resolve([])),
         aggregate: vi.fn(() => Promise.resolve({ _sum: { totalStreamed: 0 } })),
       },
@@ -319,5 +325,93 @@ describe('Stream failure escalation', () => {
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ACTIVE');
     expect(res.body.failureCount).toBe(0);
+  });
+});
+
+describe('Stream creation rate limiting (#541)', () => {
+  const senderKey = 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H';
+  const recipientKey = 'GAK6SGA5S75J3Z3B4S3Z3B4S3Z3B4S3Z3B4S3Z3B4S3Z3B4S3Z3B4S3';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockStreams.length = 0;
+    mockFailures.length = 0;
+    delete process.env.MAX_STREAMS_PER_USER;
+    process.env.STREAM_SECRET_ENCRYPTION_KEY = 'test-key-32-chars-xxxxxxxxxxx';
+  });
+
+  it('rejects the 11th active stream creation with 429', async () => {
+    // Pre-fill 10 active streams for the sender
+    for (let i = 0; i < 10; i++) {
+      mockStreams.push({
+        id: `bbbbbbbb-000${i}-4000-a000-000000000000`,
+        senderId: mockUsers[0].id,
+        status: 'ACTIVE',
+        sender: mockUsers[0],
+        recipient: mockUsers[1],
+      });
+    }
+
+    const res = await request(app).post('/api/streaming').send({
+      senderPublicKey: senderKey,
+      recipientPublicKey: recipientKey,
+      senderSecret: 'SCZANGBA5RLKJNMDBJKTA7LCMNSZXJVLCMSBXOLQXGAEOP7SKNU4PX2',
+      rateAmount: 0.1,
+      intervalSeconds: 60,
+    });
+
+    expect(res.status).toBe(429);
+    expect(res.body.error).toMatch(/limit reached/i);
+  });
+
+  it('allows the 10th active stream when limit is 10 (default)', async () => {
+    for (let i = 0; i < 9; i++) {
+      mockStreams.push({
+        id: `cccccccc-000${i}-4000-a000-000000000000`,
+        senderId: mockUsers[0].id,
+        status: 'ACTIVE',
+        sender: mockUsers[0],
+        recipient: mockUsers[1],
+      });
+    }
+
+    const res = await request(app).post('/api/streaming').send({
+      senderPublicKey: senderKey,
+      recipientPublicKey: recipientKey,
+      senderSecret: 'SCZANGBA5RLKJNMDBJKTA7LCMNSZXJVLCMSBXOLQXGAEOP7SKNU4PX2',
+      rateAmount: 0.1,
+      intervalSeconds: 60,
+    });
+
+    expect(res.status).toBe(201);
+  });
+
+  it('respects MAX_STREAMS_PER_USER env var', async () => {
+    process.env.MAX_STREAMS_PER_USER = '2';
+
+    mockStreams.push({
+      id: 'dddddddd-0001-4000-a000-000000000001',
+      senderId: mockUsers[0].id,
+      status: 'ACTIVE',
+      sender: mockUsers[0],
+      recipient: mockUsers[1],
+    });
+    mockStreams.push({
+      id: 'dddddddd-0002-4000-a000-000000000002',
+      senderId: mockUsers[0].id,
+      status: 'ACTIVE',
+      sender: mockUsers[0],
+      recipient: mockUsers[1],
+    });
+
+    const res = await request(app).post('/api/streaming').send({
+      senderPublicKey: senderKey,
+      recipientPublicKey: recipientKey,
+      senderSecret: 'SCZANGBA5RLKJNMDBJKTA7LCMNSZXJVLCMSBXOLQXGAEOP7SKNU4PX2',
+      rateAmount: 0.1,
+      intervalSeconds: 60,
+    });
+
+    expect(res.status).toBe(429);
   });
 });

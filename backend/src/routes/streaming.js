@@ -88,6 +88,9 @@ router.post('/', streamRules.create, validate, async (req, res) => {
     res.status(201).json(withNextPaymentAt(stream));
   } catch (error) {
     logger.error('streaming.route.create.failed', { error: error.message });
+    if (error.code === 'STREAM_LIMIT_EXCEEDED') {
+      return res.status(429).json({ error: error.message });
+    }
     res.status(500).json({ error: error.message });
   }
 });

@@ -50,13 +50,23 @@ function getStreamEncryptionKey() {
 export async function createStream({ senderPublicKey, senderSecret, recipientPublicKey, assetCode, rateAmount, intervalSeconds = 60, endTime, metadata }) {
   if (!senderSecret) throw new Error('senderSecret is required to create a stream');
 
-  const encryptedSecret = encryptToEnvValue(senderSecret, getStreamEncryptionKey());
-
   // Ensure users exist
   const [sender, recipient] = await Promise.all([
     prisma.user.upsert({ where: { publicKey: senderPublicKey }, update: {}, create: { publicKey: senderPublicKey } }),
     prisma.user.upsert({ where: { publicKey: recipientPublicKey }, update: {}, create: { publicKey: recipientPublicKey } }),
   ]);
+
+  const maxStreams = parseInt(process.env.MAX_STREAMS_PER_USER ?? '10', 10);
+  const activeCount = await prisma.paymentStream.count({
+    where: { senderId: sender.id, status: 'ACTIVE' },
+  });
+  if (activeCount >= maxStreams) {
+    const err = new Error(`Active stream limit reached (max ${maxStreams} per user)`);
+    err.code = 'STREAM_LIMIT_EXCEEDED';
+    throw err;
+  }
+
+  const encryptedSecret = encryptToEnvValue(senderSecret, getStreamEncryptionKey());
 
   const stream = await prisma.paymentStream.create({
     data: {
