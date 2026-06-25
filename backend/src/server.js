@@ -38,6 +38,7 @@ import retryRoutes from './routes/retry.js';
 import { processActiveStreams } from './services/streaming.js';
 import { expireStaleTransactions } from './services/multiSig.js';
 import accountsRoutes from './routes/accounts.js';
+import contactsRoutes from './routes/contacts.js';
 import clinicsRoutes from './routes/clinics.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
@@ -160,6 +161,7 @@ app.use('/api/v1/streaming', streamingRoutes);
 app.use('/api/v1/recovery', recoveryRoutes);
 app.use('/api/v1/retry', retryRoutes);
 app.use('/api/v1/accounts', accountsRoutes);
+app.use('/api/v1/accounts/contacts', contactsRoutes);
 app.use('/api/v1/clinics/:id/keypair', clinicsRoutes);
 
 // Health routes (not versioned - used by load balancers)
