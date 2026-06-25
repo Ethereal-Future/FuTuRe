@@ -159,7 +159,23 @@ function App() {
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatusQuery();
-  const { rate: xlmUsdRate, loading: rateLoading } = useExchangeRate(lastWsMessage);
+
+  // Load user's preferred fiat currency from account settings (defaultAsset)
+  const [fiatCurrency, setFiatCurrency] = useState('USD');
+  useEffect(() => {
+    if (!account?.publicKey) return;
+    apiClient.get(`/api/stellar/account/${account.publicKey}/settings`)
+      .then(({ data }) => {
+        const asset = data?.defaultAsset;
+        // Use defaultAsset as fiat currency if it's not a Stellar asset (XLM/USDC/etc.)
+        const STELLAR_ASSETS = new Set(['XLM', 'USDC', 'EURC']);
+        if (asset && !STELLAR_ASSETS.has(asset)) setFiatCurrency(asset);
+        else if (asset === 'EURC') setFiatCurrency('EUR');
+      })
+      .catch(() => { /* use USD default */ });
+  }, [account?.publicKey]);
+
+  const { rate: xlmFiatRate, loading: rateLoading } = useExchangeRate(lastWsMessage, fiatCurrency);
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -1130,8 +1146,11 @@ function App() {
                       <AnimatePresence>
                         {showScanner && (
                           <QRScanner
-                            onScan={(address) => {
-                              dispatch({ type: A.SET_RECIPIENT, payload: address });
+                            onScan={(parsed) => {
+                              dispatch({ type: A.SET_RECIPIENT, payload: parsed.destination });
+                              if (parsed.amount) dispatch({ type: A.SET_AMOUNT, payload: parsed.amount });
+                              if (parsed.memo) dispatch({ type: A.SET_MEMO, payload: parsed.memo });
+                              if (parsed.memoType) dispatch({ type: A.SET_MEMO_TYPE, payload: parsed.memoType });
                               setShowScanner(false);
                             }}
                             onClose={() => setShowScanner(false)}
@@ -1233,52 +1252,74 @@ function App() {
                         >
                           <option value="text">Text</option>
                           <option value="id">ID (exchange)</option>
+                          <option value="hash">Hash (32 bytes)</option>
+                          <option value="return">Return (32 bytes)</option>
                         </select>
                         <div style={{ position: 'relative', flex: 1, minWidth: 0 }}>
                           <label htmlFor="memo-input" className="sr-only">
-                            {memoType === 'id'
-                              ? 'Numeric memo ID (required for exchange deposits)'
-                              : 'Payment memo (optional, max 28 characters)'}
+                            {memoType === 'text' && 'Payment memo (optional, max 28 bytes)'}
+                            {memoType === 'id' && 'Numeric memo ID (uint64, exchange deposit)'}
+                            {(memoType === 'hash' || memoType === 'return') && `${memoType} memo (64 hex chars = 32 bytes)`}
                           </label>
                           <input
                             id="memo-input"
                             type={memoType === 'id' ? 'number' : 'text'}
                             inputMode={memoType === 'id' ? 'numeric' : undefined}
                             placeholder={
-                              memoType === 'id'
-                                ? 'Numeric memo ID (exchange deposit)'
-                                : 'Memo (optional, max 28 chars)'
+                              memoType === 'text' ? 'Memo (optional, max 28 bytes)' :
+                              memoType === 'id' ? 'Numeric memo ID (exchange deposit)' :
+                              `${memoType} memo (64 hex characters)`
                             }
                             value={memo}
                             onChange={(e) => {
-                              const val =
-                                memoType === 'id'
-                                  ? e.target.value.replace(/\D/g, '').slice(0, 20)
-                                  : e.target.value.slice(0, 28);
+                              let val = e.target.value;
+                              if (memoType === 'id') {
+                                val = val.replace(/\D/g, '').slice(0, 20);
+                              } else if (memoType === 'hash' || memoType === 'return') {
+                                val = val.replace(/[^0-9a-fA-F]/g, '').slice(0, 64);
+                              } else {
+                                // text: limit by byte count (UTF-8), not char count
+                                const encoder = new TextEncoder();
+                                while (encoder.encode(val).length > 28) {
+                                  val = val.slice(0, -1);
+                                }
+                              }
                               dispatch({ type: A.SET_MEMO, payload: val });
                             }}
                             onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
                             aria-label={
-                              memoType === 'id'
-                                ? 'Numeric memo ID for exchange deposit'
-                                : 'Payment memo (optional)'
+                              memoType === 'text' ? 'Payment memo (optional)' :
+                              memoType === 'id' ? 'Numeric memo ID for exchange deposit' :
+                              `${memoType} memo (64 hex characters)`
                             }
-                            maxLength={memoType === 'id' ? 20 : 28}
-                            style={{ paddingRight: memo && memoType === 'text' ? '50px' : '10px' }}
+                            maxLength={memoType === 'id' ? 20 : memoType === 'text' ? undefined : 64}
+                            style={{ paddingRight: memo ? '60px' : '10px' }}
                           />
-                          {memo && memoType === 'text' && (
+                          {memo && (
                             <span className="input-icon" aria-hidden="true">
-                              {memo.length}/28
+                              {memoType === 'text' && `${new TextEncoder().encode(memo).length}/28 bytes`}
+                              {memoType === 'id' && memo.length > 0 && '✓'}
+                              {(memoType === 'hash' || memoType === 'return') && `${memo.length}/64`}
                             </span>
                           )}
                         </div>
                       </div>
 
+                      {memo && memoType === 'hash' && memo.length > 0 && memo.length !== 64 && (
+                        <p className="field-error" role="alert">Hash memo must be exactly 64 hex characters (32 bytes)</p>
+                      )}
+                      {memo && memoType === 'return' && memo.length > 0 && memo.length !== 64 && (
+                        <p className="field-error" role="alert">Return memo must be exactly 64 hex characters (32 bytes)</p>
+                      )}
+                      {memo && memoType === 'id' && memo && BigInt(memo) > 18446744073709551615n && (
+                        <p className="field-error" role="alert">Memo ID exceeds max uint64 value</p>
+                      )}
+
                       <FeeDisplay amount={amount} visible={amountValid} />
                       {amountValid &&
-                        (xlmUsdRate ? (
+                        (xlmFiatRate ? (
                           <p className="rate-estimate" aria-live="polite">
-                            ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                            ≈ {(parseFloat(amount) * xlmFiatRate).toFixed(2)} {fiatCurrency}
                             <span className="rate-source"> · live rate</span>
                           </p>
                         ) : (
@@ -1296,7 +1337,8 @@ function App() {
                             !recipientValid ||
                             !amountValid ||
                             loading === 'send' ||
-                            largeTransactionBlocked
+                            largeTransactionBlocked ||
+                            ((memoType === 'hash' || memoType === 'return') && memo.length > 0 && memo.length !== 64)
                           }
                           aria-busy={loading === 'send'}
                           aria-label="Send XLM payment"

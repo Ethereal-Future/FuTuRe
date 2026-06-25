@@ -27,6 +27,7 @@ model User {
   amlAlerts               AMLAlert[]
   auditLogs               AuditLog[]
   webAuthnCredentials     WebAuthnCredential[]
+  contacts                Contact[]
 
   @@index([deletedAt])
 }
@@ -240,4 +241,16 @@ model ClientError {
 
   @@index([createdAt])
   @@index([context])
+}
+
+model Contact {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  address   String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, address])
+  @@index([userId])
 }

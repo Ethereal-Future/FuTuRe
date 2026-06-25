@@ -211,3 +211,17 @@ export async function createAccountMerge(payload, options = {}) {
   const response = await apiClient.post('/api/stellar/account/merge', payload, options);
   return response.data;
 }
+
+export async function getContacts(options = {}) {
+  const response = await apiClient.get('/api/accounts/contacts', options);
+  return response.data.contacts;
+}
+
+export async function createContact(payload, options = {}) {
+  const response = await apiClient.post('/api/accounts/contacts', payload, options);
+  return response.data.contact;
+}
+
+export async function deleteContact(id, options = {}) {
+  await apiClient.delete(`/api/accounts/contacts/${id}`, options);
+}

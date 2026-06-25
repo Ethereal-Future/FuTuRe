@@ -20,6 +20,9 @@ function getExchangeRateTimeout() {
 // CoinGecko coin IDs for supported assets
 const COINGECKO_IDS = { XLM: 'stellar', USDC: 'usd-coin' };
 
+// Fiat currencies supported as vs_currencies by CoinGecko
+const FIAT_CURRENCIES = new Set(['USD', 'EUR', 'GBP', 'JPY', 'PHP', 'INR', 'MXN', 'BRL', 'AUD', 'CAD', 'CHF', 'SGD', 'HKD', 'KRW', 'NGN']);
+
 // ---------------------------------------------------------------------------
 // In-memory cache  { key: { rate, fetchedAt } }
 // ---------------------------------------------------------------------------
@@ -62,19 +65,23 @@ async function fetchFromCoinGecko(from, to) {
   lastFetchAt = now;
 
   const fromId = COINGECKO_IDS[from];
-  const toId = COINGECKO_IDS[to];
-  if (!fromId || !toId) return null;
+  if (!fromId) return null;
+
+  // "to" can be a known fiat currency or a crypto with a CoinGecko ID
+  const isFiat = FIAT_CURRENCIES.has(to);
+  const toId   = COINGECKO_IDS[to];
+  if (!isFiat && !toId) return null;
+  const vsCurrency = isFiat ? to.toLowerCase() : (toId === 'usd-coin' ? 'usd' : toId);
 
   try {
     const apiKey = process.env.COINGECKO_API_KEY;
     const headers = apiKey ? { 'x-cg-demo-api-key': apiKey } : {};
     const res = await fetch(
-      `${COINGECKO_BASE}/simple/price?ids=${fromId}&vs_currencies=${toId === 'usd-coin' ? 'usd' : toId}`,
-      { headers, signal: AbortSignal.timeout(getExchangeRateTimeout()) },
+      `${COINGECKO_BASE}/simple/price?ids=${fromId}&vs_currencies=${vsCurrency}`,
+      { headers, signal: AbortSignal.timeout(5_000) }
     );
     if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
     const data = await res.json();
-    const vsCurrency = toId === 'usd-coin' ? 'usd' : toId;
     const rate = data[fromId]?.[vsCurrency];
     if (rate == null) return null;
     logger.debug('exchangeRate.coingecko', { from, to, rate });
