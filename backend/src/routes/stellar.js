@@ -519,6 +519,60 @@ router.get(
 
 /**
  * @swagger
+ * /api/stellar/fee-estimate:
+ *   get:
+ *     summary: Get current fee estimate
+ *     description: Returns the current base fee in both stroops and XLM for transaction estimation
+ *     tags: [Stellar]
+ *     responses:
+ *       200:
+ *         description: Fee estimate retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 baseFeeBump:
+ *                   type: integer
+ *                   description: Base fee in stroops (1 stroop = 0.0000001 XLM)
+ *                 baseFeeXLM:
+ *                   type: string
+ *                   description: Base fee in XLM
+ *                 recommendedFeeMultiplier:
+ *                   type: number
+ *                   description: Multiplier for base fee based on network congestion
+ *             example:
+ *               baseFeeBump: 100
+ *               baseFeeXLM: "0.0000100"
+ *               recommendedFeeMultiplier: 1
+ *       500:
+ *         description: Failed to retrieve fee estimate
+ */
+router.get(
+  '/fee-estimate',
+  cacheMiddleware(TTL.FEE_STATS, () => cacheKeys.feeStats()),
+  async (req, res) => {
+    const correlationId = req.correlationId;
+    try {
+      const server = StellarService.getHorizonServer();
+      const ledger = await server.ledgers().order('desc').limit(1).call();
+      const baseFeeBump = ledger.records[0].base_fee_in_stroops || 100;
+      
+      res.json({
+        baseFeeBump,
+        baseFeeXLM: (baseFeeBump / 10000000).toFixed(7),
+        recommendedFeeMultiplier: 1,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logError(req, error, { correlationId });
+      res.status(500).json({ error: 'Failed to retrieve fee estimate' });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/stellar/exchange-rate/{from}/{to}:
  *   get:
  *     summary: Get exchange rate
