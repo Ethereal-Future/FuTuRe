@@ -40,6 +40,8 @@ import { expireStaleTransactions } from './services/multiSig.js';
 import accountsRoutes from './routes/accounts.js';
 import contactsRoutes from './routes/contacts.js';
 import clinicsRoutes from './routes/clinics.js';
+import adminRoutes from './routes/admin.js';
+import { getFederationDomain } from './services/federation.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
@@ -163,6 +165,19 @@ app.use('/api/v1/retry', retryRoutes);
 app.use('/api/v1/accounts', accountsRoutes);
 app.use('/api/v1/accounts/contacts', contactsRoutes);
 app.use('/api/v1/clinics/:id/keypair', clinicsRoutes);
+app.use('/api/v1/admin', adminRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/stellar', stellarRoutes);
+app.get('/.well-known/stellar.toml', (_req, res) => {
+  const baseUrl = process.env.SERVER_BASE_URL || 'http://localhost:3001';
+  res.type('text/plain').send([
+    `FEDERATION_SERVER="${baseUrl}/api/v1/stellar/federation"`,
+    `SIGNING_KEY="${process.env.STELLAR_SIGNING_KEY || ''}"`,
+    `NETWORK_PASSPHRASE="${process.env.STELLAR_NETWORK === 'mainnet' ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015'}"`,
+    `VERSION="2.0.0"`,
+    `# Federation domain: ${getFederationDomain()}`,
+  ].join('\n'));
+});
 
 // Health routes (not versioned - used by load balancers)
 app.use('/', healthRoutes);

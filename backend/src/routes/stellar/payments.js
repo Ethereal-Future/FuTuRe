@@ -7,7 +7,7 @@ import { dispatchEvent } from '../../webhooks/dispatcher.js';
 import { keys as cacheKeys, invalidateBalance } from '../../cache/appCache.js';
 import { getSubscriptionByPublicKey, sendWebPush } from '../../notifications/webPush.js';
 import logger from '../../config/logger.js';
-import { createRateLimiter } from '../../middleware/rateLimiter.js';
+import { createPerUserRateLimiter } from '../../middleware/rateLimiter.js';
 
 const router = express.Router();
 
@@ -33,7 +33,7 @@ function handleError(res, error, fallbackMessage) {
 }
 
 // Stricter rate limit for payment endpoint (10 req/min)
-const paymentRateLimiter = createRateLimiter({
+const paymentRateLimiter = createPerUserRateLimiter({
   windowMs: 60000,
   max: 10,
   message: 'Too many payment requests, please try again later.',
