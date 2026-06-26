@@ -13,6 +13,7 @@ export const A = {
   SET_AMOUNT: 'SET_AMOUNT',
   SET_MEMO: 'SET_MEMO',
   SET_MEMO_TYPE: 'SET_MEMO_TYPE',
+  SET_ASSET_CODE: 'SET_ASSET_CODE',
   RESET_FORM: 'RESET_FORM',
   SET_SHOW_QR: 'SET_SHOW_QR',
   SET_SHOW_IMPORT: 'SET_SHOW_IMPORT',
@@ -32,6 +33,7 @@ export const initialState = {
   loading: '',         // 'create' | 'balance' | 'send' | 'import' | ''
   recipient: '',
   amount: '',
+  assetCode: 'XLM',    // selected asset for payment
   memo: '',
   memoType: 'text',    // 'text' | 'id'
   showQR: false,
@@ -63,8 +65,10 @@ export function appReducer(state, action) {
       return { ...state, memo: action.payload };
     case A.SET_MEMO_TYPE:
       return { ...state, memoType: action.payload };
+    case A.SET_ASSET_CODE:
+      return { ...state, assetCode: action.payload };
     case A.RESET_FORM:
-      return { ...state, recipient: '', amount: '', memo: '', memoType: 'text' };
+      return { ...state, recipient: '', amount: '', memo: '', memoType: 'text', assetCode: 'XLM' };
     case A.SET_SHOW_QR:
       return { ...state, showQR: action.payload };
     case A.SET_SHOW_IMPORT:

@@ -9,7 +9,10 @@ import {
   getAccountLabel,
   updateAccountLabel,
   sendPayment as sendStellarPayment,
+  createTrustline,
+  batchPayment,
 } from './api/stellar.js';
+import { verifyRecoveryCode, getMFAStatus } from './api/auth.js';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { isValidStellarAddress } from './utils/validateStellarAddress';
 import { validateAmount, formatAmount } from './utils/validateAmount';
@@ -93,6 +96,7 @@ function App() {
     loading,
     recipient,
     amount,
+    assetCode,
     memo,
     memoType,
     showQR,
@@ -136,6 +140,13 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [lastWsMessage, setLastWsMessage] = useState(null);
   const [activeSettingsSection, setActiveSettingsSection] = useState(null); // null, 'multisig', 'kyc', 'notifications'
+  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
+  const [trustlineAsset, setTrustlineAsset] = useState(null);
+  const [trustlineLoading, setTrustlineLoading] = useState(false);
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchRecipients, setBatchRecipients] = useState([]);
+  const [showRecoveryCodeEntry, setShowRecoveryCodeEntry] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState('');
   const { isDark, toggleTheme } = useTheme();
   useRTL();
   const prefersReduced = useReducedMotion();
@@ -400,16 +411,18 @@ function App() {
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
+  const selectedBalance = balance?.balances?.find((b) => b.asset === assetCode)?.balance ?? null;
   const xlmBalance = balance?.balances?.find((b) => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
-  const amountError = validateAmount(amount, xlmBalance !== null ? parseFloat(xlmBalance) : null);
+  const amountError = validateAmount(amount, selectedBalance !== null ? parseFloat(selectedBalance) : null);
   const amountValid = amountTouched && !amountError;
   const largeTransactionBlocked =
-    amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+    amountValid && kycStatus !== 'APPROVED' && assetCode === 'XLM' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
   const handleSendMax = () => {
-    if (xlmBalance === null) return;
-    const maxSendable = Math.max(0, parseFloat(xlmBalance) - 1 - 0.00001);
+    if (selectedBalance === null) return;
+    const fee = assetCode === 'XLM' ? 1.00001 : 0; // fee only applies to XLM
+    const maxSendable = Math.max(0, parseFloat(selectedBalance) - fee);
     dispatch({ type: A.SET_AMOUNT, payload: maxSendable.toFixed(7).replace(/\.?0+$/, '') });
   };
 
@@ -420,7 +433,7 @@ function App() {
 
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
-    if (kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
+    if (assetCode === 'XLM' && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
       msg.error(
         `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
       );
@@ -432,18 +445,19 @@ function App() {
       sourceSecret: account.secretKey,
       destination: recipient,
       amount,
-      assetCode: 'XLM',
+      assetCode,
       memo: memo || undefined,
       memoType: memo ? memoType : undefined,
     };
 
     // Optimistic balance update
-    if (xlmBalance !== null) {
+    if (selectedBalance !== null) {
+      const fee = assetCode === 'XLM' ? 0.00001 : 0;
       const optimisticBalances = balance.balances.map((b) =>
-        b.asset === 'XLM'
+        b.asset === assetCode
           ? {
               ...b,
-              balance: String((parseFloat(b.balance) - parseFloat(amount) - 0.00001).toFixed(7)),
+              balance: String((parseFloat(b.balance) - parseFloat(amount) - fee).toFixed(7)),
             }
           : b
       );
@@ -480,6 +494,107 @@ function App() {
       }
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
+    }
+  };
+
+  const handleCreateTrustline = async () => {
+    if (!account || !trustlineAsset) return;
+    
+    setTrustlineLoading(true);
+    try {
+      await createTrustline(account.secretKey, trustlineAsset);
+      msg.success(`Trustline created for ${trustlineAsset}!`);
+      checkBalance();
+      setTrustlineAsset(null);
+    } catch (error) {
+      logError(error, { context: 'createTrustline' });
+      msg.error(getFriendlyError(error));
+    } finally {
+      setTrustlineLoading(false);
+    }
+  };
+
+  const handleAssetChange = async (newAssetCode) => {
+    dispatch({ type: A.SET_ASSET_CODE, payload: newAssetCode });
+    
+    // Check if non-native asset requires trustline
+    if (newAssetCode !== 'XLM') {
+      const hasTrustline = balance?.balances?.some((b) => b.asset === newAssetCode);
+      if (!hasTrustline) {
+        setTrustlineAsset(newAssetCode);
+      }
+    }
+  };
+
+  const addBatchRecipient = () => {
+    if (!recipientValid || !amountValid) return;
+    setBatchRecipients([...batchRecipients, { destination: recipient, amount, assetCode }]);
+    dispatch({ type: A.SET_RECIPIENT, payload: '' });
+    dispatch({ type: A.SET_AMOUNT, payload: '' });
+  };
+
+  const removeBatchRecipient = (index) => {
+    setBatchRecipients(batchRecipients.filter((_, i) => i !== index));
+  };
+
+  const confirmBatchPayment = async () => {
+    if (!account || batchRecipients.length === 0) return;
+    
+    dispatch({ type: A.SET_LOADING, payload: 'send' });
+    const payload = {
+      sourceSecret: account.secretKey,
+      payments: batchRecipients,
+      memo: memo || undefined,
+      memoType: memo ? memoType : undefined,
+    };
+
+    // Optimistic balance update
+    if (balance) {
+      const optimisticBalances = balance.balances.map((b) => {
+        const totalReduced = batchRecipients
+          .filter((p) => p.assetCode === b.asset)
+          .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+        const fee = b.asset === 'XLM' ? 0.00001 : 0;
+        return {
+          ...b,
+          balance: String((parseFloat(b.balance) - totalReduced - fee).toFixed(7)),
+        };
+      });
+      dispatch({ type: A.SET_BALANCE_OPTIMISTIC, payload: { balances: optimisticBalances } });
+    }
+
+    try {
+      const data = await batchPayment(payload);
+      msg.success(
+        `Batch payment sent to ${batchRecipients.length} recipients! Hash: ${data.hash.slice(0, 8)}…`,
+        { hash: data.hash }
+      );
+      setBatchRecipients([]);
+      setBatchMode(false);
+      resetForm();
+      checkBalance();
+      setShowPaymentConfirmation(false);
+    } catch (error) {
+      dispatch({ type: A.REVERT_BALANCE });
+      logError(error, { context: 'batchPayment' });
+      msg.error(getFriendlyError(error));
+    } finally {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    }
+  };
+
+  const handleRecoveryCodeSubmit = async () => {
+    if (!account) return;
+    
+    setShowRecoveryCodeEntry(false);
+    try {
+      const result = await verifyRecoveryCode(account.publicKey, recoveryCode);
+      msg.success('Recovery code accepted! You are logged in.');
+      setRecoveryCode('');
+    } catch (error) {
+      logError(error, { context: 'recovery-code' });
+      msg.error(getFriendlyError(error));
+      setShowRecoveryCodeEntry(true);
     }
   };
 
@@ -617,7 +732,7 @@ function App() {
           </AnimatePresence>
 
           <header>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="app-header-row">
               <div>
                 <h1>Stellar Remittance Platform</h1>
                 {account && (
@@ -684,7 +799,7 @@ function App() {
                   </div>
                 )}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div className="header-actions">
                 <button
                   type="button"
                   className="theme-toggle-btn"
@@ -759,7 +874,9 @@ function App() {
                     }}
                     aria-hidden="true"
                   />
-                  <span aria-hidden="true">{wsStatus}</span>
+                  <span aria-hidden="true" className={wsStatus === 'failed' ? 'ws-status-failed' : ''}>
+                    {wsStatus === 'failed' ? 'Connection lost' : wsStatus}
+                  </span>
                 </motion.span>
               </div>
             </div>
@@ -913,10 +1030,46 @@ function App() {
                       </motion.p>
                     )}
                   </AnimatePresence>
+                  {/* Asset Selector */}
+                  <div className="input-wrap">
+                    <label htmlFor="asset-select" style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: 4, display: 'block' }}>Asset</label>
+                    <select
+                      id="asset-select"
+                      value={assetCode}
+                      onChange={(e) => handleAssetChange(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: '2px solid #ccc',
+                        borderRadius: '4px',
+                        fontSize: '1rem',
+                      }}
+                      aria-label="Select asset to send"
+                    >
+                      {balance?.balances && balance.balances.map((b) => (
+                        <option key={b.asset} value={b.asset}>
+                          {b.asset} - {formatBalanceWithAsset(b.balance, b.asset)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {trustlineAsset && (
+                    <InlineConfirmation
+                      isVisible={!!trustlineAsset}
+                      message={`You don't have a trustline for ${trustlineAsset}. Create one?`}
+                      confirmText="Create Trustline"
+                      cancelText="Cancel"
+                      onConfirm={handleCreateTrustline}
+                      onCancel={() => {
+                        setTrustlineAsset(null);
+                        dispatch({ type: A.SET_ASSET_CODE, payload: 'XLM' });
+                      }}
+                    />
+                  )}
                   <div className="input-wrap">
                     <input
                       type="text"
-                      placeholder="Amount (XLM)"
+                      placeholder={`Amount (${assetCode})`}
                       value={amount}
                       onChange={(e) =>
                         dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
@@ -925,7 +1078,7 @@ function App() {
                       style={{
                         border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
-                      aria-label="Payment amount in XLM"
+                      aria-label={`Payment amount in ${assetCode}`}
                     />
                     {amountTouched && (
                       <span className="input-icon">{amountValid ? '✅' : '❌'}</span>
@@ -960,12 +1113,34 @@ function App() {
                     ))}
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
                     <motion.button
-                      onClick={sendPayment}
+                      onClick={batchMode ? addBatchRecipient : sendPayment}
                       {...tap}
-                      disabled={!recipientValid || !amountValid || loading === 'send'}
+                      disabled={!recipientValid || !amountValid || loading === 'send' || (batchMode && batchRecipients.length >= 10)}
                     >
-                      {loading === 'send' ? <Spinner label="Sending payment..." /> : 'Send'}
+                      {loading === 'send' ? (
+                        <Spinner label={batchMode ? 'Adding...' : 'Sending payment...'} />
+                      ) : batchMode ? (
+                        'Add to Batch'
+                      ) : (
+                        'Send'
+                      )}
                     </motion.button>
+                    {batchMode && batchRecipients.length > 0 && (
+                      <motion.button
+                        onClick={() => {
+                          setShowPaymentConfirmation(true);
+                        }}
+                        {...tap}
+                        disabled={loading === 'send'}
+                        style={{ background: '#10b981' }}
+                      >
+                        {loading === 'send' ? (
+                          <Spinner label="Sending..." />
+                        ) : (
+                          `Send Batch (${batchRecipients.length})`
+                        )}
+                      </motion.button>
+                    )}
                     {confirmClear ? (
                       <span className="confirm-clear" role="group" aria-label="Confirm clear form">
                         <span className="confirm-clear__label">Clear form?</span>
@@ -1099,7 +1274,49 @@ function App() {
                     variants={v.fadeSlide}
                   >
                     <ErrorBoundary context="send-payment">
-                      <h2 id="send-heading">Send Payment</h2>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                        <h2 id="send-heading">Send Payment</h2>
+                        <button
+                          type="button"
+                          style={{
+                            padding: '8px 12px',
+                            background: batchMode ? '#2563eb' : '#ccc',
+                            color: '#fff',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer',
+                            fontSize: '0.875rem',
+                          }}
+                          onClick={() => setBatchMode(!batchMode)}
+                        >
+                          {batchMode ? 'Batch Mode (On)' : 'Batch Mode (Off)'}
+                        </button>
+                      </div>
+                      
+                      {batchMode && batchRecipients.length > 0 && (
+                        <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: '4px', marginBottom: 16 }}>
+                          <h3 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600 }}>
+                            Recipients ({batchRecipients.length}/10)
+                          </h3>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {batchRecipients.map((p, i) => (
+                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: '#fff', borderRadius: '3px' }}>
+                                <span style={{ fontSize: '0.85rem' }}>
+                                  {formatBalanceWithAsset(p.amount, p.assetCode)} to {p.destination.slice(0, 16)}...
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => removeBatchRecipient(i)}
+                                  style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '2px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                >
+                                  Remove
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      
                       <AddressBook
                         onSelect={(address) =>
                           dispatch({ type: A.SET_RECIPIENT, payload: address })
@@ -1688,6 +1905,83 @@ function App() {
             onCancel={() => setShowConfirm(false)}
           />
 
+          {/* Batch Payment Confirmation */}
+          <AnimatePresence>
+            {showPaymentConfirmation && batchMode && batchRecipients.length > 0 && (
+              <motion.div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 1000,
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <motion.div
+                  style={{
+                    background: '#fff',
+                    borderRadius: '8px',
+                    padding: '24px',
+                    maxWidth: '500px',
+                    maxHeight: '80vh',
+                    overflow: 'auto',
+                  }}
+                  initial={{ scale: 0.9, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.9, y: 20 }}
+                >
+                  <h3 style={{ marginTop: 0, marginBottom: 16 }}>Confirm Batch Payment</h3>
+                  <div style={{ marginBottom: 16, padding: '12px', background: '#f3f4f6', borderRadius: '4px' }}>
+                    <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>Recipients ({batchRecipients.length}/10):</p>
+                    {batchRecipients.map((p, i) => (
+                      <div key={i} style={{ fontSize: '0.875rem', marginBottom: 8, paddingBottom: 8, borderBottom: i < batchRecipients.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                        <p style={{ margin: '0 0 4px 0' }}>{p.destination.slice(0, 20)}...</p>
+                        <p style={{ margin: 0, color: '#666' }}>{formatBalanceWithAsset(p.amount, p.assetCode)}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 20 }}>
+                    <button
+                      onClick={confirmBatchPayment}
+                      disabled={loading === 'send'}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#10b981',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {loading === 'send' ? 'Sending...' : 'Confirm & Send'}
+                    </button>
+                    <button
+                      onClick={() => setShowPaymentConfirmation(false)}
+                      disabled={loading === 'send'}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#e5e7eb',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <AnimatePresence>
             {showTxLookup && (
               <TxLookup
@@ -1742,6 +2036,92 @@ function App() {
               <Suspense fallback={<Spinner />}>
                 <BackupSettings onClose={() => setShowBackupSettings(false)} />
               </Suspense>
+            )}
+
+            {/* MFA Recovery Code Entry */}
+            {showRecoveryCodeEntry && (
+              <motion.div
+                style={{
+                  position: 'fixed',
+                  inset: 0,
+                  background: 'rgba(0,0,0,0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 2000,
+                }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+              >
+                <motion.div
+                  style={{
+                    background: '#fff',
+                    borderRadius: '8px',
+                    padding: '24px',
+                    maxWidth: '400px',
+                  }}
+                  initial={{ scale: 0.9, y: 20 }}
+                  animate={{ scale: 1, y: 0 }}
+                  exit={{ scale: 0.9, y: 20 }}
+                >
+                  <h3 style={{ marginTop: 0, marginBottom: 8 }}>Enter Recovery Code</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#666', marginBottom: 16 }}>
+                    Your TOTP device is unavailable. Enter one of your recovery codes to continue.
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="Recovery Code (8 hex characters)"
+                    value={recoveryCode}
+                    onChange={(e) => setRecoveryCode(e.target.value.toUpperCase())}
+                    maxLength={8}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      border: '2px solid #ccc',
+                      borderRadius: '4px',
+                      fontSize: '1rem',
+                      fontFamily: 'monospace',
+                      boxSizing: 'border-box',
+                      marginBottom: 16,
+                    }}
+                  />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={handleRecoveryCodeSubmit}
+                      disabled={recoveryCode.length !== 8}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#2563eb',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                      }}
+                    >
+                      Submit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowRecoveryCodeEntry(false);
+                        setRecoveryCode('');
+                      }}
+                      style={{
+                        flex: 1,
+                        padding: '12px',
+                        background: '#e5e7eb',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </motion.div>
+              </motion.div>
             )}
           </AnimatePresence>
         </motion.div>

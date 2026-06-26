@@ -29,6 +29,27 @@ model User {
   webAuthnCredentials    WebAuthnCredential[]
   contacts               Contact[]
   role                   UserRole                @default(USER)
+  id                      String                   @id @default(uuid())
+  publicKey               String                   @unique
+  username                String?                  @unique
+  passwordHash            String?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  deletedAt               DateTime?
+  settings                Setting?
+  sentTxs                 Transaction[]            @relation("sender")
+  receivedTxs             Transaction[]            @relation("recipient")
+  sentStreams             PaymentStream[]          @relation("streamSender")
+  receivedStreams         PaymentStream[]          @relation("streamRecipient")
+  notifications           Notification[]
+  notificationPreference  NotificationPreference?
+  kycRecord               KYCRecord?
+  amlAlerts               AMLAlert[]
+  auditLogs               AuditLog[]
+  webAuthnCredentials     WebAuthnCredential[]
+  contacts                Contact[]
+  mfaSettings             MFASettings?
+  recoveryCodes           RecoveryCode[]
 
   @@index([deletedAt])
 }
@@ -259,5 +280,28 @@ model Contact {
   createdAt DateTime @default(now())
 
   @@unique([userId, address])
+  @@index([userId])
+}
+
+model MFASettings {
+  id        String    @id @default(uuid())
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  secret    String?   // encrypted TOTP secret
+  enabled   Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  lastUsed  DateTime?
+}
+
+model RecoveryCode {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    // bcrypt hash of recovery code
+  used      Boolean   @default(false)
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
   @@index([userId])
 }

@@ -383,6 +383,40 @@ class TransactionService {
       });
     }
   }
+
+  /**
+   * Convert transactions array to CSV format
+   * @param {object[]} transactions - Array of enriched transaction records
+   * @returns {string} CSV formatted string with header and rows
+   */
+  transactionsToCSV(transactions) {
+    const csvEscape = (val) => {
+      const s = val == null ? '' : String(val);
+      return s.includes(',') || s.includes('"') || s.includes('\n') 
+        ? `"${s.replace(/"/g, '""')}"` 
+        : s;
+    };
+
+    const headers = ['date', 'hash', 'sender', 'recipient', 'amount', 'asset', 'memo', 'fee', 'status'];
+    const rows = transactions.map(tx => [
+      tx.created_at ? new Date(tx.created_at).toISOString() : '',
+      tx.hash || '',
+      tx.source_account || '',
+      tx.id || '',
+      tx.amount || '',
+      tx.asset || 'XLM',
+      tx.memo || '',
+      tx.fee_charged || '',
+      tx.successful ? 'success' : 'failed'
+    ]);
+
+    const lines = [
+      headers.map(csvEscape).join(','),
+      ...rows.map(row => row.map(csvEscape).join(','))
+    ];
+
+    return lines.join('\n');
+  }
 }
 
 /** Singleton {@link TransactionService} instance for use throughout the application. */

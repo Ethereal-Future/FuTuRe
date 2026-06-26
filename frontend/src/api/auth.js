@@ -24,3 +24,35 @@ export async function getProfile() {
   const response = await apiClient.get('/api/auth/profile');
   return response.data;
 }
+
+/**
+ * Setup MFA and get recovery codes
+ */
+export async function setupMFA(totp, secret, options = {}) {
+  const response = await apiClient.post('/api/auth/mfa/setup', { totp, secret }, options);
+  return response.data;
+}
+
+/**
+ * Regenerate recovery codes
+ */
+export async function regenerateRecoveryCodes(options = {}) {
+  const response = await apiClient.post('/api/auth/mfa/regenerate', null, options);
+  return response.data;
+}
+
+/**
+ * Verify recovery code for login
+ */
+export async function verifyRecoveryCode(publicKey, recoveryCode, options = {}) {
+  const response = await apiClient.post('/api/auth/mfa/verify-recovery', { publicKey, recoveryCode }, options);
+  return response.data;
+}
+
+/**
+ * Get MFA status
+ */
+export async function getMFAStatus(options = {}) {
+  const response = await apiClient.get('/api/auth/mfa/status', options);
+  return response.data;
+}

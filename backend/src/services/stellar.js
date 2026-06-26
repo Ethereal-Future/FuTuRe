@@ -123,6 +123,42 @@ export async function withHorizonTimeout(fn) {
   });
 }
 
+const HORIZON_RETRY_BACKOFFS = [500, 1000, 2000];
+
+function isTransientHorizonError(err) {
+  const status = err?.response?.status ?? err?.status;
+  if (status === 400 || status === 404 || status === 409) return false;
+  if (status === 429 || status === 503) return true;
+  if (err.isTimeout) return true;
+  const code = err?.code;
+  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ETIMEDOUT' || code === 'ECONNRESET') return true;
+  return false;
+}
+
+/**
+ * Run a Horizon call with timeout, circuit breaker, and exponential backoff retry.
+ * Retries on 429, 503, and network timeouts (max 3 attempts: 500ms, 1s, 2s backoff).
+ * Does NOT retry on 400, 404, or 409.
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+export async function withHorizonRetry(fn) {
+  let lastErr;
+  for (let attempt = 0; attempt <= HORIZON_RETRY_BACKOFFS.length; attempt++) {
+    try {
+      return await withHorizonTimeout(fn);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientHorizonError(err) || attempt === HORIZON_RETRY_BACKOFFS.length) throw err;
+      const delay = HORIZON_RETRY_BACKOFFS[attempt];
+      logger.warn('stellar.horizon.retry', { attempt: attempt + 1, delay, error: err.message });
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
+}
+
 /**
  * Check whether the configured Stellar network is testnet.
  * @returns {boolean}
@@ -204,7 +240,7 @@ export async function createAccount(correlationId = null) {
  */
 export async function getBalance(publicKey, correlationId = null) {
   logger.debug('stellar.getBalance', { publicKey, correlationId });
-  const account = await withHorizonTimeout(() => getHorizonServer().loadAccount(publicKey));
+  const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
   const balances = account.balances.map((b) => ({
     asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
     balance: b.balance,
@@ -260,7 +296,7 @@ export async function sendPayment(
   // the intended order and prevents replay attacks (an old signed transaction cannot
   // be resubmitted once the sequence number has advanced).
   // @see https://developers.stellar.org/docs/learn/fundamentals/transactions/signals#sequence-number
-  const sourceAccount = await withHorizonTimeout(() =>
+  const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
   );
 
@@ -336,7 +372,7 @@ export async function sendPayment(
 
   let result;
   try {
-    result = await withHorizonTimeout(() => getHorizonServer().submitTransaction(txToSubmit));
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(txToSubmit));
   } catch (err) {
     logger.error('stellar.sendPayment.failed', {
       source: sourcePublicKey,
@@ -440,7 +476,7 @@ export async function createTrustline(sourceSecret, assetCode) {
   const sourcePublicKey = sourceKeypair.publicKey();
   logger.info('stellar.createTrustline', { publicKey: sourcePublicKey, assetCode });
 
-  const sourceAccount = await withHorizonTimeout(() =>
+  const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
   );
 
@@ -466,7 +502,7 @@ export async function createTrustline(sourceSecret, assetCode) {
 
   let result;
   try {
-    result = await withHorizonTimeout(() => getHorizonServer().submitTransaction(transaction));
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
   } catch (err) {
     logger.error('stellar.createTrustline.failed', {
       publicKey: sourcePublicKey,
@@ -506,7 +542,7 @@ export async function removeTrustline(sourceSecret, assetCode) {
   const sourcePublicKey = sourceKeypair.publicKey();
   logger.info('stellar.removeTrustline', { publicKey: sourcePublicKey, assetCode });
 
-  const sourceAccount = await withHorizonTimeout(() =>
+  const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
   );
 
@@ -536,7 +572,7 @@ export async function removeTrustline(sourceSecret, assetCode) {
 
   let result;
   try {
-    result = await withHorizonTimeout(() => getHorizonServer().submitTransaction(transaction));
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
   } catch (err) {
     logger.error('stellar.removeTrustline.failed', {
       publicKey: sourcePublicKey,
@@ -594,7 +630,7 @@ export async function getTransactions(
   let builder = getHorizonServer().transactions().forAccount(publicKey).order('desc').limit(limit);
   if (cursor) builder = builder.cursor(cursor);
 
-  const page = await withHorizonTimeout(() => builder.call());
+  const page = await withHorizonRetry(() => builder.call());
 
   let records = await Promise.all(
     page.records.map(async (tx) => {
@@ -642,7 +678,7 @@ export async function getTransactions(
  * @throws {Error} If the Horizon feeStats call fails
  */
 export async function getFeeStats() {
-  const stats = await withHorizonTimeout(() => getHorizonServer().feeStats());
+  const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
   const feeStroops = parseInt(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
   const feeXLM = feeStroops / 1e7;
 
@@ -650,7 +686,7 @@ export async function getFeeStats() {
   let xlmUsd = null;
   try {
     const usdc = new StellarSDK.Asset('USDC', getIssuer('USDC'));
-    const book = await withHorizonTimeout(() =>
+    const book = await withHorizonRetry(() =>
       getHorizonServer().orderbook(StellarSDK.Asset.native(), usdc).limit(1).call(),
     );
     const ask = parseFloat(book.asks?.[0]?.price);
@@ -686,7 +722,7 @@ export async function getExchangeRate(from, to) {
       from === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(from, getIssuer(from));
     const toAsset =
       to === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(to, getIssuer(to));
-    const orderbook = await withHorizonTimeout(() =>
+    const orderbook = await withHorizonRetry(() =>
       getHorizonServer().orderbook(fromAsset, toAsset).call(),
     );
     const bestAsk = orderbook.asks?.[0]?.price;
@@ -704,7 +740,7 @@ export async function getExchangeRate(from, to) {
 export async function getNetworkStatus() {
   const { horizonUrl } = getConfig().stellar;
   try {
-    const root = await withHorizonTimeout(() => getHorizonServer().root());
+    const root = await withHorizonRetry(() => getHorizonServer().root());
     const status = {
       network: isTestnet() ? 'testnet' : 'mainnet',
       horizonUrl,
@@ -732,7 +768,7 @@ export async function getNetworkStatus() {
  */
 export async function getTrustlines(publicKey) {
   logger.debug('stellar.getTrustlines', { publicKey });
-  const account = await withHorizonTimeout(() => getHorizonServer().loadAccount(publicKey));
+  const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
   return account.balances
     .filter((b) => b.asset_type !== 'native')
     .map((b) => ({
@@ -757,7 +793,7 @@ export async function mergeAccount(sourceSecret, destination) {
   const sourcePublicKey = sourceKeypair.publicKey();
   logger.info('stellar.mergeAccount.start', { source: sourcePublicKey, destination });
 
-  const sourceAccount = await withHorizonTimeout(() =>
+  const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
   );
 
@@ -773,7 +809,7 @@ export async function mergeAccount(sourceSecret, destination) {
 
   let result;
   try {
-    result = await withHorizonTimeout(() => getHorizonServer().submitTransaction(transaction));
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
   } catch (err) {
     logger.error('stellar.mergeAccount.failed', {
       source: sourcePublicKey,

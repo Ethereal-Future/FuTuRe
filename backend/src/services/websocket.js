@@ -95,7 +95,28 @@ export function initWebSocket(server) {
     stats.totalConnections++;
     stats.activeConnections++;
     ws.isAlive = true;
-    ws.authenticated = false;
+
+    // Authenticate at connection time so clients receive close code 4001
+    const jwtSecret = process.env.JWT_SECRET;
+    if (jwtSecret) {
+      const url = new URL(req.url, 'ws://localhost');
+      const token =
+        url.searchParams.get('token') ||
+        (req.headers.authorization?.startsWith('Bearer ')
+          ? req.headers.authorization.slice(7)
+          : null);
+      const claims = token ? verifyToken(token) : null;
+      if (!claims) {
+        stats.authFailures++;
+        stats.activeConnections = Math.max(0, stats.activeConnections - 1);
+        ws.close(4001, 'Unauthorized');
+        return;
+      }
+      ws.userId = claims.sub ?? claims.userId;
+      ws.userPublicKey = claims.publicKey ?? null;
+    }
+
+    ws.authenticated = true;
 
     ws.on('pong', () => { ws.isAlive = true; });
 
@@ -151,32 +172,37 @@ function handleMessage(ws, msg) {
 }
 
 function handleAuth(ws, msg) {
+  // Authentication is handled at handshake time; this message is a no-op for
+  // already-authenticated connections but kept for protocol compatibility.
+  if (ws.authenticated) {
+    ws.send(JSON.stringify({ type: 'auth_ok' }));
+    return;
+  }
+  // Dev mode (no JWT_SECRET): allow post-connection auth via message.
   const jwtSecret = process.env.JWT_SECRET;
-  // If no JWT_SECRET configured, allow unauthenticated (dev mode)
   if (!jwtSecret) {
     ws.authenticated = true;
     ws.send(JSON.stringify({ type: 'auth_ok' }));
     return;
   }
-  const claims = verifyToken(msg.token);
-  if (!claims) {
-    stats.authFailures++;
-    ws.send(JSON.stringify({ type: 'auth_error', message: 'Invalid or expired token' }));
-    return;
-  }
-  ws.authenticated = true;
-  ws.userId = claims.sub ?? claims.userId;
-  ws.send(JSON.stringify({ type: 'auth_ok' }));
+  stats.authFailures++;
+  ws.send(JSON.stringify({ type: 'auth_error', message: 'Invalid or expired token' }));
 }
 
 function handleSubscribe(ws, msg) {
-  if (process.env.JWT_SECRET && !ws.authenticated) {
+  if (!ws.authenticated) {
     ws.send(JSON.stringify({ type: 'error', message: 'Authenticate first' }));
     return;
   }
   const { publicKey } = msg;
   if (!publicKey) {
     ws.send(JSON.stringify({ type: 'error', message: 'publicKey required' }));
+    return;
+  }
+  // Scope check: reject subscriptions to keys the user does not own.
+  // ws.userPublicKey is populated from the JWT claim; null means dev mode (no restriction).
+  if (ws.userPublicKey && publicKey !== 'rates' && publicKey !== ws.userPublicKey) {
+    ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: cannot subscribe to another account' }));
     return;
   }
   if (connectionCount(publicKey) >= MAX_CONNECTIONS_PER_KEY) {

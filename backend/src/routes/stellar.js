@@ -21,6 +21,14 @@ import sanctionsChecker from '../compliance/sanctionsChecker.js';
 import amlMonitor from '../compliance/amlMonitor.js';
 import { AppError, ErrorCodes } from '../middleware/errorHandler.js';
 
+const isValidStellarAddress = (address) => {
+  try {
+    return StellarSDK.StrKey.isValidEd25519PublicKey(address);
+  } catch {
+    return false;
+  }
+};
+
 const router = express.Router();
 
 function logError(req, error, context = {}) {
@@ -520,6 +528,60 @@ router.get(
 
 /**
  * @swagger
+ * /api/stellar/fee-estimate:
+ *   get:
+ *     summary: Get current fee estimate
+ *     description: Returns the current base fee in both stroops and XLM for transaction estimation
+ *     tags: [Stellar]
+ *     responses:
+ *       200:
+ *         description: Fee estimate retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 baseFeeBump:
+ *                   type: integer
+ *                   description: Base fee in stroops (1 stroop = 0.0000001 XLM)
+ *                 baseFeeXLM:
+ *                   type: string
+ *                   description: Base fee in XLM
+ *                 recommendedFeeMultiplier:
+ *                   type: number
+ *                   description: Multiplier for base fee based on network congestion
+ *             example:
+ *               baseFeeBump: 100
+ *               baseFeeXLM: "0.0000100"
+ *               recommendedFeeMultiplier: 1
+ *       500:
+ *         description: Failed to retrieve fee estimate
+ */
+router.get(
+  '/fee-estimate',
+  cacheMiddleware(TTL.FEE_STATS, () => cacheKeys.feeStats()),
+  async (req, res) => {
+    const correlationId = req.correlationId;
+    try {
+      const server = StellarService.getHorizonServer();
+      const ledger = await server.ledgers().order('desc').limit(1).call();
+      const baseFeeBump = ledger.records[0].base_fee_in_stroops || 100;
+      
+      res.json({
+        baseFeeBump,
+        baseFeeXLM: (baseFeeBump / 10000000).toFixed(7),
+        recommendedFeeMultiplier: 1,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logError(req, error, { correlationId });
+      res.status(500).json({ error: 'Failed to retrieve fee estimate' });
+    }
+  }
+);
+
+/**
+ * @swagger
  * /api/stellar/exchange-rate/{from}/{to}:
  *   get:
  *     summary: Get exchange rate
@@ -831,5 +893,188 @@ router.post('/account/merge', rules.mergeAccount, validate, async (req, res) => 
     res.status(500).json({ error: error.message });
   }
 });
+
+// POST /api/stellar/trustline/create - Create trustline for non-native asset
+router.post('/trustline/create', [
+  body('sourceSecret').notEmpty(),
+  body('assetCode').notEmpty().isString().isLength({ min: 1, max: 12 }),
+], validate, async (req, res) => {
+  try {
+    const { sourceSecret, assetCode } = req.body;
+    
+    if (assetCode === 'XLM') {
+      return res.status(400).json({ error: 'XLM is native and does not require a trustline' });
+    }
+
+    const issuer = getIssuer(assetCode);
+    if (!issuer) {
+      return res.status(400).json({ error: `No issuer found for asset code: ${assetCode}` });
+    }
+
+    const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+    const sourcePublicKey = sourceKeypair.publicKey();
+    
+    // Load account and create trustline transaction
+    const sourceAccount = await StellarService.getHorizonServer().loadAccount(sourcePublicKey);
+    const asset = new StellarSDK.Asset(assetCode, issuer);
+
+    const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
+      fee: StellarSDK.BASE_FEE,
+      networkPassphrase: StellarService.isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+    }).addOperation(
+      StellarSDK.Operation.changeTrust({
+        asset,
+      })
+    ).setTimeout(30);
+
+    const transaction = txBuilder.build();
+    transaction.sign(sourceKeypair);
+
+    const result = await StellarService.getHorizonServer().submitTransaction(transaction);
+    
+    res.json({
+      success: true,
+      hash: result.hash,
+      assetCode,
+      issuer,
+      ledger: result.ledger,
+    });
+  } catch (error) {
+    logError(req, error, { assetCode: req.body.assetCode });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET /api/stellar/account/:publicKey/balances - Get all asset balances (cached)
+router.get('/account/:publicKey/balances', cacheMiddleware(cacheKeys.balance, TTL.balance), async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const balances = await StellarService.getBalance(publicKey);
+    res.json(balances);
+  } catch (error) {
+    logError(req, error, { publicKey: req.params.publicKey });
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST /api/stellar/batch-payment - Send payment to multiple recipients
+router.post(
+  '/batch-payment',
+  paymentRateLimiter,
+  idempotencyMiddleware,
+  requireKYC,
+  [
+    body('sourceSecret').notEmpty(),
+    body('payments').isArray({ min: 1, max: 10 }),
+    body('payments.*.destination').notEmpty().isString(),
+    body('payments.*.amount').notEmpty().isString(),
+    body('payments.*.assetCode').optional().isString().isLength({ min: 1, max: 12 }),
+    body('memo').optional().isString().isLength({ max: 28 }),
+    body('memoType').optional().isIn(['text', 'id', 'hash', 'return']),
+  ],
+  validate,
+  optionalMFA,
+  async (req, res) => {
+    try {
+      const { sourceSecret, payments, memo, memoType } = req.body;
+      const senderKey = StellarSDK.Keypair.fromSecret(sourceSecret).publicKey();
+
+      // Validate payments
+      if (payments.length > 10) {
+        return res.status(400).json({ error: 'Maximum 10 recipients per batch' });
+      }
+
+      let totalAmount = 0;
+      for (const payment of payments) {
+        totalAmount += parseFloat(payment.amount);
+        if (!isValidStellarAddress(payment.destination)) {
+          return res.status(400).json({ error: `Invalid recipient address: ${payment.destination}` });
+        }
+      }
+
+      // Sanctions screening for sender and recipients
+      const senderKyc = await prisma.kYCRecord.findFirst({
+        where: { user: { publicKey: senderKey } },
+      });
+      const senderName = senderKyc?.fullName ?? senderKey;
+
+      const [senderScreen, ...recipientScreens] = await Promise.all([
+        sanctionsChecker.check(senderName),
+        ...payments.map((p) => sanctionsChecker.check(p.destination)),
+      ]);
+
+      if (senderScreen.hit) {
+        return res.status(403).json({ error: { code: 'SANCTIONS_MATCH', message: 'Sanctions screening failed', reason: senderScreen.reason } });
+      }
+
+      for (const screen of recipientScreens) {
+        if (screen.hit) {
+          return res.status(403).json({ error: { code: 'SANCTIONS_MATCH', message: 'Recipient sanctions screening failed', reason: screen.reason } });
+        }
+      }
+
+      // Build batch transaction
+      const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+      const sourceAccount = await StellarService.getHorizonServer().loadAccount(senderKey);
+
+      const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
+        fee: StellarSDK.BASE_FEE * Math.ceil(payments.length / 100),
+        networkPassphrase: StellarService.isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+      });
+
+      // Add payment operations
+      for (const payment of payments) {
+        const assetCode = payment.assetCode ?? 'XLM';
+        const asset = assetCode === 'XLM' ? StellarSDK.Asset.native() : new StellarSDK.Asset(assetCode, getIssuer(assetCode));
+
+        txBuilder.addOperation(
+          StellarSDK.Operation.payment({
+            destination: payment.destination,
+            asset,
+            amount: payment.amount.toString(),
+          })
+        );
+      }
+
+      // Add memo if provided
+      if (memo) {
+        let stellarMemo;
+        switch (memoType) {
+          case 'id':
+            stellarMemo = StellarSDK.Memo.id(memo);
+            break;
+          case 'hash':
+            stellarMemo = StellarSDK.Memo.hash(memo);
+            break;
+          case 'return':
+            stellarMemo = StellarSDK.Memo.return(memo);
+            break;
+          case 'text':
+          default:
+            stellarMemo = StellarSDK.Memo.text(memo);
+            break;
+        }
+        txBuilder.addMemo(stellarMemo);
+      }
+
+      const transaction = txBuilder.setTimeout(30).build();
+      transaction.sign(sourceKeypair);
+
+      // Submit transaction
+      const result = await StellarService.getHorizonServer().submitTransaction(transaction);
+
+      res.json({
+        hash: result.hash,
+        ledger: result.ledger,
+        payments: payments.length,
+        totalAmount,
+        successful: true,
+      });
+    } catch (error) {
+      logError(req, error, { context: 'batch-payment' });
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
 
 export default router;
