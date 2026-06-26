@@ -17,6 +17,7 @@ export function AccountSettings({ publicKey, onClose }) {
   const [showCompliance, setShowCompliance] = useState(false);
   const [showMerge, setShowMerge] = useState(false);
   const [userRole, setUserRole] = useState(null);
+  const [federationLocalPart, setFederationLocalPart] = useState('');
 
   useEffect(() => {
     apiClient.get(`/api/stellar/account/${publicKey}/settings`)
@@ -45,6 +46,12 @@ export function AccountSettings({ publicKey, onClose }) {
         defaultAsset: settings.defaultAsset,
         notificationsOn: settings.notificationsOn,
       });
+      if (federationLocalPart.trim()) {
+        const { data } = await apiClient.put(`/api/stellar/federation/claim/${publicKey}`, {
+          localPart: federationLocalPart.trim(),
+        });
+        setSettings(s => ({ ...s, federationAddress: data.federationAddress }));
+      }
       setSaved(true);
     } catch (e) {
       setError(e?.response?.data?.error ?? e.message);
@@ -97,6 +104,24 @@ export function AccountSettings({ publicKey, onClose }) {
               <label htmlFor="notifications-toggle" style={{ fontWeight: 600, cursor: 'pointer' }}>
                 Notifications enabled
               </label>
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <label htmlFor="federation-address" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
+                Federation Address
+              </label>
+              <input
+                id="federation-address"
+                value={federationLocalPart}
+                onChange={e => setFederationLocalPart(e.target.value)}
+                placeholder="alice"
+                aria-label="Claim federation address"
+              />
+              <p style={{ margin: '4px 0 0', color: 'var(--text-muted, #64748b)', fontSize: '0.85rem' }}>
+                {settings.federationAddress
+                  ? `Current: ${settings.federationAddress}`
+                  : 'Claim a human-readable address like alice*futureremit.app.'}
+              </p>
             </div>
 
             <div style={{ marginBottom: 16 }}>

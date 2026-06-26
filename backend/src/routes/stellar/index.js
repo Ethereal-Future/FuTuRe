@@ -7,6 +7,8 @@ import convertRouter from './convert.js';
 import networkRouter from './network.js';
 import trustlinesRouter from './trustlines.js';
 import ammRouter from './amm.js';
+import federationRouter from './federation.js';
+import contractRouter from './contract.js';
 
 const router = express.Router();
 
@@ -21,5 +23,7 @@ router.use('/network', networkRouter);
 router.use('/trustline', trustlinesRouter);
 router.use('/assets', trustlinesRouter);
 router.use('/amm', ammRouter);
+router.use('/federation', federationRouter);
+router.use('/contract', contractRouter);
 
 export default router;

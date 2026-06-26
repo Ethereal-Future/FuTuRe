@@ -5,6 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#0066cc" />
     <meta name="description" content="Send and receive XLM payments on the Stellar network" />
+    
+    <!-- Font preloading: System fonts are used, so preload critical CSS early -->
+    <!-- This ensures typography is available before render blocking CSS parses -->
+    <link rel="preload" href="/src/index.css" as="style" />
+    
     <link rel="manifest" href="/manifest.json" />
     <title>Stellar Remittance</title>
   </head>

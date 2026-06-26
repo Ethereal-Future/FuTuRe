@@ -336,14 +336,24 @@ export function TransactionHistory({ publicKey }) {
               </div>
             ) : (
               <>
-                <VirtualList
-                  items={txs}
-                  renderItem={(tx) => (
-                    <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
-                  )}
-                  itemHeight={64}
-                  height={Math.min(txs.length * 64 + 1, 480)}
-                />
+                {txs.length > 50 ? (
+                  <VirtualList
+                    items={txs}
+                    renderItem={(tx) => (
+                      <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
+                    )}
+                    itemHeight={64}
+                    height={Math.min(txs.length * 64 + 1, 480)}
+                  />
+                ) : (
+                  <ul className="tx-list">
+                    {txs.map((tx) => (
+                      <li key={tx.id || tx.hash}>
+                        <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <nav className="tx-pagination" aria-label="Transaction page navigation">
                   <button onClick={handleBack} disabled={page <= 1 || loading} className="tx-page-btn" aria-label="Previous page">← Prev</button>
                   <span className="tx-page-info" aria-current="page">Page {page}</span>
