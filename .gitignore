@@ -10,3 +10,4 @@ mutation-reports/mutation-report.json
 .stryker-tmp/
 backups/
 coverage/
+stellar-contract/target/

@@ -1,6 +1,8 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';
+import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
@@ -22,6 +24,7 @@ import { csrfTokenEndpoint } from '../middleware/csrf.js';
 import mfaManager from '../security/mfa.js';
 import oauth2Provider from '../security/oauth2.js';
 import { getConfig } from '../config/env.js';
+import { sendEmail } from '../notifications/channels/email.js';
 
 const router = express.Router();
 
@@ -48,7 +51,13 @@ const authRateLimiter = createRateLimiter({
 const validateBody = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
-    return sendError(res, 422, ErrorCodes.VALIDATION_INVALID_INPUT, 'Validation failed', errors.array());
+    return sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_INVALID_INPUT,
+      'Validation failed',
+      errors.array(),
+    );
   next();
 };
 
@@ -179,14 +188,17 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
   const locked = await isAccountLocked(username);
   if (locked) {
     const retryAfter = Math.ceil(getLockoutDuration() / 1000);
-    return res.status(423).set('Retry-After', retryAfter).json({
-      success: false,
-      error: {
-        code: ErrorCodes.UNAUTHORIZED,
-        message: 'Account is temporarily locked due to too many failed login attempts',
-        details: { retryAfter },
-      },
-    });
+    return res
+      .status(423)
+      .set('Retry-After', retryAfter)
+      .json({
+        success: false,
+        error: {
+          code: ErrorCodes.UNAUTHORIZED,
+          message: 'Account is temporarily locked due to too many failed login attempts',
+          details: { retryAfter },
+        },
+      });
   }
 
   const user = findUser(username);
@@ -527,7 +539,8 @@ router.post('/mfa/verify', requireAuth, (req, res) => {
   if (!token) return sendError(res, 400, ErrorCodes.VALIDATION_MISSING_FIELD, 'Token required');
   try {
     const mfa = mfaManager.userMFA.get(req.user.sub);
-    if (!mfa) return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'MFA setup not initiated');
+    if (!mfa)
+      return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'MFA setup not initiated');
     mfaManager.verifyTOTP(req.user.sub, token, mfa.secret);
     res.json({ message: 'MFA enabled successfully' });
   } catch (error) {
@@ -601,7 +614,12 @@ router.get('/oauth/google/callback', async (req, res) => {
   const storedState = req.cookies.oauth_state;
 
   if (!code || !state || state !== storedState) {
-    return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'Invalid state or authorization code');
+    return sendError(
+      res,
+      400,
+      ErrorCodes.VALIDATION_INVALID_INPUT,
+      'Invalid state or authorization code',
+    );
   }
 
   try {
@@ -614,7 +632,7 @@ router.get('/oauth/google/callback', async (req, res) => {
       code,
       clientId,
       clientSecret,
-      redirectUri
+      redirectUri,
     );
 
     // Get user info
@@ -634,7 +652,7 @@ router.get('/oauth/google/callback', async (req, res) => {
     // Redirect to frontend with tokens
     const frontendUrl = getConfig().frontend.baseUrl;
     res.redirect(
-      `${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`
+      `${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`,
     );
   } catch (error) {
     sendError(res, 400, ErrorCodes.INTERNAL_ERROR, error.message);
@@ -714,7 +732,8 @@ router.get('/data-export', requireAuth, async (req, res) => {
     });
     if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
 
-    const { passwordHash: _omit, ...exportData } = user;
+    const exportData = { ...user };
+    delete exportData.passwordHash;
 
     res.setHeader('Content-Disposition', 'attachment; filename="data-export.json"');
     res.json({ exportedAt: new Date().toISOString(), data: exportData });
@@ -867,67 +886,72 @@ router.delete('/account', requireAuth, async (req, res) => {
 
 // MFA Routes
 // POST /api/auth/mfa/setup - Enable MFA and generate recovery codes
-router.post('/mfa/setup', [
-  body('totp').notEmpty().isString(),
-], validate, async (req, res) => {
-  try {
-    const userId = req.user?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
+router.post(
+  '/mfa/setup',
+  requireAuth,
+  [body('totp').notEmpty().isString(), body('secret').notEmpty().isString()],
+  validateBody,
+  async (req, res) => {
+    try {
+      const userId = req.user?.sub;
+      if (!userId) {
+        return res.status(401).json({ error: 'Unauthorized' });
+      }
+
+      const { totp, secret } = req.body;
+
+      try {
+        mfaManager.verifyTOTP(userId, totp, secret);
+      } catch {
+        return res.status(400).json({ error: 'Invalid TOTP code' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+
+      // Generate recovery codes
+      const recoveryCodes = Array.from({ length: 10 }, () =>
+        randomBytes(4).toString('hex').toUpperCase(),
+      );
+
+      // Hash and store recovery codes
+      const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
+
+      // Create/update MFA settings
+      await prisma.mFASettings.upsert({
+        where: { userId },
+        create: {
+          userId,
+          secret,
+          enabled: true,
+        },
+        update: {
+          enabled: true,
+        },
+      });
+
+      // Save recovery codes
+      await prisma.recoveryCode.deleteMany({ where: { userId } });
+      await prisma.recoveryCode.createMany({
+        data: hashedCodes.map((codeHash) => ({
+          userId,
+          codeHash,
+        })),
+      });
+
+      res.json({
+        message: 'MFA enabled successfully',
+        recoveryCodes, // Return unhashed codes only once during setup
+        warning: 'Store these recovery codes in a safe place. Each code can only be used once.',
+      });
+    } catch (error) {
+      logger.error({ err: error }, 'MFA setup failed');
+      res.status(500).json({ error: 'Failed to enable MFA' });
     }
-
-    const { totp } = req.body;
-
-    // Verify TOTP is valid
-    const mfaManager = (await import('../security/mfa.js')).default;
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Generate recovery codes
-    const recoveryCodes = Array.from({ length: 10 }, () =>
-      require('crypto').randomBytes(4).toString('hex').toUpperCase()
-    );
-
-    // Hash and store recovery codes
-    const bcrypt = require('bcryptjs');
-    const hashedCodes = await Promise.all(
-      recoveryCodes.map((code) => bcrypt.hash(code, 10))
-    );
-
-    // Create/update MFA settings
-    await prisma.mFASettings.upsert({
-      where: { userId },
-      create: {
-        userId,
-        secret: req.body.secret, // encrypted secret would be passed from client
-        enabled: true,
-      },
-      update: {
-        enabled: true,
-      },
-    });
-
-    // Save recovery codes
-    await prisma.recoveryCode.deleteMany({ where: { userId } });
-    await prisma.recoveryCode.createMany({
-      data: hashedCodes.map((codeHash) => ({
-        userId,
-        codeHash,
-      })),
-    });
-
-    res.json({
-      message: 'MFA enabled successfully',
-      recoveryCodes, // Return unhashed codes only once during setup
-      warning: 'Store these recovery codes in a safe place. Each code can only be used once.',
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'MFA setup failed');
-    res.status(500).json({ error: 'Failed to enable MFA' });
-  }
-});
+  },
+);
 
 // POST /api/auth/mfa/regenerate - Regenerate recovery codes
 router.post('/mfa/regenerate', requireAuth, async (req, res) => {
@@ -939,14 +963,11 @@ router.post('/mfa/regenerate', requireAuth, async (req, res) => {
 
     // Generate new recovery codes
     const recoveryCodes = Array.from({ length: 10 }, () =>
-      require('crypto').randomBytes(4).toString('hex').toUpperCase()
+      randomBytes(4).toString('hex').toUpperCase(),
     );
 
     // Hash and store new codes
-    const bcrypt = require('bcryptjs');
-    const hashedCodes = await Promise.all(
-      recoveryCodes.map((code) => bcrypt.hash(code, 10))
-    );
+    const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
 
     // Delete old codes and save new ones
     await prisma.recoveryCode.deleteMany({ where: { userId } });
@@ -969,64 +990,65 @@ router.post('/mfa/regenerate', requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/mfa/verify-recovery - Verify recovery code and log in
-router.post('/mfa/verify-recovery', [
-  body('publicKey').notEmpty().isString(),
-  body('recoveryCode').notEmpty().isString(),
-], validate, async (req, res) => {
-  try {
-    const { publicKey, recoveryCode } = req.body;
+router.post(
+  '/mfa/verify-recovery',
+  [body('publicKey').notEmpty().isString(), body('recoveryCode').notEmpty().isString()],
+  validateBody,
+  async (req, res) => {
+    try {
+      const { publicKey, recoveryCode } = req.body;
 
-    // Find user by public key
-    const user = await prisma.user.findUnique({
-      where: { publicKey },
-      include: { recoveryCodes: true, mfaSettings: true },
-    });
+      // Find user by public key
+      const user = await prisma.user.findUnique({
+        where: { publicKey },
+        include: { recoveryCodes: true, mfaSettings: true },
+      });
 
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Check if MFA is enabled
-    if (!user.mfaSettings?.enabled) {
-      return res.status(400).json({ error: 'MFA not enabled' });
-    }
-
-    // Find matching recovery code
-    const bcrypt = require('bcryptjs');
-    let validCode = null;
-    for (const code of user.recoveryCodes) {
-      if (!code.used && await bcrypt.compare(recoveryCode, code.codeHash)) {
-        validCode = code;
-        break;
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      // Check if MFA is enabled
+      if (!user.mfaSettings?.enabled) {
+        return res.status(400).json({ error: 'MFA not enabled' });
+      }
+
+      // Find matching recovery code
+      let validCode = null;
+      for (const code of user.recoveryCodes) {
+        if (!code.used && (await bcrypt.compare(recoveryCode, code.codeHash))) {
+          validCode = code;
+          break;
+        }
+      }
+
+      if (!validCode) {
+        return res.status(401).json({ error: 'Invalid recovery code' });
+      }
+
+      // Mark code as used
+      await prisma.recoveryCode.update({
+        where: { id: validCode.id },
+        data: { used: true, usedAt: new Date() },
+      });
+
+      // Generate JWT token
+      const token = signAccessToken({ sub: user.id, username: user.publicKey, role: 'USER' });
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          publicKey: user.publicKey,
+        },
+        message: 'Recovery code accepted. Please update your TOTP device.',
+      });
+    } catch (error) {
+      logger.error({ err: error }, 'Recovery code verification failed');
+      res.status(500).json({ error: 'Failed to verify recovery code' });
     }
-
-    if (!validCode) {
-      return res.status(401).json({ error: 'Invalid recovery code' });
-    }
-
-    // Mark code as used
-    await prisma.recoveryCode.update({
-      where: { id: validCode.id },
-      data: { used: true, usedAt: new Date() },
-    });
-
-    // Generate JWT token
-    const token = generateToken(user.id, user.publicKey);
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        publicKey: user.publicKey,
-      },
-      message: 'Recovery code accepted. Please update your TOTP device.',
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Recovery code verification failed');
-    res.status(500).json({ error: 'Failed to verify recovery code' });
-  }
-});
+  },
+);
 
 // GET /api/auth/mfa/status - Check MFA status
 router.get('/mfa/status', requireAuth, async (req, res) => {
@@ -1052,6 +1074,170 @@ router.get('/mfa/status', requireAuth, async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, 'Failed to get MFA status');
     res.status(500).json({ error: 'Failed to get MFA status' });
+  }
+});
+
+// ── SEP-0010 ──────────────────────────────────────────────────────────────────
+
+let _anchorKeypair = null;
+const getAnchorKeypair = () => {
+  const secret = process.env.STELLAR_ANCHOR_SECRET;
+  if (secret) return StellarSDK.Keypair.fromSecret(secret);
+  if (!_anchorKeypair) _anchorKeypair = StellarSDK.Keypair.random();
+  return _anchorKeypair;
+};
+
+function checkTxSignature(transaction, publicKey) {
+  try {
+    const txHash = transaction.hash();
+    const kp = StellarSDK.Keypair.fromPublicKey(publicKey);
+    const hint = kp.signatureHint();
+    for (const sig of transaction.signatures) {
+      if (sig.hint().equals(hint) && kp.verify(txHash, sig.signature())) return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+router.get('/stellar/challenge', async (req, res) => {
+  const { account } = req.query;
+  if (!account) return res.status(400).json({ error: 'Missing required query parameter: account' });
+  if (!StellarSDK.StrKey.isValidEd25519PublicKey(account))
+    return res.status(400).json({ error: 'Invalid Stellar public key' });
+  try {
+    const anchorKp = getAnchorKeypair();
+    const isTestnet = getConfig().stellar?.network !== 'mainnet';
+    const networkPassphrase = isTestnet ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC;
+    const anchorDomain = process.env.STELLAR_ANCHOR_DOMAIN || 'localhost';
+    const tx = new StellarSDK.TransactionBuilder(
+      new StellarSDK.Account(anchorKp.publicKey(), '-1'),
+      {
+        fee: '100',
+        networkPassphrase,
+        timebounds: {
+          minTime: Math.floor(Date.now() / 1000).toString(),
+          maxTime: (Math.floor(Date.now() / 1000) + 300).toString(),
+        },
+      },
+    )
+      .addOperation(
+        StellarSDK.Operation.manageData({
+          source: account,
+          name: `${anchorDomain} auth`,
+          value: randomBytes(48).toString('base64'),
+        }),
+      )
+      .build();
+    tx.sign(anchorKp);
+    res.json({
+      transaction: tx.toEnvelope().toXDR('base64'),
+      network_passphrase: networkPassphrase,
+      network: isTestnet ? 'testnet' : 'public',
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to generate Stellar challenge');
+    res.status(500).json({ error: 'Failed to generate challenge transaction' });
+  }
+});
+
+router.post('/stellar/token', async (req, res) => {
+  const { transaction } = req.body;
+  if (!transaction) return res.status(400).json({ error: 'Missing transaction envelope' });
+  try {
+    const isTestnet = getConfig().stellar?.network !== 'mainnet';
+    const networkPassphrase = isTestnet ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC;
+    let tx;
+    try {
+      tx = StellarSDK.TransactionBuilder.fromXDR(transaction, networkPassphrase);
+    } catch {
+      return res.status(400).json({ error: 'Invalid transaction XDR format' });
+    }
+    if (tx.sequence !== '0') return res.status(400).json({ error: 'Invalid sequence number' });
+    const now = Math.floor(Date.now() / 1000);
+    if (
+      !tx.timeBounds ||
+      now < parseInt(tx.timeBounds.minTime) ||
+      now > parseInt(tx.timeBounds.maxTime)
+    )
+      return res.status(400).json({ error: 'Challenge transaction has expired' });
+    const op = tx.operations[0];
+    if (!op || op.type !== 'manageData')
+      return res.status(400).json({ error: 'Invalid challenge operation' });
+    const anchorDomain = process.env.STELLAR_ANCHOR_DOMAIN || 'localhost';
+    if (op.name !== `${anchorDomain} auth`)
+      return res.status(400).json({ error: 'Invalid anchor domain in challenge' });
+    const clientPublicKey = op.source;
+    if (!clientPublicKey)
+      return res.status(400).json({ error: 'Missing client public key in challenge' });
+    if (!checkTxSignature(tx, getAnchorKeypair().publicKey()))
+      return res.status(400).json({ error: 'Challenge not signed by server' });
+    if (!checkTxSignature(tx, clientPublicKey))
+      return res.status(400).json({ error: 'Challenge not signed by client' });
+    let user = await prisma.user.findUnique({ where: { publicKey: clientPublicKey } });
+    if (!user)
+      user = await prisma.user.create({
+        data: { publicKey: clientPublicKey, username: clientPublicKey },
+      });
+    const payload = { sub: user.id, username: user.username, role: user.role || 'USER' };
+    const accessToken = signAccessToken(payload);
+    setRefreshTokenCookie(res, signRefreshToken(payload));
+    res.json({ token: accessToken, accessToken });
+  } catch (error) {
+    logger.error({ err: error }, 'Stellar token verification failed');
+    res.status(500).json({ error: 'Token verification failed' });
+  }
+});
+
+// ── Email Verification ─────────────────────────────────────────────────────────
+
+const EMAIL_VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
+
+async function sendVerificationEmail(user) {
+  const token = randomBytes(32).toString('hex');
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      emailVerifyToken: token,
+      emailVerifyExpires: new Date(Date.now() + EMAIL_VERIFY_TTL_MS),
+    },
+  });
+  const baseUrl = getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
+  await sendEmail(user.email || user.username, {
+    subject: 'Verify your email address',
+    body: `Verify your email: ${baseUrl}/api/auth/verify-email?token=${token}\nExpires in 24 hours.`,
+  });
+}
+
+router.get('/verify-email', async (req, res) => {
+  const { token } = req.query;
+  if (!token) return res.status(400).json({ error: 'Missing token' });
+  try {
+    const user = await prisma.user.findUnique({ where: { emailVerifyToken: token } });
+    if (!user || !user.emailVerifyExpires || user.emailVerifyExpires < new Date())
+      return res.status(400).json({ error: 'Invalid or expired verification token' });
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { emailVerified: true, emailVerifyToken: null, emailVerifyExpires: null },
+    });
+    res.json({ message: 'Email verified successfully' });
+  } catch (error) {
+    logger.error({ err: error }, 'verify-email failed');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to verify email');
+  }
+});
+
+router.post('/resend-verification', requireAuth, async (req, res) => {
+  try {
+    const user = await prisma.user.findUnique({ where: { id: req.user.sub } });
+    if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
+    if (user.emailVerified) return res.status(400).json({ error: 'Email already verified' });
+    await sendVerificationEmail(user);
+    res.json({ message: 'Verification email resent' });
+  } catch (error) {
+    logger.error({ err: error }, 'resend-verification failed');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to resend verification email');
   }
 });
 
