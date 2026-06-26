@@ -15,7 +15,81 @@ Never embed API keys or JWT secrets in source code or version-controlled files.
 
 ---
 
-## Webhook Signature Verification
+## Subresource Integrity (SRI)
+
+Subresource Integrity (SRI) is a browser security feature that prevents a compromised CDN from serving malicious JavaScript or CSS. An SRI hash is a cryptographic digest of a resource's content. If the hash does not match, the browser refuses to load the resource.
+
+### SRI Format
+
+```html
+<script
+  src="https://cdn.example.com/library.js"
+  integrity="sha256-abc123def456..."
+  crossorigin="anonymous"
+></script>
+```
+
+The `integrity` attribute contains the hash algorithm and digest:
+
+- `sha256-` — SHA-256 hash (recommended)
+- Base64-encoded hash value
+
+### Generating SRI Hashes
+
+For a resource at `https://example.com/app.js`:
+
+```bash
+curl https://example.com/app.js | openssl dgst -sha256 -binary | openssl enc -base64
+# Output: sha256-abc123def456...
+```
+
+Or use an online tool: [srihash.org](https://www.srihash.org/)
+
+### Implementation
+
+When hosting CDN assets for the FuTuRe frontend:
+
+1. Generate SRI hashes for all JavaScript and CSS files
+2. Embed the hashes in HTML with the `integrity` attribute
+3. Always include `crossorigin="anonymous"` to ensure the response is sent securely
+4. Update hashes whenever assets change
+5. Monitor browser console for SRI failures (indicated by "Failed to load" or subresource integrity mismatch errors)
+
+CSP + SRI together provide defense-in-depth:
+
+- CSP prevents execution of inline scripts
+- SRI prevents loading of compromised CDN assets
+
+Both should be enabled in production.
+
+Cross-Site Request Forgery (CSRF) is an attack where a malicious website tricks an authenticated user's browser into making unintended state-changing requests. The platform implements CSRF protection on all state-mutating endpoints (POST, PUT, DELETE) via the `backend/src/middleware/csrf.js` middleware.
+
+### Token Delivery Flow
+
+1. **Frontend initialization**: Call `GET /api/v1/auth/csrf-token` on app startup to fetch the CSRF token
+2. **Token storage**: Store the token in memory (not localStorage, to prevent XSS exfiltration)
+3. **Request inclusion**: Add the token as the `X-CSRF-Token` request header in all state-mutating fetch/axios calls
+4. **Token refresh**: Refresh the token after login and after each successful mutation
+
+### Backend Behavior
+
+- All POST/PUT/DELETE requests without a valid CSRF token return `403 Forbidden`
+- GET requests are never blocked by CSRF middleware
+- Tokens expire after 24 hours
+- A new token is generated on each GET request
+
+### API Endpoint
+
+```http
+GET /api/v1/auth/csrf-token
+
+Response:
+{
+  "csrfToken": "abc123def456..."
+}
+```
+
+The token is also set as an httpOnly, secure cookie (CSRF cookie).
 
 All outbound webhooks from FuTuRe include an `X-FuTuRe-Signature: sha256=<hex>` header. You must verify this before processing the payload.
 
@@ -53,14 +127,25 @@ The platform generates Stellar keypairs on behalf of users. Integrators that han
 
 ---
 
-## CSP Configuration
+## Content Security Policy (CSP)
 
-A Content Security Policy (CSP) limits what resources a browser will load. The platform sets a default CSP in `backend/src/middleware/securityHeaders.js`. When embedding the frontend or building your own UI on top of the API, configure CSP headers to:
+A Content Security Policy (CSP) is an HTTP response header that limits what resources a browser will load. It prevents injected JavaScript from executing, protecting against XSS attacks. The platform sets a strict CSP in `backend/src/middleware/securityHeaders.js` with the following directives:
 
-- Restrict `script-src` to your own origin and any explicitly trusted CDNs.
-- Set `default-src 'self'` and allow additional origins only where necessary.
-- Use `connect-src` to whitelist the API origin rather than allowing `*`.
-- Avoid `unsafe-inline` and `unsafe-eval`; use a nonce or hash-based approach for any inline scripts.
+- `default-src 'self'` — block all content from untrusted origins by default
+- `script-src 'self' 'nonce-*'` — allow only inline scripts with a nonce, no eval()
+- `style-src 'self' 'unsafe-inline'` — allow inline styles (tightened from 'unsafe-inline' in future)
+- `connect-src 'self' https://horizon.stellar.org https://horizon-testnet.stellar.org` — allow Horizon API calls
+- `frame-ancestors 'none'` — prevent clickjacking by disallowing iframe embedding
+- `object-src 'none'` — block Flash and plugins
+
+CSP violations are logged to `res.locals.cspNonce` for monitoring. Review logs regularly to identify unexpected script attempts.
+
+When embedding the frontend or building your own UI on top of the API:
+
+- Restrict `script-src` to your own origin and any explicitly trusted CDNs
+- Use `connect-src` to whitelist API origins rather than `*`
+- Use nonce-based or hash-based approaches for inline scripts instead of 'unsafe-inline'
+- Avoid `unsafe-eval` in production
 
 Test your CSP with the [CSP Evaluator](https://csp-evaluator.withgoogle.com/) before deploying.
 
