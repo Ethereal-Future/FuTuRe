@@ -24,11 +24,24 @@ const execFileAsync = promisify(execFile);
 
 // ── Config ───────────────────────────────────────────────────────────────────
 
-const BACKUP_DIR      = process.env.BACKUP_DIR      || path.join(process.cwd(), 'backups');
-const BACKUP_ENC_KEY  = process.env.BACKUP_ENC_KEY  || null;   // 32-byte hex key
-const RETENTION_DAYS  = parseInt(process.env.BACKUP_RETENTION_DAYS, 10) || 7;
-const BACKUP_SCHEDULE = parseInt(process.env.BACKUP_INTERVAL_HOURS, 10) || 24; // hours
-const DATABASE_URL    = process.env.DATABASE_URL     || '';
+const BACKUP_DIR = process.env.BACKUP_DIR || path.join(process.cwd(), 'backups');
+const BACKUP_ENC_KEY = process.env.BACKUP_ENC_KEY || null;
+const RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS, 10) || 7;
+const BACKUP_SCHEDULE = parseInt(process.env.BACKUP_INTERVAL_HOURS, 10) || 24;
+const DATABASE_URL = process.env.DATABASE_URL || '';
+
+const KEY_VERSIONS_FILE = path.join(BACKUP_DIR, '.key-versions.json');
+async function readKeyVersions() {
+  try {
+    return JSON.parse(await fs.readFile(KEY_VERSIONS_FILE, 'utf8'));
+  } catch {
+    return {};
+  }
+}
+async function writeKeyVersions(map) {
+  await fs.mkdir(BACKUP_DIR, { recursive: true });
+  await fs.writeFile(KEY_VERSIONS_FILE, JSON.stringify(map, null, 2));
+}
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -50,10 +63,10 @@ function parseDatabaseUrl(url) {
   try {
     const u = new URL(url);
     return {
-      host:     u.hostname,
-      port:     u.port || '5432',
+      host: u.hostname,
+      port: u.port || '5432',
       database: u.pathname.replace(/^\//, ''),
-      user:     u.username,
+      user: u.username,
       password: u.password,
     };
   } catch {
@@ -80,7 +93,7 @@ function addAlert(type, message) {
  */
 async function encryptFile(srcPath, dstPath, hexKey) {
   const key = Buffer.from(hexKey, 'hex');
-  const iv  = crypto.randomBytes(16);
+  const iv = crypto.randomBytes(16);
   const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
 
   const src = createReadStream(srcPath);
@@ -107,9 +120,9 @@ async function encryptFile(srcPath, dstPath, hexKey) {
  * Decrypt srcPath → dstPath.
  */
 async function decryptFile(srcPath, dstPath, hexKey) {
-  const key     = Buffer.from(hexKey, 'hex');
+  const key = Buffer.from(hexKey, 'hex');
   const content = await fs.readFile(srcPath);
-  const iv      = content.slice(0, 16);
+  const iv = content.slice(0, 16);
   const authTag = content.slice(16, 32);
   const payload = content.slice(32);
 
@@ -124,7 +137,7 @@ async function decryptFile(srcPath, dstPath, hexKey) {
 
 async function sha256File(filePath) {
   const hash = crypto.createHash('sha256');
-  const src  = createReadStream(filePath);
+  const src = createReadStream(filePath);
   await pipeline(src, async (source) => {
     for await (const chunk of source) hash.update(chunk);
   });
@@ -138,7 +151,7 @@ async function writeChecksum(filePath) {
 }
 
 async function verifyChecksum(filePath) {
-  const stored  = (await fs.readFile(filePath + '.sha256', 'utf8')).trim();
+  const stored = (await fs.readFile(filePath + '.sha256', 'utf8')).trim();
   const current = await sha256File(filePath);
   return { valid: stored === current, stored, current };
 }
@@ -152,9 +165,9 @@ async function verifyChecksum(filePath) {
 export async function createBackup({ tag = 'scheduled' } = {}) {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
 
-  const db      = parseDatabaseUrl(DATABASE_URL);
+  const db = parseDatabaseUrl(DATABASE_URL);
   const rawFile = path.join(BACKUP_DIR, backupFilename(tag));
-  const gzFile  = rawFile + '.gz';
+  const gzFile = rawFile + '.gz';
   const outFile = BACKUP_ENC_KEY ? gzFile + '.enc' : gzFile;
 
   metrics.totalBackups++;
@@ -162,21 +175,27 @@ export async function createBackup({ tag = 'scheduled' } = {}) {
   try {
     // 1. pg_dump → raw dump file
     const env = { ...process.env, PGPASSWORD: db.password };
-    await execFileAsync('pg_dump', [
-      '-h', db.host,
-      '-p', db.port,
-      '-U', db.user,
-      '-d', db.database,
-      '-F', 'c',          // custom format (supports PITR restore)
-      '-f', rawFile,
-    ], { env });
+    await execFileAsync(
+      'pg_dump',
+      [
+        '-h',
+        db.host,
+        '-p',
+        db.port,
+        '-U',
+        db.user,
+        '-d',
+        db.database,
+        '-F',
+        'c', // custom format (supports PITR restore)
+        '-f',
+        rawFile,
+      ],
+      { env },
+    );
 
     // 2. Compress
-    await pipeline(
-      createReadStream(rawFile),
-      createGzip(),
-      createWriteStream(gzFile),
-    );
+    await pipeline(createReadStream(rawFile), createGzip(), createWriteStream(gzFile));
     await fs.unlink(rawFile);
 
     // 3. Encrypt (optional)
@@ -187,10 +206,10 @@ export async function createBackup({ tag = 'scheduled' } = {}) {
 
     // 4. Checksum
     const checksum = await writeChecksum(outFile);
-    const { size }  = await fs.stat(outFile);
+    const { size } = await fs.stat(outFile);
 
     metrics.successfulBackups++;
-    metrics.lastBackupAt   = new Date().toISOString();
+    metrics.lastBackupAt = new Date().toISOString();
     metrics.lastBackupSize = size;
 
     const meta = {
@@ -204,7 +223,6 @@ export async function createBackup({ tag = 'scheduled' } = {}) {
 
     logger.info('backup.created', meta);
     return meta;
-
   } catch (err) {
     metrics.failedBackups++;
     addAlert('BACKUP_FAILED', err.message);
@@ -239,9 +257,9 @@ export async function verifyBackup(filePath) {
  * Optionally pass targetTime (ISO string) for point-in-time recovery.
  */
 export async function restoreBackup(filePath, { targetTime, targetDatabase } = {}) {
-  const db      = parseDatabaseUrl(DATABASE_URL);
+  const db = parseDatabaseUrl(DATABASE_URL);
   const restoreDb = targetDatabase || db.database;
-  let   workFile  = filePath;
+  let workFile = filePath;
 
   try {
     // 1. Decrypt if needed
@@ -260,12 +278,16 @@ export async function restoreBackup(filePath, { targetTime, targetDatabase } = {
     );
 
     // 3. pg_restore
-    const env  = { ...process.env, PGPASSWORD: db.password };
+    const env = { ...process.env, PGPASSWORD: db.password };
     const args = [
-      '-h', db.host,
-      '-p', db.port,
-      '-U', db.user,
-      '-d', restoreDb,
+      '-h',
+      db.host,
+      '-p',
+      db.port,
+      '-U',
+      db.user,
+      '-d',
+      restoreDb,
       '--clean',
       '--if-exists',
     ];
@@ -280,7 +302,6 @@ export async function restoreBackup(filePath, { targetTime, targetDatabase } = {
 
     logger.info('backup.restored', { file: filePath, targetTime, restoreDb });
     return { status: 'restored', file: filePath, targetTime, restoreDb };
-
   } catch (err) {
     addAlert('RESTORE_FAILED', err.message);
     logger.error('backup.restore.failed', { error: err.message });
@@ -292,8 +313,8 @@ export async function restoreBackup(filePath, { targetTime, targetDatabase } = {
 
 export async function enforceRetention() {
   await fs.mkdir(BACKUP_DIR, { recursive: true });
-  const files   = await fs.readdir(BACKUP_DIR);
-  const cutoff  = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
+  const files = await fs.readdir(BACKUP_DIR);
+  const cutoff = Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000;
   const removed = [];
 
   for (const file of files) {
@@ -344,7 +365,9 @@ export function startScheduler() {
     try {
       await createBackup({ tag: 'scheduled' });
       await enforceRetention();
-    } catch { /* already logged */ }
+    } catch {
+      /* already logged */
+    }
   }, intervalMs);
 
   scheduleTimer.unref?.();
@@ -359,6 +382,46 @@ export function stopScheduler() {
 }
 
 // ── Metrics ──────────────────────────────────────────────────────────────────
+
+export async function rotateEncryptionKey(newHexKey) {
+  if (!newHexKey || Buffer.from(newHexKey, 'hex').length !== 32)
+    throw new Error('New key must be a 32-byte hex string (64 hex characters)');
+  const previousKey = process.env.BACKUP_ENC_KEY_PREVIOUS || BACKUP_ENC_KEY;
+  if (!previousKey) throw new Error('BACKUP_ENC_KEY_PREVIOUS required to decrypt existing backups');
+  await fs.mkdir(BACKUP_DIR, { recursive: true });
+  const files = (await fs.readdir(BACKUP_DIR)).filter(
+    (f) => f.startsWith('backup-') && f.endsWith('.enc'),
+  );
+  const rotated = [],
+    errors = [];
+  const kvMap = await readKeyVersions();
+  for (const file of files) {
+    const full = path.join(BACKUP_DIR, file);
+    const tmpDec = full + '.rot-dec';
+    const tmpEnc = full + '.rot-enc';
+    try {
+      await decryptFile(full, tmpDec, previousKey);
+      await encryptFile(tmpDec, tmpEnc, newHexKey);
+      await fs.rename(tmpEnc, full);
+      await writeChecksum(full);
+      kvMap[file] = 'new';
+      rotated.push(file);
+    } catch (err) {
+      errors.push({ file, error: err.message });
+      logger.error('backup.key_rotation.file_failed', { file, error: err.message });
+    } finally {
+      await fs.unlink(tmpDec).catch(() => {});
+      await fs.unlink(tmpEnc).catch(() => {});
+    }
+  }
+  await writeKeyVersions(kvMap);
+  logger.info('backup.key_rotation.complete', {
+    rotated: rotated.length,
+    skipped: 0,
+    errors: errors.length,
+  });
+  return { rotated, skipped: [], errors };
+}
 
 export function getMetrics() {
   return {
