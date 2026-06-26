@@ -264,3 +264,13 @@ async function shutdown(signal) {
 
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 process.on('SIGINT', () => shutdown('SIGINT'));
+
+process.on('unhandledRejection', (reason) => {
+  logger.error('process.unhandledRejection', { error: reason instanceof Error ? reason.message : String(reason) });
+  shutdown('unhandledRejection').finally(() => process.exit(1));
+});
+
+process.on('uncaughtException', (err) => {
+  logger.error('process.uncaughtException', { error: err.message });
+  shutdown('uncaughtException').finally(() => process.exit(1));
+});

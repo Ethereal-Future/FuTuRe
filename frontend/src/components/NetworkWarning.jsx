@@ -1,4 +1,6 @@
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 /**
  * NetworkWarning — displays network-specific warnings.
@@ -24,8 +26,11 @@ export function NetworkWarning({ networkStatus }) {
           display: 'flex',
           gap: 12,
         }}
+        role="status"
+        aria-live="polite"
+        aria-label="You are using testnet with test funds"
       >
-        <span style={{ fontSize: 22, flexShrink: 0 }}>🧪</span>
+        <span style={{ fontSize: 22, flexShrink: 0 }} aria-hidden="true">🧪</span>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px 0', color: '#0c4a6e', fontSize: 14, fontWeight: 600 }}>
             Testnet Mode
@@ -53,8 +58,10 @@ export function NetworkWarning({ networkStatus }) {
           display: 'flex',
           gap: 12,
         }}
+        role="alert"
+        aria-live="assertive"
       >
-        <span style={{ fontSize: 22, flexShrink: 0 }}>🌐</span>
+        <span style={{ fontSize: 22, flexShrink: 0 }} aria-hidden="true">🌐</span>
         <div style={{ flex: 1 }}>
           <h3 style={{ margin: '0 0 4px 0', color: '#991b1b', fontSize: 14, fontWeight: 600 }}>
             Network Offline
@@ -73,25 +80,126 @@ export function NetworkWarning({ networkStatus }) {
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
       style={{
-        background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)',
-        border: '2px solid #22c55e',
+        background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+        border: '2px solid #dc2626',
         borderRadius: 8,
         padding: 14,
         marginBottom: 14,
         display: 'flex',
         gap: 12,
       }}
+      role="alert"
+      aria-live="assertive"
+      aria-label="You are using mainnet with real funds"
     >
-      <span style={{ fontSize: 22, flexShrink: 0 }}>✅</span>
+      <span style={{ fontSize: 22, flexShrink: 0 }} aria-hidden="true">⚠️</span>
       <div style={{ flex: 1 }}>
-        <h3 style={{ margin: '0 0 4px 0', color: '#166534', fontSize: 14, fontWeight: 600 }}>
-          Mainnet Connected
+        <h3 style={{ margin: '0 0 4px 0', color: '#7f1d1d', fontSize: 14, fontWeight: 600 }}>
+          Real Funds — Mainnet Active
         </h3>
-        <p style={{ margin: 0, fontSize: 13, color: '#166534' }}>
-          Connected to Stellar Mainnet. <strong>Real funds are at risk.</strong> Always verify
-          recipient addresses and transaction amounts carefully before sending.
+        <p style={{ margin: 0, fontSize: 13, color: '#7f1d1d' }}>
+          <strong>You are using real funds on Stellar Mainnet.</strong> Verify all recipient addresses
+          and transaction amounts carefully before sending. There is no undo.
         </p>
       </div>
+    </motion.div>
+  );
+}
+
+export function MainnetPaymentConfirmation({ amount, onConfirm, onCancel }) {
+  const modalRef = useRef(null);
+  useFocusTrap(modalRef, true);
+  const [confirmed, setConfirmed] = useState(false);
+
+  const xlmAmount = parseFloat(amount) || 0;
+  const requiresConfirm = xlmAmount >= 10;
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onCancel?.(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onCancel]);
+
+  if (!requiresConfirm) return null;
+
+  return (
+    <motion.div
+      className="confirm-overlay"
+      onClick={onCancel}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <motion.div
+        ref={modalRef}
+        className="confirm-modal"
+        onClick={e => e.stopPropagation()}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.9, opacity: 0 }}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="mainnet-confirm-title"
+      >
+        <h2 id="mainnet-confirm-title" style={{ margin: '0 0 12px 0', color: '#7f1d1d' }}>
+          Confirm Mainnet Payment
+        </h2>
+        <div style={{ background: '#fef2f2', padding: 12, borderRadius: 6, marginBottom: 14, borderLeft: '4px solid #dc2626' }}>
+          <p style={{ margin: '0 0 8px 0', fontSize: 13 }}>
+            You are about to send <strong>{xlmAmount} XLM</strong> on <strong>Stellar Mainnet</strong> with real funds.
+          </p>
+          <p style={{ margin: 0, fontSize: 13 }}>
+            This transaction cannot be reversed. Please verify the recipient address is correct.
+          </p>
+        </div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+          <input
+            type="checkbox"
+            id="mainnet-confirm-check"
+            checked={confirmed}
+            onChange={(e) => setConfirmed(e.target.checked)}
+            aria-label="I understand this transaction uses real funds and cannot be reversed"
+          />
+          <label htmlFor="mainnet-confirm-check" style={{ margin: 0, fontSize: 13 }}>
+            I understand this transaction uses real funds and cannot be reversed
+          </label>
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => onConfirm?.()}
+            disabled={!confirmed}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              background: confirmed ? '#dc2626' : '#d1d5db',
+              color: 'white',
+              border: 'none',
+              borderRadius: 6,
+              cursor: confirmed ? 'pointer' : 'not-allowed',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Send {xlmAmount} XLM
+          </button>
+          <button
+            onClick={onCancel}
+            style={{
+              flex: 1,
+              padding: '8px 12px',
+              background: '#e5e7eb',
+              color: '#374151',
+              border: 'none',
+              borderRadius: 6,
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: 600,
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </motion.div>
     </motion.div>
   );
 }
@@ -113,15 +221,15 @@ export function NetworkStatus({ networkStatus, compact = false }) {
         alignItems: 'center',
         gap: 6,
         padding: '6px 10px',
-        background: isTestnet ? '#dbeafe' : (online ? '#f0fdf4' : '#fef2f2'),
-        border: `1px solid ${isTestnet ? '#0284c7' : (online ? '#22c55e' : '#ef4444')}`,
+        background: isTestnet ? '#dbeafe' : (online ? '#fee2e2' : '#fef2f2'),
+        border: `1px solid ${isTestnet ? '#0284c7' : (online ? '#dc2626' : '#ef4444')}`,
         borderRadius: 4,
         fontSize: 12,
-        color: isTestnet ? '#0c4a6e' : (online ? '#166534' : '#991b1b'),
+        color: isTestnet ? '#0c4a6e' : (online ? '#7f1d1d' : '#991b1b'),
         fontWeight: 500,
       }}>
-        <span>{isTestnet ? '🧪' : (online ? '✅' : '❌')}</span>
-        <span>{isTestnet ? 'Testnet' : (online ? 'Mainnet • Online' : 'Offline')}</span>
+        <span>{isTestnet ? '🧪' : (online ? '⚠️' : '❌')}</span>
+        <span>{isTestnet ? 'Testnet' : (online ? 'Mainnet • Real Funds' : 'Offline')}</span>
       </div>
     );
   }
@@ -159,13 +267,13 @@ export function NetworkStatus({ networkStatus, compact = false }) {
   return (
     <div style={{
       padding: 10,
-      background: '#f0fdf4',
-      border: '1px solid #22c55e',
+      background: '#fee2e2',
+      border: '1px solid #dc2626',
       borderRadius: 6,
       fontSize: 12,
-      color: '#166534',
+      color: '#7f1d1d',
     }}>
-      ✅ Mainnet Connected — Real funds
+      ⚠️ Mainnet Connected — Real funds at risk
     </div>
   );
 }

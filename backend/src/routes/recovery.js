@@ -90,6 +90,45 @@ router.get('/phrase/status', requireAuth, (req, res) => {
   res.json({ configured: hasRecoveryPhrase(req.user.sub) });
 });
 
+/**
+ * @swagger
+ * /api/recovery/phrase/confirm-backup:
+ *   post:
+ *     summary: Confirm recovery phrase backup
+ *     description: Mark recovery phrase as backed up and confirmed after user verifies random words
+ *     tags: [Recovery]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Backup confirmed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 message: { type: string }
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: No recovery phrase found
+ *       500:
+ *         description: Server error
+ */
+router.post('/phrase/confirm-backup', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user.sub;
+    if (!hasRecoveryPhrase(userId)) {
+      return res.status(404).json({ error: 'No recovery phrase found. Generate one first.' });
+    }
+    // Mark phrase as confirmed/backed up in user settings
+    await markPhraseUsed(userId);
+    res.json({ message: 'Recovery phrase backup confirmed successfully' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Recovery Contacts ────────────────────────────────────────────────────────
 
 /**

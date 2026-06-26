@@ -15,6 +15,7 @@
   --ws-connected: #16a34a;
   --ws-disconnected: #dc2626;
   --ws-reconnecting: #d97706;
+  --ws-failed: #7c3aed;
 
   /* ── Accessibility utilities ─────────────────────────────────────────────── */
   .sr-only {
@@ -79,6 +80,7 @@
   --ws-connected: #4ade80;
   --ws-disconnected: #f87171;
   --ws-reconnecting: #fbbf24;
+  --ws-failed: #a78bfa;
 }
 
 * {
@@ -2202,5 +2204,90 @@ kbd {
 }
 .skeleton-text-line:last-child {
   margin-bottom: 0;
+}
+
+/* ── Responsive header ───────────────────────────────────────────────────── */
+.app-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 480px) {
+  .header-actions {
+    gap: 4px;
+  }
+
+  .theme-toggle-btn {
+    font-size: 0.8rem;
+    padding: 6px 8px;
+  }
+
+  /* Ensure all icon-only header buttons meet 44x44 touch target */
+  .shortcuts-help-btn {
+    min-height: 44px;
+    min-width: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+  }
+
+  .net-badge {
+    font-size: 11px;
+    padding: 3px 7px;
+  }
+}
+
+/* WS "Connection lost" status */
+.ws-status-failed {
+  color: var(--ws-failed);
+}
+
+/* Prevent horizontal scroll at 375px */
+@media (max-width: 375px) {
+  .app {
+    padding: 12px;
+  }
+
+  .section {
+    margin-bottom: 16px;
+  }
+
+  .app h1 {
+    font-size: 1.2rem;
+  }
+
+  .account-info {
+    font-size: 12px;
+  }
+
+  .tx-row {
+    grid-template-columns: 20px 1fr auto 20px;
+    font-size: 12px;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+
+  .tx-amount {
+    font-size: 12px;
+  }
+
+  .tx-date {
+    display: none;
+  }
+
+  .balance-row {
+    font-size: 13px;
+  }
 }
 

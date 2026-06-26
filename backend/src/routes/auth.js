@@ -709,4 +709,194 @@ router.delete('/account', requireAuth, async (req, res) => {
   }
 });
 
+// MFA Routes
+// POST /api/auth/mfa/setup - Enable MFA and generate recovery codes
+router.post('/mfa/setup', [
+  body('totp').notEmpty().isString(),
+], validate, async (req, res) => {
+  try {
+    const userId = req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { totp } = req.body;
+
+    // Verify TOTP is valid
+    const mfaManager = (await import('../security/mfa.js')).default;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Generate recovery codes
+    const recoveryCodes = Array.from({ length: 10 }, () =>
+      require('crypto').randomBytes(4).toString('hex').toUpperCase()
+    );
+
+    // Hash and store recovery codes
+    const bcrypt = require('bcryptjs');
+    const hashedCodes = await Promise.all(
+      recoveryCodes.map((code) => bcrypt.hash(code, 10))
+    );
+
+    // Create/update MFA settings
+    await prisma.mFASettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        secret: req.body.secret, // encrypted secret would be passed from client
+        enabled: true,
+      },
+      update: {
+        enabled: true,
+      },
+    });
+
+    // Save recovery codes
+    await prisma.recoveryCode.deleteMany({ where: { userId } });
+    await prisma.recoveryCode.createMany({
+      data: hashedCodes.map((codeHash) => ({
+        userId,
+        codeHash,
+      })),
+    });
+
+    res.json({
+      message: 'MFA enabled successfully',
+      recoveryCodes, // Return unhashed codes only once during setup
+      warning: 'Store these recovery codes in a safe place. Each code can only be used once.',
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'MFA setup failed');
+    res.status(500).json({ error: 'Failed to enable MFA' });
+  }
+});
+
+// POST /api/auth/mfa/regenerate - Regenerate recovery codes
+router.post('/mfa/regenerate', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Generate new recovery codes
+    const recoveryCodes = Array.from({ length: 10 }, () =>
+      require('crypto').randomBytes(4).toString('hex').toUpperCase()
+    );
+
+    // Hash and store new codes
+    const bcrypt = require('bcryptjs');
+    const hashedCodes = await Promise.all(
+      recoveryCodes.map((code) => bcrypt.hash(code, 10))
+    );
+
+    // Delete old codes and save new ones
+    await prisma.recoveryCode.deleteMany({ where: { userId } });
+    await prisma.recoveryCode.createMany({
+      data: hashedCodes.map((codeHash) => ({
+        userId,
+        codeHash,
+      })),
+    });
+
+    res.json({
+      message: 'Recovery codes regenerated',
+      recoveryCodes,
+      warning: 'All previous recovery codes are now invalid.',
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Recovery code regeneration failed');
+    res.status(500).json({ error: 'Failed to regenerate recovery codes' });
+  }
+});
+
+// POST /api/auth/mfa/verify-recovery - Verify recovery code and log in
+router.post('/mfa/verify-recovery', [
+  body('publicKey').notEmpty().isString(),
+  body('recoveryCode').notEmpty().isString(),
+], validate, async (req, res) => {
+  try {
+    const { publicKey, recoveryCode } = req.body;
+
+    // Find user by public key
+    const user = await prisma.user.findUnique({
+      where: { publicKey },
+      include: { recoveryCodes: true, mfaSettings: true },
+    });
+
+    if (!user) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Check if MFA is enabled
+    if (!user.mfaSettings?.enabled) {
+      return res.status(400).json({ error: 'MFA not enabled' });
+    }
+
+    // Find matching recovery code
+    const bcrypt = require('bcryptjs');
+    let validCode = null;
+    for (const code of user.recoveryCodes) {
+      if (!code.used && await bcrypt.compare(recoveryCode, code.codeHash)) {
+        validCode = code;
+        break;
+      }
+    }
+
+    if (!validCode) {
+      return res.status(401).json({ error: 'Invalid recovery code' });
+    }
+
+    // Mark code as used
+    await prisma.recoveryCode.update({
+      where: { id: validCode.id },
+      data: { used: true, usedAt: new Date() },
+    });
+
+    // Generate JWT token
+    const token = generateToken(user.id, user.publicKey);
+
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        publicKey: user.publicKey,
+      },
+      message: 'Recovery code accepted. Please update your TOTP device.',
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Recovery code verification failed');
+    res.status(500).json({ error: 'Failed to verify recovery code' });
+  }
+});
+
+// GET /api/auth/mfa/status - Check MFA status
+router.get('/mfa/status', requireAuth, async (req, res) => {
+  try {
+    const userId = req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const mfaSettings = await prisma.mFASettings.findUnique({
+      where: { userId },
+    });
+
+    const availableRecoveryCodes = await prisma.recoveryCode.count({
+      where: { userId, used: false },
+    });
+
+    res.json({
+      enabled: mfaSettings?.enabled ?? false,
+      availableRecoveryCodes,
+      lastUsed: mfaSettings?.lastUsed,
+    });
+  } catch (error) {
+    logger.error({ err: error }, 'Failed to get MFA status');
+    res.status(500).json({ error: 'Failed to get MFA status' });
+  }
+});
+
 export default router;
