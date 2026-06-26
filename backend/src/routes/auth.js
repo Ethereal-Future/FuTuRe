@@ -1,9 +1,17 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
 import { randomBytes } from 'crypto';
+import bcrypt from 'bcryptjs';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
+import {
+  createSession,
+  getActiveSession,
+  listUserSessions,
+  revokeSession,
+  revokeAllSessions,
+} from '../auth/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendError, ErrorCodes } from '../middleware/errorHandler.js';
 import { consumePendingCredentials } from '../recovery/recoveryStore.js';
@@ -24,6 +32,17 @@ import oauth2Provider from '../security/oauth2.js';
 import { getConfig } from '../config/env.js';
 
 const router = express.Router();
+
+function clearRefreshTokenCookie(res) {
+  const config = getConfig();
+  const isProduction = config.meta.appEnv === 'production';
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'strict',
+    path: '/api/auth',
+  });
+}
 
 function setRefreshTokenCookie(res, refreshToken) {
   const config = getConfig();
@@ -48,7 +67,13 @@ const authRateLimiter = createRateLimiter({
 const validateBody = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
-    return sendError(res, 422, ErrorCodes.VALIDATION_INVALID_INPUT, 'Validation failed', errors.array());
+    return sendError(
+      res,
+      422,
+      ErrorCodes.VALIDATION_INVALID_INPUT,
+      'Validation failed',
+      errors.array(),
+    );
   next();
 };
 
@@ -179,17 +204,20 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
   const locked = await isAccountLocked(username);
   if (locked) {
     const retryAfter = Math.ceil(getLockoutDuration() / 1000);
-    return res.status(423).set('Retry-After', retryAfter).json({
-      success: false,
-      error: {
-        code: ErrorCodes.UNAUTHORIZED,
-        message: 'Account is temporarily locked due to too many failed login attempts',
-        details: { retryAfter },
-      },
-    });
+    return res
+      .status(423)
+      .set('Retry-After', retryAfter)
+      .json({
+        success: false,
+        error: {
+          code: ErrorCodes.UNAUTHORIZED,
+          message: 'Account is temporarily locked due to too many failed login attempts',
+          details: { retryAfter },
+        },
+      });
   }
 
-  const user = findUser(username);
+  const user = await findUser(username);
   if (!user) {
     await recordFailedLogin(username, ipAddress);
     return sendError(res, 401, ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid credentials');
@@ -202,12 +230,22 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
     if (valid) {
       updateUserPassword(user.id, recovered.passwordHash);
       await clearFailedAttempts(username);
-      const recoveredPayload = { sub: user.id, username: user.username, role: user.role || 'USER' };
+      const recoveredSession = await createSession(user.id, {
+        ipAddress,
+        userAgent: req.headers['user-agent'],
+      });
+      const recoveredPayload = {
+        sub: user.id,
+        username: user.username,
+        role: user.role || 'USER',
+        sid: recoveredSession.id,
+      };
       const recoveredRefreshToken = signRefreshToken(recoveredPayload);
       setRefreshTokenCookie(res, recoveredRefreshToken);
       return res.json({
         accessToken: signAccessToken(recoveredPayload),
         recovered: true,
+        sessionId: recoveredSession.id,
       });
     }
     await recordFailedLogin(username, ipAddress);
@@ -221,11 +259,21 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
 
   // Successful login - clear failed attempts
   await clearFailedAttempts(username);
-  const payload = { sub: user.id, username: user.username, role: user.role || 'USER' };
+  const session = await createSession(user.id, {
+    ipAddress,
+    userAgent: req.headers['user-agent'],
+  });
+  const payload = {
+    sub: user.id,
+    username: user.username,
+    role: user.role || 'USER',
+    sid: session.id,
+  };
   const refreshToken = signRefreshToken(payload);
   setRefreshTokenCookie(res, refreshToken);
   res.json({
     accessToken: signAccessToken(payload),
+    sessionId: session.id,
   });
 });
 
@@ -262,15 +310,28 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken)
     return sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Refresh token missing or expired');
   try {
-    const { sub, username } = verifyToken(refreshToken);
-    const newRefreshToken = signRefreshToken({ sub, username });
+    const payload = verifyToken(refreshToken);
+    if (payload.sid) {
+      const session = await getActiveSession(payload.sid);
+      if (!session) {
+        clearRefreshTokenCookie(res);
+        return sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Session expired or revoked');
+      }
+    }
+    const newPayload = {
+      sub: payload.sub,
+      username: payload.username,
+      role: payload.role,
+      sid: payload.sid,
+    };
+    const newRefreshToken = signRefreshToken(newPayload);
     setRefreshTokenCookie(res, newRefreshToken);
-    res.json({ accessToken: signAccessToken({ sub, username }) });
+    res.json({ accessToken: signAccessToken(newPayload) });
   } catch {
     sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Invalid or expired refresh token');
   }
@@ -302,8 +363,80 @@ router.post('/refresh', (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/logout', requireAuth, (_req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
+  if (req.user.sid) {
+    await revokeSession(req.user.sid, req.user.sub);
+  }
+  clearRefreshTokenCookie(res);
   res.json({ message: 'Logged out successfully' });
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions:
+ *   get:
+ *     summary: List all active sessions for the authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Active sessions
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/sessions', requireAuth, async (req, res) => {
+  try {
+    const sessions = await listUserSessions(req.user.sub, req.user.sid);
+    res.json({ sessions });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'Failed to list sessions');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to list sessions');
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions/{id}:
+ *   delete:
+ *     summary: Revoke a specific session
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/sessions/:id', requireAuth, async (req, res) => {
+  try {
+    const revoked = await revokeSession(req.params.id, req.user.sub);
+    if (!revoked) {
+      return sendError(res, 404, ErrorCodes.NOT_FOUND, 'Session not found');
+    }
+    if (req.params.id === req.user.sid) {
+      clearRefreshTokenCookie(res);
+    }
+    res.json({ message: 'Session revoked' });
+  } catch (error) {
+    logger.error({ err: error, sessionId: req.params.id }, 'Failed to revoke session');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to revoke session');
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions:
+ *   delete:
+ *     summary: Revoke all sessions (logout everywhere)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/sessions', requireAuth, async (req, res) => {
+  try {
+    const count = await revokeAllSessions(req.user.sub, req.user.sid);
+    res.json({ message: 'All other sessions revoked', revokedCount: count });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'Failed to revoke all sessions');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to revoke sessions');
+  }
 });
 
 /**
@@ -527,7 +660,8 @@ router.post('/mfa/verify', requireAuth, (req, res) => {
   if (!token) return sendError(res, 400, ErrorCodes.VALIDATION_MISSING_FIELD, 'Token required');
   try {
     const mfa = mfaManager.userMFA.get(req.user.sub);
-    if (!mfa) return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'MFA setup not initiated');
+    if (!mfa)
+      return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'MFA setup not initiated');
     mfaManager.verifyTOTP(req.user.sub, token, mfa.secret);
     res.json({ message: 'MFA enabled successfully' });
   } catch (error) {
@@ -601,7 +735,12 @@ router.get('/oauth/google/callback', async (req, res) => {
   const storedState = req.cookies.oauth_state;
 
   if (!code || !state || state !== storedState) {
-    return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'Invalid state or authorization code');
+    return sendError(
+      res,
+      400,
+      ErrorCodes.VALIDATION_INVALID_INPUT,
+      'Invalid state or authorization code',
+    );
   }
 
   try {
@@ -614,7 +753,7 @@ router.get('/oauth/google/callback', async (req, res) => {
       code,
       clientId,
       clientSecret,
-      redirectUri
+      redirectUri,
     );
 
     // Get user info
@@ -634,7 +773,7 @@ router.get('/oauth/google/callback', async (req, res) => {
     // Redirect to frontend with tokens
     const frontendUrl = getConfig().frontend.baseUrl;
     res.redirect(
-      `${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`
+      `${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`,
     );
   } catch (error) {
     sendError(res, 400, ErrorCodes.INTERNAL_ERROR, error.message);
@@ -867,19 +1006,15 @@ router.delete('/account', requireAuth, async (req, res) => {
 
 // MFA Routes
 // POST /api/auth/mfa/setup - Enable MFA and generate recovery codes
-router.post('/mfa/setup', [
-  body('totp').notEmpty().isString(),
-], validate, async (req, res) => {
+router.post('/mfa/setup', [body('totp').notEmpty().isString()], validateBody, async (req, res) => {
   try {
     const userId = req.user?.sub;
     if (!userId) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    const { totp } = req.body;
+    const { totp: _totp } = req.body;
 
-    // Verify TOTP is valid
-    const mfaManager = (await import('../security/mfa.js')).default;
     const user = await prisma.user.findUnique({ where: { id: userId } });
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
@@ -887,14 +1022,11 @@ router.post('/mfa/setup', [
 
     // Generate recovery codes
     const recoveryCodes = Array.from({ length: 10 }, () =>
-      require('crypto').randomBytes(4).toString('hex').toUpperCase()
+      randomBytes(4).toString('hex').toUpperCase(),
     );
 
     // Hash and store recovery codes
-    const bcrypt = require('bcryptjs');
-    const hashedCodes = await Promise.all(
-      recoveryCodes.map((code) => bcrypt.hash(code, 10))
-    );
+    const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
 
     // Create/update MFA settings
     await prisma.mFASettings.upsert({
@@ -939,14 +1071,11 @@ router.post('/mfa/regenerate', requireAuth, async (req, res) => {
 
     // Generate new recovery codes
     const recoveryCodes = Array.from({ length: 10 }, () =>
-      require('crypto').randomBytes(4).toString('hex').toUpperCase()
+      randomBytes(4).toString('hex').toUpperCase(),
     );
 
     // Hash and store new codes
-    const bcrypt = require('bcryptjs');
-    const hashedCodes = await Promise.all(
-      recoveryCodes.map((code) => bcrypt.hash(code, 10))
-    );
+    const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
 
     // Delete old codes and save new ones
     await prisma.recoveryCode.deleteMany({ where: { userId } });
@@ -969,64 +1098,69 @@ router.post('/mfa/regenerate', requireAuth, async (req, res) => {
 });
 
 // POST /api/auth/mfa/verify-recovery - Verify recovery code and log in
-router.post('/mfa/verify-recovery', [
-  body('publicKey').notEmpty().isString(),
-  body('recoveryCode').notEmpty().isString(),
-], validate, async (req, res) => {
-  try {
-    const { publicKey, recoveryCode } = req.body;
+router.post(
+  '/mfa/verify-recovery',
+  [body('publicKey').notEmpty().isString(), body('recoveryCode').notEmpty().isString()],
+  validateBody,
+  async (req, res) => {
+    try {
+      const { publicKey, recoveryCode } = req.body;
 
-    // Find user by public key
-    const user = await prisma.user.findUnique({
-      where: { publicKey },
-      include: { recoveryCodes: true, mfaSettings: true },
-    });
+      // Find user by public key
+      const user = await prisma.user.findUnique({
+        where: { publicKey },
+        include: { recoveryCodes: true, mfaSettings: true },
+      });
 
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
-
-    // Check if MFA is enabled
-    if (!user.mfaSettings?.enabled) {
-      return res.status(400).json({ error: 'MFA not enabled' });
-    }
-
-    // Find matching recovery code
-    const bcrypt = require('bcryptjs');
-    let validCode = null;
-    for (const code of user.recoveryCodes) {
-      if (!code.used && await bcrypt.compare(recoveryCode, code.codeHash)) {
-        validCode = code;
-        break;
+      if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
       }
+
+      // Check if MFA is enabled
+      if (!user.mfaSettings?.enabled) {
+        return res.status(400).json({ error: 'MFA not enabled' });
+      }
+
+      // Find matching recovery code
+      let validCode = null;
+      for (const code of user.recoveryCodes) {
+        if (!code.used && (await bcrypt.compare(recoveryCode, code.codeHash))) {
+          validCode = code;
+          break;
+        }
+      }
+
+      if (!validCode) {
+        return res.status(401).json({ error: 'Invalid recovery code' });
+      }
+
+      // Mark code as used
+      await prisma.recoveryCode.update({
+        where: { id: validCode.id },
+        data: { used: true, usedAt: new Date() },
+      });
+
+      // Generate JWT token
+      const token = signAccessToken({
+        sub: user.id,
+        username: user.username,
+        role: user.role || 'USER',
+      });
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          publicKey: user.publicKey,
+        },
+        message: 'Recovery code accepted. Please update your TOTP device.',
+      });
+    } catch (error) {
+      logger.error({ err: error }, 'Recovery code verification failed');
+      res.status(500).json({ error: 'Failed to verify recovery code' });
     }
-
-    if (!validCode) {
-      return res.status(401).json({ error: 'Invalid recovery code' });
-    }
-
-    // Mark code as used
-    await prisma.recoveryCode.update({
-      where: { id: validCode.id },
-      data: { used: true, usedAt: new Date() },
-    });
-
-    // Generate JWT token
-    const token = generateToken(user.id, user.publicKey);
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        publicKey: user.publicKey,
-      },
-      message: 'Recovery code accepted. Please update your TOTP device.',
-    });
-  } catch (error) {
-    logger.error({ err: error }, 'Recovery code verification failed');
-    res.status(500).json({ error: 'Failed to verify recovery code' });
-  }
-});
+  },
+);
 
 // GET /api/auth/mfa/status - Check MFA status
 router.get('/mfa/status', requireAuth, async (req, res) => {

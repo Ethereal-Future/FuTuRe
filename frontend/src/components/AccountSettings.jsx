@@ -18,24 +18,67 @@ export function AccountSettings({ publicKey, onClose }) {
   const [showMerge, setShowMerge] = useState(false);
   const [userRole, setUserRole] = useState(null);
   const [federationLocalPart, setFederationLocalPart] = useState('');
+  const [sessions, setSessions] = useState([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [sessionAction, setSessionAction] = useState('');
 
   useEffect(() => {
-    apiClient.get(`/api/stellar/account/${publicKey}/settings`)
+    apiClient
+      .get(`/api/stellar/account/${publicKey}/settings`)
       .then(({ data }) => {
         setSettings(data);
-        // Check if user has admin role from JWT token
-        const token = localStorage.getItem('authToken');
+        const token = localStorage.getItem('accessToken') || localStorage.getItem('authToken');
         if (token) {
           try {
             const payload = JSON.parse(atob(token.split('.')[1]));
             setUserRole(payload.role);
-          } catch (e) {
+          } catch {
             // Invalid token format
           }
         }
       })
-      .catch(e => setError(e?.response?.data?.error ?? e.message));
+      .catch((e) => setError(e?.response?.data?.error ?? e.message));
   }, [publicKey]);
+
+  const loadSessions = async () => {
+    setSessionsLoading(true);
+    try {
+      const { data } = await apiClient.get('/api/auth/sessions');
+      setSessions(data.sessions ?? []);
+    } catch (e) {
+      setError(e?.response?.data?.error ?? e.message);
+    } finally {
+      setSessionsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSessions();
+  }, []);
+
+  const revokeSession = async (sessionId) => {
+    setSessionAction(sessionId);
+    try {
+      await apiClient.delete(`/api/auth/sessions/${sessionId}`);
+      await loadSessions();
+    } catch (e) {
+      setError(e?.response?.data?.error ?? e.message);
+    } finally {
+      setSessionAction('');
+    }
+  };
+
+  const revokeAllSessions = async () => {
+    setSessionAction('all');
+    try {
+      await apiClient.delete('/api/auth/sessions');
+      await loadSessions();
+    } catch (e) {
+      setError(e?.response?.data?.error ?? e.message);
+    } finally {
+      setSessionAction('');
+    }
+  };
 
   const save = async () => {
     setSaving(true);
@@ -50,7 +93,7 @@ export function AccountSettings({ publicKey, onClose }) {
         const { data } = await apiClient.put(`/api/stellar/federation/claim/${publicKey}`, {
           localPart: federationLocalPart.trim(),
         });
-        setSettings(s => ({ ...s, federationAddress: data.federationAddress }));
+        setSettings((s) => ({ ...s, federationAddress: data.federationAddress }));
       }
       setSaved(true);
     } catch (e) {
@@ -66,30 +109,52 @@ export function AccountSettings({ publicKey, onClose }) {
       role="dialog"
       aria-modal="true"
       aria-labelledby="settings-title"
-      onClick={e => e.target === e.currentTarget && onClose()}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="replay-modal" style={{ maxWidth: 480, width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 id="settings-title" style={{ margin: 0 }}>Account Settings</h2>
-          <button type="button" className="qr-close" onClick={onClose} aria-label="Close settings">✕</button>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: 16,
+          }}
+        >
+          <h2 id="settings-title" style={{ margin: 0 }}>
+            Account Settings
+          </h2>
+          <button type="button" className="qr-close" onClick={onClose} aria-label="Close settings">
+            ✕
+          </button>
         </div>
 
         {!settings && !error && <p>Loading…</p>}
-        {error && <p role="alert" style={{ color: '#ef4444' }}>{error}</p>}
+        {error && (
+          <p role="alert" style={{ color: '#ef4444' }}>
+            {error}
+          </p>
+        )}
 
         {settings && (
           <>
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="default-asset" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
+              <label
+                htmlFor="default-asset"
+                style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
+              >
                 Default Asset
               </label>
               <select
                 id="default-asset"
                 value={settings.defaultAsset}
-                onChange={e => setSettings(s => ({ ...s, defaultAsset: e.target.value }))}
+                onChange={(e) => setSettings((s) => ({ ...s, defaultAsset: e.target.value }))}
                 aria-label="Default asset"
               >
-                {ASSETS.map(a => <option key={a} value={a}>{a}</option>)}
+                {ASSETS.map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -98,7 +163,7 @@ export function AccountSettings({ publicKey, onClose }) {
                 id="notifications-toggle"
                 type="checkbox"
                 checked={settings.notificationsOn}
-                onChange={e => setSettings(s => ({ ...s, notificationsOn: e.target.checked }))}
+                onChange={(e) => setSettings((s) => ({ ...s, notificationsOn: e.target.checked }))}
                 style={{ width: 'auto', minHeight: 'unset' }}
               />
               <label htmlFor="notifications-toggle" style={{ fontWeight: 600, cursor: 'pointer' }}>
@@ -107,17 +172,26 @@ export function AccountSettings({ publicKey, onClose }) {
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <label htmlFor="federation-address" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
+              <label
+                htmlFor="federation-address"
+                style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
+              >
                 Federation Address
               </label>
               <input
                 id="federation-address"
                 value={federationLocalPart}
-                onChange={e => setFederationLocalPart(e.target.value)}
+                onChange={(e) => setFederationLocalPart(e.target.value)}
                 placeholder="alice"
                 aria-label="Claim federation address"
               />
-              <p style={{ margin: '4px 0 0', color: 'var(--text-muted, #64748b)', fontSize: '0.85rem' }}>
+              <p
+                style={{
+                  margin: '4px 0 0',
+                  color: 'var(--text-muted, #64748b)',
+                  fontSize: '0.85rem',
+                }}
+              >
                 {settings.federationAddress
                   ? `Current: ${settings.federationAddress}`
                   : 'Claim a human-readable address like alice*futureremit.app.'}
@@ -128,26 +202,132 @@ export function AccountSettings({ publicKey, onClose }) {
               <p style={{ fontWeight: 600, marginBottom: 4 }}>KYC Status</p>
               {settings.kycStatus ? (
                 <p style={{ margin: 0 }}>
-                  <span style={{
-                    background: settings.kycStatus === 'APPROVED' ? '#22c55e' : settings.kycStatus === 'REJECTED' ? '#ef4444' : '#f59e0b',
-                    color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.8rem', fontWeight: 600,
-                  }}>
+                  <span
+                    style={{
+                      background:
+                        settings.kycStatus === 'APPROVED'
+                          ? '#22c55e'
+                          : settings.kycStatus === 'REJECTED'
+                            ? '#ef4444'
+                            : '#f59e0b',
+                      color: '#fff',
+                      borderRadius: 4,
+                      padding: '2px 8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                    }}
+                  >
                     {settings.kycStatus}
                   </span>
                   {settings.kycSubmittedAt && (
-                    <span style={{ marginLeft: 8, fontSize: '0.8rem', color: 'var(--text-muted, #64748b)' }}>
+                    <span
+                      style={{
+                        marginLeft: 8,
+                        fontSize: '0.8rem',
+                        color: 'var(--text-muted, #64748b)',
+                      }}
+                    >
                       Submitted {new Date(settings.kycSubmittedAt).toLocaleDateString()}
                     </span>
                   )}
                 </p>
               ) : (
-                <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>No KYC record on file.</p>
+                <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
+                  No KYC record on file.
+                </p>
               )}
             </div>
 
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontWeight: 600, marginBottom: 4 }}>Address Book</p>
               <AddressBook />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <div
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  marginBottom: 8,
+                }}
+              >
+                <p style={{ fontWeight: 600, margin: 0 }}>Active Sessions</p>
+                {sessions.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={revokeAllSessions}
+                    disabled={sessionAction === 'all'}
+                    style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#ef4444' }}
+                  >
+                    {sessionAction === 'all' ? 'Revoking…' : 'Log out everywhere'}
+                  </button>
+                )}
+              </div>
+              {sessionsLoading ? (
+                <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
+                  Loading sessions…
+                </p>
+              ) : sessions.length === 0 ? (
+                <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
+                  No active sessions.
+                </p>
+              ) : (
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 0,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  {sessions.map((s) => (
+                    <li
+                      key={s.id}
+                      style={{
+                        background: 'var(--surface, #f8fafc)',
+                        borderRadius: 6,
+                        padding: '8px 12px',
+                        fontSize: '0.85rem',
+                        border: s.current ? '1px solid #22c55e' : '1px solid transparent',
+                      }}
+                    >
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <span>
+                          <strong>{s.device ?? 'Unknown device'}</strong>
+                          {s.current && (
+                            <span style={{ marginLeft: 6, color: '#22c55e', fontSize: '0.75rem' }}>
+                              (this device)
+                            </span>
+                          )}
+                        </span>
+                        {!s.current && (
+                          <button
+                            type="button"
+                            onClick={() => revokeSession(s.id)}
+                            disabled={sessionAction === s.id}
+                            style={{ fontSize: '0.75rem', padding: '2px 8px' }}
+                          >
+                            {sessionAction === s.id ? '…' : 'Revoke'}
+                          </button>
+                        )}
+                      </div>
+                      <div style={{ color: 'var(--text-muted, #64748b)', marginTop: 2 }}>
+                        {s.ipAddress && <span>{s.ipAddress} · </span>}
+                        Last active {new Date(s.lastActiveAt).toLocaleString()}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div style={{ marginBottom: 16 }}>
@@ -162,7 +342,7 @@ export function AccountSettings({ publicKey, onClose }) {
               >
                 💾 Backup & Restore
               </button>
-              {userRole === 'admin' && (
+              {userRole === 'ADMIN' && (
                 <button
                   type="button"
                   onClick={() => setShowCompliance(true)}
@@ -184,8 +364,14 @@ export function AccountSettings({ publicKey, onClose }) {
               <button type="button" onClick={save} disabled={saving}>
                 {saving ? 'Saving…' : 'Save'}
               </button>
-              <button type="button" className="btn-clear" onClick={onClose}>Close</button>
-              {saved && <span role="status" style={{ color: '#22c55e', fontSize: '0.9rem' }}>Saved ✓</span>}
+              <button type="button" className="btn-clear" onClick={onClose}>
+                Close
+              </button>
+              {saved && (
+                <span role="status" style={{ color: '#22c55e', fontSize: '0.9rem' }}>
+                  Saved ✓
+                </span>
+              )}
             </div>
           </>
         )}

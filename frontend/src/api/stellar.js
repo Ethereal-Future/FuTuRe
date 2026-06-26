@@ -23,7 +23,11 @@ export async function getAccountLabel(publicKey, options = {}) {
 }
 
 export async function updateAccountLabel(publicKey, accountLabel, options = {}) {
-  const response = await apiClient.put(`/api/stellar/account/${publicKey}/label`, { accountLabel }, options);
+  const response = await apiClient.put(
+    `/api/stellar/account/${publicKey}/label`,
+    { accountLabel },
+    options,
+  );
   return response.data;
 }
 
@@ -33,12 +37,15 @@ export async function sendPayment(payload, options = {}) {
 }
 
 export async function getNetworkStatus(options = {}) {
-  const response = await apiClient.get('/api/stellar/network/status', options);
+  const response = await apiClient.get('/api/stellar/network-status', options);
   return response.data;
 }
 
 export async function getTransactions(publicKey, params = {}, options = {}) {
-  const response = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, { params, ...options });
+  const response = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, {
+    params,
+    ...options,
+  });
   return response.data;
 }
 
@@ -73,7 +80,11 @@ export async function getAccountSettings(publicKey, options = {}) {
 }
 
 export async function updateAccountSettings(publicKey, settings, options = {}) {
-  const response = await apiClient.put(`/api/stellar/account/${publicKey}/settings`, settings, options);
+  const response = await apiClient.put(
+    `/api/stellar/account/${publicKey}/settings`,
+    settings,
+    options,
+  );
   return response.data;
 }
 
@@ -113,7 +124,11 @@ export async function getNotifications(options = {}) {
 }
 
 export async function markNotificationRead(notificationId, options = {}) {
-  const response = await apiClient.patch(`/api/notifications/${notificationId}/read`, null, options);
+  const response = await apiClient.patch(
+    `/api/notifications/${notificationId}/read`,
+    null,
+    options,
+  );
   return response.data;
 }
 
@@ -133,7 +148,10 @@ export async function createStreamPayment(payload, options = {}) {
 }
 
 export async function getStreamPayments(publicKey, options = {}) {
-  const response = await apiClient.get('/api/streaming', { params: { senderPublicKey: publicKey }, ...options });
+  const response = await apiClient.get('/api/streaming', {
+    params: { senderPublicKey: publicKey },
+    ...options,
+  });
   return response.data;
 }
 
@@ -143,7 +161,11 @@ export async function performStreamAction(id, action, options = {}) {
 }
 
 export async function retryTransaction(txHash, options = {}) {
-  const response = await apiClient.post('/api/retry/transaction', { transactionHash: txHash }, options);
+  const response = await apiClient.post(
+    '/api/retry/transaction',
+    { transactionHash: txHash },
+    options,
+  );
   return response.data;
 }
 
@@ -173,7 +195,11 @@ export async function deleteRecoveryContact(id, options = {}) {
 }
 
 export async function initiateRecovery(requestId, payload, options = {}) {
-  const response = await apiClient.post(`/api/recovery/${requestId}/verify-phrase`, payload, options);
+  const response = await apiClient.post(
+    `/api/recovery/${requestId}/verify-phrase`,
+    payload,
+    options,
+  );
   return response.data;
 }
 
@@ -227,7 +253,11 @@ export async function deleteContact(id, options = {}) {
 }
 
 export async function createTrustline(sourceSecret, assetCode, options = {}) {
-  const response = await apiClient.post('/api/stellar/trustline/create', { sourceSecret, assetCode }, options);
+  const response = await apiClient.post(
+    '/api/stellar/trustline/create',
+    { sourceSecret, assetCode },
+    options,
+  );
   return response.data;
 }
 
