@@ -6,17 +6,20 @@ interface ErrorMatch {
 interface ApiError {
   response?: {
     data?: {
+      // Standard envelope: { success: false, error: { code, message, details? } }
+      error?: string | { code?: string; message?: string; details?: unknown };
       extras?: {
         result_codes?: {
           transaction?: string;
           operations?: string[];
         };
       };
-      error?: string;
     };
   };
   code?: string;
   message?: string;
+  // Normalized shape set by api/client.js interceptor
+  normalized?: { message?: string; code?: string };
 }
 
 const ERROR_MAP: ErrorMatch[] = [
@@ -36,7 +39,7 @@ const STELLAR_RESULT_CODES: Record<string, string> = {
   tx_too_early: 'Transaction timestamp is too early.',
   tx_too_late: 'Transaction timestamp is too late.',
   tx_missing_operation: 'Transaction has no operations.',
-  tx_bad_seq: 'Transaction sequence number is invalid.',
+  tx_bad_seq: 'Transaction sequence error. Please refresh and try again.',
   tx_bad_auth: 'Transaction authentication failed.',
   tx_insufficient_balance: 'Insufficient balance for this transaction.',
   tx_no_source_account: 'Source account does not exist.',
@@ -56,40 +59,56 @@ const STELLAR_RESULT_CODES: Record<string, string> = {
   op_no_destination: 'Destination account does not exist.',
   op_no_trust: 'Destination has no trust line for this asset.',
   op_not_authorized: 'Operation not authorized.',
-  op_underfunded: 'Source account has insufficient funds.',
+  op_underfunded: 'Insufficient funds — please top up your account.',
   op_line_full: 'Destination trust line is full.',
-  op_self_not_allowed: 'Cannot send to self.',
+  op_self_not_allowed: 'Cannot send to your own account.',
   op_not_supported: 'Operation type is not supported.',
+  op_too_many_subentries: 'Account has too many subentries.',
+  op_exceed_work_limit: 'Operation exceeded the network work limit.',
+  op_too_many_sponsoring: 'Too many sponsored entries.',
 };
+
+/**
+ * Returns the i18n key for a Stellar result code, or null if not recognised.
+ * Use with `t(key)` from react-i18next for a translated message.
+ * Example: getStellarErrorKey('op_underfunded') → 'stellarErrors.op_underfunded'
+ */
+export function getStellarErrorKey(code: string): string | null {
+  if (code in STELLAR_RESULT_CODES) return `stellarErrors.${code}`;
+  return null;
+}
 
 export function getFriendlyError(error: unknown): string {
   const err = error as ApiError;
 
-  // Check for Stellar SDK result codes first
-  const resultCodes = err?.response?.data?.extras?.result_codes;
-  if (resultCodes) {
-    if (resultCodes.transaction) {
-      const txCode = resultCodes.transaction;
-      if (STELLAR_RESULT_CODES[txCode]) {
-        return STELLAR_RESULT_CODES[txCode];
-      }
+  // Use the normalized message set by the axios interceptor if available.
+  if (err?.normalized?.message) return err.normalized.message;
+
+  // Check for Stellar SDK result codes first (Horizon extras)
+  const extras = err?.response?.data?.extras;
+  if (extras?.result_codes) {
+    const { transaction, operations } = extras.result_codes;
+    if (transaction && STELLAR_RESULT_CODES[transaction]) {
+      return STELLAR_RESULT_CODES[transaction];
     }
-    if (resultCodes.operations && resultCodes.operations.length > 0) {
-      const opCode = resultCodes.operations[0];
-      if (STELLAR_RESULT_CODES[opCode]) {
-        return STELLAR_RESULT_CODES[opCode];
-      }
+    if (operations && operations.length > 0 && STELLAR_RESULT_CODES[operations[0]]) {
+      return STELLAR_RESULT_CODES[operations[0]];
     }
   }
 
-  // Handle axios timeout (ECONNABORTED) and network errors (ERR_NETWORK) by error code
+  // Handle axios timeout / network error codes
   if (err?.code === 'ECONNABORTED' || err?.code === 'ERR_NETWORK') {
     return 'Connection timed out — please check your internet connection.';
   }
 
-  // Fall back to string matching
-  const raw = err?.response?.data?.error || err?.message || String(error);
-  console.error('[Stellar Error]', raw);
-  const match = ERROR_MAP.find(e => e.match.test(raw));
-  return match ? match.message : `Something went wrong: ${raw}`;
+  // Extract message from either the standard envelope { error: { message } } or flat { error: string }
+  const responseError = err?.response?.data?.error;
+  const rawMessage =
+    (typeof responseError === 'object' ? responseError?.message : responseError) ||
+    err?.message ||
+    String(error);
+
+  console.error('[Stellar Error]', rawMessage);
+  const match = ERROR_MAP.find(e => e.match.test(rawMessage));
+  return match ? match.message : `Something went wrong: ${rawMessage}`;
 }

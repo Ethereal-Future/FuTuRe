@@ -332,6 +332,17 @@ export function createStellarError(message, stellarError = null) {
   return new StellarError(message, stellarError);
 }
 
+/**
+ * Send a standard error envelope directly from a route handler.
+ * Use this only when you cannot use next(err) — e.g. inside a non-Express callback.
+ * Prefer throwing AppError + asyncHandler for route code.
+ */
+export function sendError(res, statusCode, code, message, details) {
+  const body = { success: false, error: { code, message } };
+  if (details !== undefined && details !== null) body.error.details = details;
+  return res.status(statusCode).json(body);
+}
+
 export default {
   AppError,
   StellarError,
@@ -345,6 +356,7 @@ export default {
   createError,
   createValidationError,
   createStellarError,
+  sendError,
   generateRequestId,
   attachRequestIdToError,
 };
