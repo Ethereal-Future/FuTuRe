@@ -176,6 +176,7 @@ router.get('/:publicKey/settings', rules.publicKeyParam, validate, async (req, r
     res.json({
       defaultAsset: settings.defaultAsset ?? 'XLM',
       notificationsOn: settings.notificationsOn ?? true,
+      federationAddress: settings.federationAddress ?? null,
       kycStatus: user?.kycRecord?.status ?? null,
       kycSubmittedAt: user?.kycRecord?.submittedAt ?? null,
     });

@@ -68,6 +68,7 @@ import {
 import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { XLMInfoIcon } from './components/XLMInfoIcon';
+import { AdminDashboard } from './components/AdminDashboard';
 
 // Heavy components loaded on-demand to keep the initial bundle small
 const AMMPoolBrowser = lazy(() =>
@@ -90,6 +91,10 @@ const BackupSettings = lazy(() =>
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
 
 function App() {
+  if (window.location.pathname === '/admin') {
+    return <AdminDashboard />;
+  }
+
   const {
     account,
     balance,
@@ -121,6 +126,7 @@ function App() {
   const [showComplianceDashboard, setShowComplianceDashboard] = useState(false);
   const [showBackupSettings, setShowBackupSettings] = useState(false);
   const [userRole, setUserRole] = useState(null);
+  const [federationStatus, setFederationStatus] = useState('');
 
   const { t } = useTranslation();
   const msg = useMessages();
@@ -411,6 +417,7 @@ function App() {
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
+  const recipientLooksFederated = recipient.includes('*');
   const selectedBalance = balance?.balances?.find((b) => b.asset === assetCode)?.balance ?? null;
   const xlmBalance = balance?.balances?.find((b) => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
@@ -418,6 +425,30 @@ function App() {
   const amountValid = amountTouched && !amountError;
   const largeTransactionBlocked =
     amountValid && kycStatus !== 'APPROVED' && assetCode === 'XLM' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+
+  useEffect(() => {
+    if (!recipientLooksFederated) {
+      setFederationStatus('');
+      return undefined;
+    }
+
+    const timeout = setTimeout(async () => {
+      setFederationStatus('Resolving federation address…');
+      try {
+        const { data } = await apiClient.get('/api/stellar/federation', {
+          params: { address: recipient },
+        });
+        if (data.account_id) {
+          dispatch({ type: A.SET_RECIPIENT, payload: data.account_id });
+          setFederationStatus(`Resolved ${data.stellar_address}`);
+        }
+      } catch (error) {
+        setFederationStatus(error?.normalized?.message || error.message || 'Federation address not found');
+      }
+    }, 500);
+
+    return () => clearTimeout(timeout);
+  }, [recipient, recipientLooksFederated, dispatch]);
 
   const handleSendMax = () => {
     if (selectedBalance === null) return;
@@ -1004,7 +1035,7 @@ function App() {
                   <div className="input-wrap">
                     <input
                       type="text"
-                      placeholder="Recipient Public Key"
+                      placeholder="Recipient public key or alice*futureremit.app"
                       value={recipient}
                       onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
                       onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
@@ -1026,10 +1057,15 @@ function App() {
                         animate="visible"
                         exit="exit"
                       >
-                        Invalid Stellar address format (must start with G and be 56 characters)
+                        Invalid Stellar address format (must start with G and be 56 characters) or federation address
                       </motion.p>
                     )}
                   </AnimatePresence>
+                  {federationStatus && (
+                    <p style={{ color: federationStatus.startsWith('Resolved') ? '#16a34a' : '#64748b' }}>
+                      {federationStatus}
+                    </p>
+                  )}
                   {/* Asset Selector */}
                   <div className="input-wrap">
                     <label htmlFor="asset-select" style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: 4, display: 'block' }}>Asset</label>
@@ -1330,7 +1366,7 @@ function App() {
                         <input
                           id="recipient-input"
                           type="text"
-                          placeholder="Recipient Public Key"
+                          placeholder="Recipient public key or alice*futureremit.app"
                           value={recipient}
                           onChange={(e) =>
                             dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })
@@ -1385,8 +1421,13 @@ function App() {
                             animate="visible"
                             exit="exit"
                           >
-                            Invalid Stellar address format (must start with G and be 56 characters)
+                            Invalid Stellar address format (must start with G and be 56 characters) or federation address
                           </motion.p>
+                        )}
+                        {federationStatus && (
+                          <p style={{ color: federationStatus.startsWith('Resolved') ? '#16a34a' : '#64748b' }}>
+                            {federationStatus}
+                          </p>
                         )}
                       </AnimatePresence>
 

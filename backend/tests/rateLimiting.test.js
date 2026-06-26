@@ -1,7 +1,12 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import request from 'supertest';
 import express from 'express';
-import { createRateLimiter, getClientIP } from '../src/middleware/rateLimiter.js';
+import {
+  createPerUserRateLimiter,
+  createRateLimiter,
+  getClientIP,
+  getUserRateLimitKey,
+} from '../src/middleware/rateLimiter.js';
 import { isWhitelisted, addToWhitelist, removeFromWhitelist } from '../src/security/ipWhitelist.js';
 
 describe('IP Whitelist', () => {
@@ -59,6 +64,57 @@ describe('getClientIP', () => {
       connection: { remoteAddress: '192.168.1.1' },
     };
     expect(getClientIP(req)).toBe('192.168.1.1');
+  });
+});
+
+describe('Per-user Rate Limiter', () => {
+  let app;
+
+  beforeEach(() => {
+    app = express();
+    app.use(express.json());
+    app.use((req, _res, next) => {
+      const userId = req.headers['x-test-user-id'];
+      if (userId) req.user = { id: userId };
+      next();
+    });
+  });
+
+  it('should derive the authenticated user id as the rate limit key', () => {
+    expect(getUserRateLimitKey({ user: { id: 'user-1' } })).toBe('user-1');
+  });
+
+  it('should isolate authenticated users sharing the same IP', async () => {
+    const limiter = createPerUserRateLimiter({ windowMs: 60000, max: 1 });
+    app.use(limiter);
+    app.post('/payment/send', (_req, res) => res.json({ ok: true }));
+
+    await request(app)
+      .post('/payment/send')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .set('X-Test-User-Id', 'user-1');
+    const sameUserExceeded = await request(app)
+      .post('/payment/send')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .set('X-Test-User-Id', 'user-1');
+    const otherUser = await request(app)
+      .post('/payment/send')
+      .set('X-Forwarded-For', '203.0.113.10')
+      .set('X-Test-User-Id', 'user-2');
+
+    expect(sameUserExceeded.status).toBe(429);
+    expect(otherUser.status).toBe(200);
+  });
+
+  it('should keep IP buckets for unauthenticated requests', async () => {
+    const limiter = createPerUserRateLimiter({ windowMs: 60000, max: 1 });
+    app.use(limiter);
+    app.get('/public', (_req, res) => res.json({ ok: true }));
+
+    await request(app).get('/public').set('X-Forwarded-For', '203.0.113.11');
+    const exceeded = await request(app).get('/public').set('X-Forwarded-For', '203.0.113.11');
+
+    expect(exceeded.status).toBe(429);
   });
 });
 

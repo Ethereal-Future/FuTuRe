@@ -10,3 +10,7 @@ mutation-reports/mutation-report.json
 .stryker-tmp/
 backups/
 coverage/
+
+# Rust/Soroban build artifacts
+target/
+.target/
