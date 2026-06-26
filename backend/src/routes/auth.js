@@ -6,6 +6,13 @@ import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
+import {
+  createSession,
+  getActiveSession,
+  listUserSessions,
+  revokeSession,
+  revokeAllSessions,
+} from '../auth/sessionStore.js';
 import { requireAuth } from '../middleware/auth.js';
 import { sendError, ErrorCodes } from '../middleware/errorHandler.js';
 import { consumePendingCredentials } from '../recovery/recoveryStore.js';
@@ -27,6 +34,17 @@ import { getConfig } from '../config/env.js';
 import { sendEmail } from '../notifications/channels/email.js';
 
 const router = express.Router();
+
+function clearRefreshTokenCookie(res) {
+  const config = getConfig();
+  const isProduction = config.meta.appEnv === 'production';
+  res.clearCookie('refreshToken', {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'strict',
+    path: '/api/auth',
+  });
+}
 
 function setRefreshTokenCookie(res, refreshToken) {
   const config = getConfig();
@@ -201,7 +219,7 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
       });
   }
 
-  const user = findUser(username);
+  const user = await findUser(username);
   if (!user) {
     await recordFailedLogin(username, ipAddress);
     return sendError(res, 401, ErrorCodes.AUTH_INVALID_CREDENTIALS, 'Invalid credentials');
@@ -214,12 +232,22 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
     if (valid) {
       updateUserPassword(user.id, recovered.passwordHash);
       await clearFailedAttempts(username);
-      const recoveredPayload = { sub: user.id, username: user.username, role: user.role || 'USER' };
+      const recoveredSession = await createSession(user.id, {
+        ipAddress,
+        userAgent: req.headers['user-agent'],
+      });
+      const recoveredPayload = {
+        sub: user.id,
+        username: user.username,
+        role: user.role || 'USER',
+        sid: recoveredSession.id,
+      };
       const recoveredRefreshToken = signRefreshToken(recoveredPayload);
       setRefreshTokenCookie(res, recoveredRefreshToken);
       return res.json({
         accessToken: signAccessToken(recoveredPayload),
         recovered: true,
+        sessionId: recoveredSession.id,
       });
     }
     await recordFailedLogin(username, ipAddress);
@@ -233,11 +261,21 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
 
   // Successful login - clear failed attempts
   await clearFailedAttempts(username);
-  const payload = { sub: user.id, username: user.username, role: user.role || 'USER' };
+  const session = await createSession(user.id, {
+    ipAddress,
+    userAgent: req.headers['user-agent'],
+  });
+  const payload = {
+    sub: user.id,
+    username: user.username,
+    role: user.role || 'USER',
+    sid: session.id,
+  };
   const refreshToken = signRefreshToken(payload);
   setRefreshTokenCookie(res, refreshToken);
   res.json({
     accessToken: signAccessToken(payload),
+    sessionId: session.id,
   });
 });
 
@@ -274,15 +312,28 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/refresh', (req, res) => {
+router.post('/refresh', async (req, res) => {
   const refreshToken = req.cookies?.refreshToken;
   if (!refreshToken)
     return sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Refresh token missing or expired');
   try {
-    const { sub, username } = verifyToken(refreshToken);
-    const newRefreshToken = signRefreshToken({ sub, username });
+    const payload = verifyToken(refreshToken);
+    if (payload.sid) {
+      const session = await getActiveSession(payload.sid);
+      if (!session) {
+        clearRefreshTokenCookie(res);
+        return sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Session expired or revoked');
+      }
+    }
+    const newPayload = {
+      sub: payload.sub,
+      username: payload.username,
+      role: payload.role,
+      sid: payload.sid,
+    };
+    const newRefreshToken = signRefreshToken(newPayload);
     setRefreshTokenCookie(res, newRefreshToken);
-    res.json({ accessToken: signAccessToken({ sub, username }) });
+    res.json({ accessToken: signAccessToken(newPayload) });
   } catch {
     sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Invalid or expired refresh token');
   }
@@ -314,8 +365,80 @@ router.post('/refresh', (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/logout', requireAuth, (_req, res) => {
+router.post('/logout', requireAuth, async (req, res) => {
+  if (req.user.sid) {
+    await revokeSession(req.user.sid, req.user.sub);
+  }
+  clearRefreshTokenCookie(res);
   res.json({ message: 'Logged out successfully' });
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions:
+ *   get:
+ *     summary: List all active sessions for the authenticated user
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Active sessions
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/sessions', requireAuth, async (req, res) => {
+  try {
+    const sessions = await listUserSessions(req.user.sub, req.user.sid);
+    res.json({ sessions });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'Failed to list sessions');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to list sessions');
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions/{id}:
+ *   delete:
+ *     summary: Revoke a specific session
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/sessions/:id', requireAuth, async (req, res) => {
+  try {
+    const revoked = await revokeSession(req.params.id, req.user.sub);
+    if (!revoked) {
+      return sendError(res, 404, ErrorCodes.NOT_FOUND, 'Session not found');
+    }
+    if (req.params.id === req.user.sid) {
+      clearRefreshTokenCookie(res);
+    }
+    res.json({ message: 'Session revoked' });
+  } catch (error) {
+    logger.error({ err: error, sessionId: req.params.id }, 'Failed to revoke session');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to revoke session');
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/sessions:
+ *   delete:
+ *     summary: Revoke all sessions (logout everywhere)
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.delete('/sessions', requireAuth, async (req, res) => {
+  try {
+    const count = await revokeAllSessions(req.user.sub, req.user.sid);
+    res.json({ message: 'All other sessions revoked', revokedCount: count });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'Failed to revoke all sessions');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to revoke sessions');
+  }
 });
 
 /**
@@ -886,6 +1009,27 @@ router.delete('/account', requireAuth, async (req, res) => {
 
 // MFA Routes
 // POST /api/auth/mfa/setup - Enable MFA and generate recovery codes
+router.post('/mfa/setup', [body('totp').notEmpty().isString()], validateBody, async (req, res) => {
+  try {
+    const userId = req.user?.sub;
+    if (!userId) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { totp: _totp } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Generate recovery codes
+    const recoveryCodes = Array.from({ length: 10 }, () =>
+      randomBytes(4).toString('hex').toUpperCase(),
+    );
+
+    // Hash and store recovery codes
+    const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
 router.post(
   '/mfa/setup',
   requireAuth,
@@ -1033,6 +1177,11 @@ router.post(
       });
 
       // Generate JWT token
+      const token = signAccessToken({
+        sub: user.id,
+        username: user.username,
+        role: user.role || 'USER',
+      });
       const token = signAccessToken({ sub: user.id, username: user.publicKey, role: 'USER' });
 
       res.json({

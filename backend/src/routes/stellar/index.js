@@ -9,6 +9,8 @@ import trustlinesRouter from './trustlines.js';
 import ammRouter from './amm.js';
 import federationRouter from './federation.js';
 import contractRouter from './contract.js';
+import { getStellarNetwork } from '../../services/stellarNetwork.js';
+import logger from '../../config/logger.js';
 
 const router = express.Router();
 
@@ -25,5 +27,16 @@ router.use('/assets', trustlinesRouter);
 router.use('/amm', ammRouter);
 router.use('/federation', federationRouter);
 router.use('/contract', contractRouter);
+
+// GET /api/stellar/network-status — fee surge indicator
+router.get('/network-status', async (req, res) => {
+  try {
+    const status = await getStellarNetwork().getNetworkStatusWithFeeSurge();
+    res.json(status);
+  } catch (error) {
+    logger.error('route.error', { path: '/network-status', error: error.message });
+    res.status(500).json({ error: 'Failed to retrieve network status' });
+  }
+});
 
 export default router;

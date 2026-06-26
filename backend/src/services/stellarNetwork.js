@@ -1,7 +1,8 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { getConfig } from '../config/env.js';
+import { recordFeeSample, getSevenDayAverageFee, detectFeeSurge } from './feeSurge.js';
+import { createStellarError } from '../middleware/errorHandler.js';
 import logger from '../config/logger.js';
-import { createStellarError, ErrorCodes } from '../middleware/errorHandler.js';
 
 /**
  * Connection pool for Horizon servers
@@ -85,7 +86,7 @@ class NetworkCache {
   get(key) {
     const item = this.cache.get(key);
     if (!item) return null;
-    
+
     if (Date.now() > item.expiresAt) {
       this.cache.delete(key);
       return null;
@@ -170,9 +171,10 @@ class NetworkMetrics {
 
     return {
       ...this.metrics,
-      successRate: this.metrics.requests > 0 
-        ? (this.metrics.successes / this.metrics.requests * 100).toFixed(2) + '%'
-        : '0%',
+      successRate:
+        this.metrics.requests > 0
+          ? ((this.metrics.successes / this.metrics.requests) * 100).toFixed(2) + '%'
+          : '0%',
       latency: {
         p50: p50.toFixed(2) + 'ms',
         p95: p95.toFixed(2) + 'ms',
@@ -204,15 +206,15 @@ export class StellarNetwork {
     this.config = getConfig().stellar;
     this.network = this.config.network;
     this.horizonUrl = this.config.horizonUrl;
-    
+
     this.connectionPool = new ConnectionPool(options.maxConnections || 5);
     this.cache = new NetworkCache(options.cacheTtlMs || 30000);
     this.metrics = new NetworkMetrics();
     this.retryConfig = { ...DEFAULT_RETRY_CONFIG, ...options.retryConfig };
-    
+
     this.statusMonitor = null;
     this.statusCheckInterval = options.statusCheckInterval || 60000;
-    
+
     logger.info('StellarNetwork initialized', {
       network: this.network,
       horizonUrl: this.horizonUrl,
@@ -238,39 +240,40 @@ export class StellarNetwork {
    */
   async withRetry(operation, operationName = 'operation') {
     let lastError;
-    
+
     for (let attempt = 1; attempt <= this.retryConfig.maxRetries; attempt++) {
       try {
         const startTime = Date.now();
         const result = await operation();
         const latency = Date.now() - startTime;
-        
+
         this.metrics.recordRequest(latency, true);
         return result;
       } catch (error) {
         lastError = error;
-        
+
         // Check if error is retryable
-        const isRetryable = this.retryConfig.retryableErrors.includes(error.code) ||
-                          error.message?.includes('timeout') ||
-                          error.message?.includes('ECONNREFUSED');
-        
+        const isRetryable =
+          this.retryConfig.retryableErrors.includes(error.code) ||
+          error.message?.includes('timeout') ||
+          error.message?.includes('ECONNREFUSED');
+
         if (!isRetryable || attempt === this.retryConfig.maxRetries) {
           const latency = Date.now() - Date.now();
           this.metrics.recordRequest(latency, false);
           this.metrics.recordError(error);
           throw createStellarError(
             `Stellar ${operationName} failed after ${attempt} attempts`,
-            error
+            error,
           );
         }
 
         this.metrics.recordRetry();
-        
+
         // Calculate delay with exponential backoff
         const delay = Math.min(
           this.retryConfig.baseDelay * Math.pow(this.retryConfig.backoffMultiplier, attempt - 1),
-          this.retryConfig.maxDelay
+          this.retryConfig.maxDelay,
         );
 
         logger.warn(`Stellar ${operationName} retry`, {
@@ -280,13 +283,13 @@ export class StellarNetwork {
           error: error.message,
         });
 
-        await new Promise(resolve => setTimeout(resolve, delay));
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
 
     throw createStellarError(
       `Stellar ${operationName} failed after ${this.retryConfig.maxRetries} attempts`,
-      lastError
+      lastError,
     );
   }
 
@@ -314,9 +317,8 @@ export class StellarNetwork {
       throw new Error('Network must be "testnet" or "mainnet"');
     }
 
-    const newHorizonUrl = network === 'testnet'
-      ? 'https://horizon-testnet.stellar.org'
-      : 'https://horizon.stellar.org';
+    const newHorizonUrl =
+      network === 'testnet' ? 'https://horizon-testnet.stellar.org' : 'https://horizon.stellar.org';
 
     this.network = network;
     this.horizonUrl = newHorizonUrl;
@@ -344,10 +346,7 @@ export class StellarNetwork {
   async getNetworkStatus() {
     try {
       const server = this.getServer();
-      const root = await this.withRetry(
-        () => server.root(),
-        'getNetworkStatus'
-      );
+      const root = await this.withRetry(() => server.root(), 'getNetworkStatus');
       this.releaseServer(server);
 
       const status = {
@@ -463,18 +462,19 @@ export class StellarNetwork {
    */
   async loadAccount(publicKey) {
     const cacheKey = `account:${publicKey}`;
-    return this.withCache(cacheKey, async () => {
-      const server = this.getServer();
-      try {
-        const account = await this.withRetry(
-          () => server.loadAccount(publicKey),
-          'loadAccount'
-        );
-        return account;
-      } finally {
-        this.releaseServer(server);
-      }
-    }, 10000); // Cache for 10 seconds
+    return this.withCache(
+      cacheKey,
+      async () => {
+        const server = this.getServer();
+        try {
+          const account = await this.withRetry(() => server.loadAccount(publicKey), 'loadAccount');
+          return account;
+        } finally {
+          this.releaseServer(server);
+        }
+      },
+      10000,
+    ); // Cache for 10 seconds
   }
 
   /**
@@ -485,12 +485,12 @@ export class StellarNetwork {
     try {
       const result = await this.withRetry(
         () => server.submitTransaction(transaction),
-        'submitTransaction'
+        'submitTransaction',
       );
-      
+
       // Clear account cache after transaction
       this.cache.clear();
-      
+
       return result;
     } finally {
       this.releaseServer(server);
@@ -502,18 +502,65 @@ export class StellarNetwork {
    */
   async getFeeStats() {
     const cacheKey = 'feeStats';
-    return this.withCache(cacheKey, async () => {
-      const server = this.getServer();
+    return this.withCache(
+      cacheKey,
+      async () => {
+        const server = this.getServer();
+        try {
+          const stats = await this.withRetry(() => server.feeStats(), 'getFeeStats');
+          return stats;
+        } finally {
+          this.releaseServer(server);
+        }
+      },
+      30000,
+    ); // Cache for 30 seconds
+  }
+
+  /**
+   * Get current fee in stroops from Horizon fee stats
+   */
+  async getCurrentFeeStroops() {
+    const stats = await this.getFeeStats();
+    return parseInt(stats.fee_charged?.p50 ?? stats.last_ledger_base_fee ?? '100', 10);
+  }
+
+  /**
+   * Get network status with fee surge detection (compares current fee to 7-day average)
+   */
+  async getNetworkStatusWithFeeSurge() {
+    const status = await this.getNetworkStatus();
+    let feeStroops = 100;
+    let feeXLM = '0.0000100';
+    let sevenDayAverageFeeStroops = null;
+    let feeSurge = false;
+    let feeSurgeRatio = 1;
+
+    if (status.online) {
       try {
-        const stats = await this.withRetry(
-          () => server.feeStats(),
-          'getFeeStats'
-        );
-        return stats;
-      } finally {
-        this.releaseServer(server);
+        feeStroops = await this.getCurrentFeeStroops();
+        feeXLM = (feeStroops / 1e7).toFixed(7);
+        recordFeeSample(feeStroops);
+        sevenDayAverageFeeStroops = getSevenDayAverageFee();
+        const surgeInfo = detectFeeSurge(feeStroops, sevenDayAverageFeeStroops);
+        feeSurge = surgeInfo.surge;
+        feeSurgeRatio = surgeInfo.ratio;
+      } catch (error) {
+        logger.warn('Fee surge detection failed', { error: error.message });
       }
-    }, 30000); // Cache for 30 seconds
+    }
+
+    return {
+      ...status,
+      feeStroops,
+      feeXLM,
+      sevenDayAverageFeeStroops: sevenDayAverageFeeStroops
+        ? Math.round(sevenDayAverageFeeStroops)
+        : null,
+      feeSurge,
+      feeSurgeRatio,
+      status: !status.online ? 'offline' : feeSurge ? 'degraded' : 'ok',
+    };
   }
 
   /**
@@ -521,18 +568,26 @@ export class StellarNetwork {
    */
   async getOrderbook(selling, buying, options = {}) {
     const cacheKey = `orderbook:${selling}:${buying}:${JSON.stringify(options)}`;
-    return this.withCache(cacheKey, async () => {
-      const server = this.getServer();
-      try {
-        const orderbook = await this.withRetry(
-          () => server.orderbook(selling, buying).limit(options.limit || 10).call(),
-          'getOrderbook'
-        );
-        return orderbook;
-      } finally {
-        this.releaseServer(server);
-      }
-    }, 5000); // Cache for 5 seconds
+    return this.withCache(
+      cacheKey,
+      async () => {
+        const server = this.getServer();
+        try {
+          const orderbook = await this.withRetry(
+            () =>
+              server
+                .orderbook(selling, buying)
+                .limit(options.limit || 10)
+                .call(),
+            'getOrderbook',
+          );
+          return orderbook;
+        } finally {
+          this.releaseServer(server);
+        }
+      },
+      5000,
+    ); // Cache for 5 seconds
   }
 
   /**
@@ -541,7 +596,8 @@ export class StellarNetwork {
   async getTransactions(publicKey, options = {}) {
     const server = this.getServer();
     try {
-      let builder = server.transactions()
+      let builder = server
+        .transactions()
         .forAccount(publicKey)
         .order(options.order || 'desc')
         .limit(options.limit || 10);
@@ -550,10 +606,7 @@ export class StellarNetwork {
         builder = builder.cursor(options.cursor);
       }
 
-      const result = await this.withRetry(
-        () => builder.call(),
-        'getTransactions'
-      );
+      const result = await this.withRetry(() => builder.call(), 'getTransactions');
 
       return result;
     } finally {
