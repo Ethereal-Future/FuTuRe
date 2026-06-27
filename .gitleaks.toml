@@ -1,0 +1,23 @@
+[extend]
+# Extend gitleaks default rules
+useDefault = true
+
+[[rules]]
+id = "stellar-secret-key"
+description = "Stellar secret key (56-character key starting with S)"
+regex = '''(?i)(?:stellar|xlm|horizon)[^0-9A-Za-z]{0,30}S[A-Z2-7]{55}|S[A-Z2-7]{55}(?:[^0-9A-Za-z]|$)'''
+tags = ["stellar", "secret-key", "crypto"]
+keywords = ["stellar", "xlm", "secret"]
+
+[[rules]]
+id = "database-encryption-key"
+description = "DATABASE_ENCRYPTION_KEY value"
+regex = '''DATABASE_ENCRYPTION_KEY\s*=\s*[0-9a-fA-F]{64}'''
+tags = ["key", "database"]
+
+[allowlist]
+description = "Global allowlist for false positives"
+paths = [
+  ".gitleaksignore",
+  "CHANGELOG.md",
+]

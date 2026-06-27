@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import logger from '../config/logger.js';
 
 // In-memory webhook store (replace with DB in production)
@@ -60,14 +60,22 @@ export function verifyWebhookSignature(webhookId, signature, payload) {
   const webhook = getWebhook(webhookId);
   if (!webhook) return false;
 
+  const safeEqual = (a, b) => {
+    try {
+      return timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'));
+    } catch {
+      return false;
+    }
+  };
+
   // Try current secret
   const expectedSignature = signPayload(webhook.signingSecret, payload);
-  if (signature === expectedSignature) return true;
+  if (safeEqual(signature, expectedSignature)) return true;
 
   // Try previous secrets (for rotation grace period)
   for (const oldSecret of webhook.previousSecrets) {
     const oldSignature = signPayload(oldSecret, payload);
-    if (signature === oldSignature) return true;
+    if (safeEqual(signature, oldSignature)) return true;
   }
 
   return false;
