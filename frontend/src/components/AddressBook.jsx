@@ -69,7 +69,10 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
             style={{ overflow: 'hidden' }}
           >
             <div style={panelStyle}>
+              <label htmlFor="addr-book-search" className="sr-only">Search contacts</label>
               <input
+                id="addr-book-search"
+                aria-label="Search contacts"
                 placeholder="Search contacts…"
                 value={search}
                 onChange={e => setSearch(e.target.value)}
@@ -89,14 +92,16 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
                   <button type="button" onClick={() => { onSelect?.(c.address); setOpen(false); }} style={smBtn}>
                     Use
                   </button>
-                  <button type="button" onClick={() => remove(c)} style={{ ...smBtn, background: '#ef4444' }}>
+                  <button type="button" onClick={() => remove(c)} style={{ ...smBtn, background: '#ef4444' }} aria-label={`Remove ${c.name}`}>
                     ✕
                   </button>
                 </div>
               ))}
               <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
-                <input placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 6 }} />
-                <input placeholder="Stellar Address" value={newAddress} onChange={e => setNewAddress(e.target.value)} style={{ marginBottom: 6 }} />
+                <label htmlFor="addr-book-new-name" className="sr-only">Contact name</label>
+                <input id="addr-book-new-name" aria-label="Contact name" placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 6 }} />
+                <label htmlFor="addr-book-new-address" className="sr-only">Stellar address</label>
+                <input id="addr-book-new-address" aria-label="Stellar address" placeholder="Stellar Address" value={newAddress} onChange={e => setNewAddress(e.target.value)} style={{ marginBottom: 6 }} />
                 <button type="button" onClick={add}>+ Add Contact</button>
               </div>
             </div>

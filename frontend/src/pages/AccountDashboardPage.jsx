@@ -91,8 +91,11 @@ export function AccountDashboardPage() {
           <label style={{ display: 'block', fontSize: 12, color: '#666', marginBottom: 4 }}>Label</label>
           {editingLabel ? (
             <div style={{ display: 'flex', gap: 8 }}>
+              <label htmlFor="account-label-edit" className="sr-only">Account label</label>
               <input
+                id="account-label-edit"
                 type="text"
+                aria-label="Account label"
                 value={labelDraft}
                 onChange={(e) => setLabelDraft(e.target.value)}
                 style={{ flex: 1, padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 4 }}
