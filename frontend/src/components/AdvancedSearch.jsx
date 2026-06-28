@@ -68,7 +68,9 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
 
       <div className="search-form">
         <div className="search-input-wrapper">
+          <label htmlFor="adv-search-query" className="sr-only">Search transactions</label>
           <input
+            id="adv-search-query"
             type="text"
             placeholder="Search transactions..."
             value={searchCriteria.query}
@@ -95,7 +97,10 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
         </div>
 
         <div className="filter-row">
+          <label htmlFor="adv-search-type" className="sr-only">Transaction type</label>
           <select
+            id="adv-search-type"
+            aria-label="Transaction type"
             value={searchCriteria.type}
             onChange={(e) => setSearchCriteria({ ...searchCriteria, type: e.target.value })}
           >
@@ -105,7 +110,10 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
             <option value="path_payment">Path Payment</option>
           </select>
 
+          <label htmlFor="adv-search-status" className="sr-only">Transaction status</label>
           <select
+            id="adv-search-status"
+            aria-label="Transaction status"
             value={searchCriteria.status}
             onChange={(e) => setSearchCriteria({ ...searchCriteria, status: e.target.value })}
           >
@@ -118,15 +126,19 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
 
         <div className="filter-row">
           <div className="date-range">
-            <label>From:</label>
+            <label htmlFor="adv-search-date-from">From:</label>
             <input
+              id="adv-search-date-from"
               type="date"
+              aria-label="Filter from date"
               value={searchCriteria.dateFrom}
               onChange={(e) => setSearchCriteria({ ...searchCriteria, dateFrom: e.target.value })}
             />
-            <label>To:</label>
+            <label htmlFor="adv-search-date-to">To:</label>
             <input
+              id="adv-search-date-to"
               type="date"
+              aria-label="Filter to date"
               value={searchCriteria.dateTo}
               onChange={(e) => setSearchCriteria({ ...searchCriteria, dateTo: e.target.value })}
             />
@@ -135,17 +147,22 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
 
         <div className="filter-row">
           <div className="amount-range">
-            <label>Amount:</label>
+            <label htmlFor="adv-search-amount-min">Amount:</label>
             <input
+              id="adv-search-amount-min"
               type="number"
               placeholder="Min"
+              aria-label="Minimum amount"
               value={searchCriteria.amountMin}
               onChange={(e) => setSearchCriteria({ ...searchCriteria, amountMin: e.target.value })}
             />
-            <span>-</span>
+            <span aria-hidden="true">-</span>
+            <label htmlFor="adv-search-amount-max" className="sr-only">Maximum amount</label>
             <input
+              id="adv-search-amount-max"
               type="number"
               placeholder="Max"
+              aria-label="Maximum amount"
               value={searchCriteria.amountMax}
               onChange={(e) => setSearchCriteria({ ...searchCriteria, amountMax: e.target.value })}
             />
@@ -153,9 +170,12 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
         </div>
 
         <div className="filter-row">
+          <label htmlFor="adv-search-address" className="sr-only">Filter by address</label>
           <input
+            id="adv-search-address"
             type="text"
             placeholder="Filter by address..."
+            aria-label="Filter by address"
             value={searchCriteria.address}
             onChange={(e) => setSearchCriteria({ ...searchCriteria, address: e.target.value })}
           />

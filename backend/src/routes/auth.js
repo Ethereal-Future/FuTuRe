@@ -66,6 +66,32 @@ const authRateLimiter = createRateLimiter({
   message: 'Too many login attempts, please try again later.',
 });
 
+// Per-IP rate limit for password reset (10 req/hour)
+const passwordResetIpLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: 'Too many requests',
+});
+
+// Per-email rate limit store (3 req/hour per email)
+const passwordResetEmailStore = new Map();
+
+function checkEmailRateLimit(email) {
+  const now = Date.now();
+  const windowMs = 60 * 60 * 1000;
+  const max = 3;
+  const entry = passwordResetEmailStore.get(email) || { count: 0, resetAt: now + windowMs };
+  if (now > entry.resetAt) {
+    entry.count = 0;
+    entry.resetAt = now + windowMs;
+  }
+  entry.count += 1;
+  passwordResetEmailStore.set(email, entry);
+  return entry.count <= max;
+}
+
+const RESET_TOKEN_TTL_MS = 15 * 60 * 1000;
+
 const validateBody = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty())
@@ -1389,5 +1415,89 @@ router.post('/resend-verification', requireAuth, async (req, res) => {
     sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to resend verification email');
   }
 });
+
+// ── Password Reset ─────────────────────────────────────────────────────────────
+
+router.post(
+  '/password-reset',
+  passwordResetIpLimiter,
+  [body('email').isEmail().normalizeEmail()],
+  validateBody,
+  async (req, res) => {
+    const { email } = req.body;
+    // Enforce minimum response time to prevent timing-based enumeration
+    const minDelay = new Promise((r) => setTimeout(r, 200));
+
+    const withinEmailLimit = checkEmailRateLimit(email);
+
+    try {
+      if (withinEmailLimit) {
+        const user = await prisma.user.findFirst({
+          where: { OR: [{ username: email }, { email }] },
+        });
+
+        if (user) {
+          // Invalidate any previous unexpired tokens for this email
+          await prisma.user.updateMany({
+            where: { id: user.id, passwordResetExpires: { gt: new Date() } },
+            data: { passwordResetToken: null, passwordResetExpires: null },
+          });
+
+          const token = randomBytes(32).toString('hex');
+          await prisma.user.update({
+            where: { id: user.id },
+            data: {
+              passwordResetToken: token,
+              passwordResetExpires: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+            },
+          });
+
+          const baseUrl = getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
+          await sendEmail(email, {
+            subject: 'Reset your password',
+            body: `Reset your password: ${baseUrl}/reset-password?token=${token}\nExpires in 15 minutes.`,
+          }).catch(() => {});
+        }
+      }
+
+      await minDelay;
+      // Always return the same response regardless of whether the email exists or rate limit triggered
+      res.json({ message: 'If that email is registered, a reset link has been sent.' });
+    } catch (error) {
+      await minDelay;
+      logger.error({ err: error }, 'password-reset failed');
+      res.json({ message: 'If that email is registered, a reset link has been sent.' });
+    }
+  },
+);
+
+router.post(
+  '/password-reset/confirm',
+  [body('token').notEmpty().isString(), body('password').isLength({ min: 8 })],
+  validateBody,
+  async (req, res) => {
+    const { token, password } = req.body;
+    try {
+      const user = await prisma.user.findFirst({
+        where: { passwordResetToken: token, passwordResetExpires: { gt: new Date() } },
+      });
+
+      if (!user) {
+        return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'Invalid or expired token');
+      }
+
+      const passwordHash = await hashPassword(password);
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash, passwordResetToken: null, passwordResetExpires: null },
+      });
+
+      res.json({ message: 'Password updated successfully' });
+    } catch (error) {
+      logger.error({ err: error }, 'password-reset/confirm failed');
+      sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to reset password');
+    }
+  },
+);
 
 export default router;
