@@ -58,8 +58,17 @@ import { sanitizeInputs } from './middleware/sanitize.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { csrfTokenMiddleware, validateCSRFMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
 import dotenv from 'dotenv';
+import { validateEncryptionKey } from './db/encryption.js';
 
 dotenv.config();
+
+// Fail fast if the database encryption key is missing or invalid
+try {
+  validateEncryptionKey();
+} catch (err) {
+  console.error(`[startup] ${err.message}`);
+  process.exit(1);
+}
 
 const app = express();
 const PORT = getConfig().server.port;

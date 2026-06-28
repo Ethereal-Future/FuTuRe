@@ -1,6 +1,7 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
 import { registerWebhook, listWebhooks, deleteWebhook, rotateWebhookSecret, verifyWebhookSignature } from '../webhooks/store.js';
+import { webhookSignatureMiddleware } from '../webhooks/verifySignature.js';
 import logger from '../config/logger.js';
 
 const router = express.Router();
@@ -174,6 +175,17 @@ router.post('/:id/rotate-secret', requireAuth, (req, res) => {
  *       200:
  *         description: Verification result
  */
+/**
+ * POST /api/v1/webhooks/incoming
+ * Receive and process incoming webhook payloads from external services.
+ * Signature is verified via HMAC-SHA256 before any processing occurs.
+ */
+router.post('/incoming', webhookSignatureMiddleware, (req, res) => {
+  logger.info({ source: req.headers['x-webhook-source'] ?? 'unknown' }, 'Incoming webhook received');
+  // Dispatch to application logic based on payload type
+  res.status(200).json({ received: true });
+});
+
 router.post('/verify', (req, res) => {
   const { webhookId, signature, payload } = req.body;
   

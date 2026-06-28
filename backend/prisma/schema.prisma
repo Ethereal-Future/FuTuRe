@@ -304,3 +304,20 @@ model Session {
   @@index([userId])
   @@index([userId, revokedAt])
 }
+
+// Immutable audit trail for all admin actions (no UPDATE/DELETE should be issued against this table)
+model AdminAuditLog {
+  id               String   @id @default(uuid())
+  adminUserId      String
+  actionType       String
+  targetEntityType String
+  targetEntityId   String
+  actionMetadata   Json     @default("{}")
+  ipAddress        String?
+  userAgent        String?
+  createdAt        DateTime @default(now())
+
+  @@index([adminUserId])
+  @@index([actionType])
+  @@index([createdAt])
+}

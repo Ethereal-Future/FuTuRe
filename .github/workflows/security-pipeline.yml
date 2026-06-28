@@ -33,6 +33,7 @@ jobs:
         uses: gitleaks/gitleaks-action@b6c5701469c3e8b8f2ec5b3c81bda3f28b673af6 # v2.3.6
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_CONFIG: .gitleaks.toml
 
   sast:
     name: SAST – Static Analysis
