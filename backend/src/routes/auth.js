@@ -136,7 +136,7 @@ router.post('/register', authRateLimiter, userRules, validateBody, async (req, r
   try {
     const { username, password } = req.body;
     const passwordHash = await hashPassword(password);
-    const user = createUser(username, passwordHash);
+    const user = await createUser(username, passwordHash);
     res.status(201).json({ user });
   } catch (error) {
     sendError(res, 409, ErrorCodes.CONFLICT, error.message);
@@ -1009,27 +1009,6 @@ router.delete('/account', requireAuth, async (req, res) => {
 
 // MFA Routes
 // POST /api/auth/mfa/setup - Enable MFA and generate recovery codes
-router.post('/mfa/setup', [body('totp').notEmpty().isString()], validateBody, async (req, res) => {
-  try {
-    const userId = req.user?.sub;
-    if (!userId) {
-      return res.status(401).json({ error: 'Unauthorized' });
-    }
-
-    const { totp: _totp } = req.body;
-
-    const user = await prisma.user.findUnique({ where: { id: userId } });
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-
-    // Generate recovery codes
-    const recoveryCodes = Array.from({ length: 10 }, () =>
-      randomBytes(4).toString('hex').toUpperCase(),
-    );
-
-    // Hash and store recovery codes
-    const hashedCodes = await Promise.all(recoveryCodes.map((code) => bcrypt.hash(code, 10)));
 router.post(
   '/mfa/setup',
   requireAuth,
@@ -1182,7 +1161,6 @@ router.post(
         username: user.username,
         role: user.role || 'USER',
       });
-      const token = signAccessToken({ sub: user.id, username: user.publicKey, role: 'USER' });
 
       res.json({
         token,
