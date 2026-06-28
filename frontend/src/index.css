@@ -35,7 +35,7 @@
     top: -100%;
     left: 0;
     background: var(--primary);
-    color: #fff;
+    color: var(--on-primary);
     padding: 8px 16px;
     font-weight: 600;
     z-index: 10000;
@@ -58,6 +58,11 @@
   --info: #0369a1;
   --link: #0b69d7;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+  /* ── Focus ring tokens (issue #741) ─────────────────────────────────────── */
+  --focus-ring-color: #2563eb;
+  --focus-ring-width: 2px;
+  --focus-ring-offset: 2px;
 }
 
 .theme-dark {
@@ -81,6 +86,8 @@
   --ws-disconnected: #f87171;
   --ws-reconnecting: #fbbf24;
   --ws-failed: #a78bfa;
+  /* Focus ring: #93c5fd on dark bg (#020617) → 11.4:1, passes WCAG AA */
+  --focus-ring-color: #93c5fd;
 }
 
 * {
@@ -217,7 +224,8 @@ input {
 }
 
 input:focus-visible {
-  outline: none;
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 0;
   border-color: var(--primary);
 }
 
@@ -489,7 +497,7 @@ select {
 
 .qr-pubkey {
   font-size: 10px;
-  color: #666;
+  color: var(--muted);
   word-break: break-all;
   text-align: center;
   max-width: 220px;
@@ -677,7 +685,7 @@ select {
 .sm-history-toggle {
   background: none;
   border: none;
-  color: #666;
+  color: var(--muted);
   font-size: 12px;
   cursor: pointer;
   padding: 4px 0;
@@ -1023,7 +1031,7 @@ select {
 }
 .balance-asset {
   font-weight: 600;
-  color: #555;
+  color: var(--muted);
 }
 .balance-amount {
   font-variant-numeric: tabular-nums;
@@ -1526,7 +1534,10 @@ kbd {
   transition:
     border-color 0.2s,
     background 0.2s;
-  outline: none;
+}
+.fu-dropzone:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: var(--focus-ring-offset);
 }
 .fu-dropzone:hover,
 .fu-dropzone:focus-visible {

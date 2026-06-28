@@ -9,13 +9,14 @@ const VARIANTS = {
 };
 
 function Message({ msg, onRemove, onRetry }) {
+  const isUrgent = msg.type === 'error' || msg.type === 'warning';
   return (
     <motion.div
       className={`sm-item sm-${msg.type}`}
       variants={VARIANTS}
       initial="hidden" animate="visible" exit="exit"
       layout
-      role="alert"
+      role={isUrgent ? 'alert' : 'status'}
       aria-atomic="true"
     >
       <span className="sm-icon" aria-hidden="true">{msg.icon}</span>

@@ -1268,39 +1268,41 @@ function App() {
                     >
                       {loading === 'balance' ? 'Checking Balance…' : 'Check Balance'}
                     </motion.button>
-                    <AnimatePresence mode="wait">
-                      {loading === 'balance' ? (
-                        <SkeletonBalance key="loading-balance" />
-                      ) : balance ? (
-                        <motion.div
-                          key="balance-list"
-                          variants={v.pop}
-                          initial="hidden"
-                          animate="visible"
-                          exit="exit"
-                          style={{ marginTop: 10 }}
-                          aria-label="Account balances"
-                          role="list"
-                        >
-                          {balance.balances.map((b, i) => (
-                            <motion.p
-                              key={i}
-                              variants={v.fadeSlide}
-                              className="balance-row"
-                              role="listitem"
-                            >
-                              <span className="balance-asset">
-                                {b.asset}
-                                {b.asset === 'XLM' && <XLMInfoIcon />}
-                              </span>
-                              <span className="balance-amount">
-                                {formatBalanceWithAsset(b.balance, b.asset)}
-                              </span>
-                            </motion.p>
-                          ))}
-                        </motion.div>
-                      ) : null}
-                    </AnimatePresence>
+                    <div role="status" aria-label="Account balance" aria-live="polite" aria-atomic="false">
+                      <AnimatePresence mode="wait">
+                        {loading === 'balance' ? (
+                          <SkeletonBalance key="loading-balance" />
+                        ) : balance ? (
+                          <motion.div
+                            key="balance-list"
+                            variants={v.pop}
+                            initial="hidden"
+                            animate="visible"
+                            exit="exit"
+                            style={{ marginTop: 10 }}
+                            aria-label="Account balances"
+                            role="list"
+                          >
+                            {balance.balances.map((b, i) => (
+                              <motion.p
+                                key={i}
+                                variants={v.fadeSlide}
+                                className="balance-row"
+                                role="listitem"
+                              >
+                                <span className="balance-asset">
+                                  {b.asset}
+                                  {b.asset === 'XLM' && <XLMInfoIcon />}
+                                </span>
+                                <span className="balance-amount">
+                                  {formatBalanceWithAsset(b.balance, b.asset)}
+                                </span>
+                              </motion.p>
+                            ))}
+                          </motion.div>
+                        ) : null}
+                      </AnimatePresence>
+                    </div>
                   </motion.section>
 
                   {/* Send Payment */}
