@@ -1,4 +1,3 @@
-import axios from 'axios';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
@@ -21,7 +20,6 @@ function fmt(dateStr) {
   return new Date(dateStr).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-
 function csvEscape(val) {
   const s = val == null ? '' : String(val);
   return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
@@ -32,7 +30,9 @@ async function fetchAllTransactions(publicKey) {
   let cursor = null;
   do {
     const params = { limit: 50, ...(cursor ? { cursor } : {}) };
-    const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, { params });
+    const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, {
+      params,
+    });
     all.push(...(data.records ?? []));
     cursor = data.nextCursor ?? null;
   } while (cursor);
@@ -40,20 +40,34 @@ async function fetchAllTransactions(publicKey) {
 }
 
 function downloadCsv(rows, filename) {
-  const COLS = ['date', 'type', 'direction', 'amount', 'asset', 'counterparty', 'hash', 'fee', 'status'];
+  const COLS = [
+    'date',
+    'type',
+    'direction',
+    'amount',
+    'asset',
+    'counterparty',
+    'hash',
+    'fee',
+    'status',
+  ];
   const lines = [
     COLS.join(','),
-    ...rows.map(tx => [
-      tx.date ? new Date(tx.date).toISOString() : '',
-      TYPE_LABELS[tx.type] ?? tx.type ?? '',
-      tx.direction ?? '',
-      tx.amount ?? '',
-      tx.asset ?? 'XLM',
-      tx.counterparty ?? '',
-      tx.hash ?? '',
-      tx.fee ?? '',
-      tx.successful ? 'success' : 'failed',
-    ].map(csvEscape).join(',')),
+    ...rows.map((tx) =>
+      [
+        tx.date ? new Date(tx.date).toISOString() : '',
+        TYPE_LABELS[tx.type] ?? tx.type ?? '',
+        tx.direction ?? '',
+        tx.amount ?? '',
+        tx.asset ?? 'XLM',
+        tx.counterparty ?? '',
+        tx.hash ?? '',
+        tx.fee ?? '',
+        tx.successful ? 'success' : 'failed',
+      ]
+        .map(csvEscape)
+        .join(','),
+    ),
   ];
   const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
@@ -82,13 +96,14 @@ function TxRow({ tx, onClick, onRetry }) {
       tabIndex={0}
       aria-label={label}
     >
-      <span className={`tx-dir ${isReceived ? 'tx-in' : isSent ? 'tx-out' : 'tx-neutral'}`} aria-hidden="true">
+      <span
+        className={`tx-dir ${isReceived ? 'tx-in' : isSent ? 'tx-out' : 'tx-neutral'}`}
+        aria-hidden="true"
+      >
         {isReceived ? '↓' : isSent ? '↑' : '•'}
       </span>
       <span className="tx-type">{TYPE_LABELS[tx.type] ?? tx.type}</span>
-      <span className="tx-amount">
-        {tx.amount ? `${tx.amount} ${tx.asset ?? ''}` : '—'}
-      </span>
+      <span className="tx-amount">{tx.amount ? `${tx.amount} ${tx.asset ?? ''}` : '—'}</span>
       <span className="tx-date">{fmt(tx.date)}</span>
       <span className={`tx-status ${tx.successful ? 'tx-ok' : 'tx-fail'}`} aria-hidden="true">
         {tx.successful ? '✓' : '✗'}
@@ -96,7 +111,10 @@ function TxRow({ tx, onClick, onRetry }) {
       {!tx.successful && onRetry && (
         <button
           className="tx-retry-btn"
-          onClick={(e) => { e.stopPropagation(); onRetry(tx); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(tx);
+          }}
           aria-label={`Retry failed transaction ${tx.hash}`}
         >
           Retry
@@ -113,7 +131,9 @@ function TxModal({ tx, onClose }) {
   const v = makeVariants(prefersReduced);
 
   useEffect(() => {
-    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
@@ -122,12 +142,15 @@ function TxModal({ tx, onClose }) {
     <motion.div
       className="tx-overlay"
       onClick={onClose}
-      variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit"
+      variants={v.fadeSlide}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
     >
       <motion.div
         ref={modalRef}
         className="tx-modal"
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
         variants={v.pop}
         role="dialog"
         aria-modal="true"
@@ -135,13 +158,33 @@ function TxModal({ tx, onClose }) {
       >
         <div className="tx-modal-header">
           <h3 id="tx-modal-title">Transaction Details</h3>
-          <button className="qr-close" onClick={onClose} aria-label="Close transaction details dialog">✕</button>
+          <button
+            className="qr-close"
+            onClick={onClose}
+            aria-label="Close transaction details dialog"
+          >
+            ✕
+          </button>
         </div>
         <dl className="tx-detail-list">
-          <dt>Hash</dt><dd className="tx-hash">{tx.hash}</dd>
-          <dt>Type</dt><dd>{TYPE_LABELS[tx.type] ?? tx.type}</dd>
-          {tx.direction && <><dt>Direction</dt><dd>{tx.direction}</dd></>}
-          {tx.amount && <><dt>Amount</dt><dd>{tx.amount} {tx.asset}</dd></>}
+          <dt>Hash</dt>
+          <dd className="tx-hash">{tx.hash}</dd>
+          <dt>Type</dt>
+          <dd>{TYPE_LABELS[tx.type] ?? tx.type}</dd>
+          {tx.direction && (
+            <>
+              <dt>Direction</dt>
+              <dd>{tx.direction}</dd>
+            </>
+          )}
+          {tx.amount && (
+            <>
+              <dt>Amount</dt>
+              <dd>
+                {tx.amount} {tx.asset}
+              </dd>
+            </>
+          )}
           {tx.counterparty && (
             <>
               <dt>Counterparty</dt>
@@ -151,10 +194,18 @@ function TxModal({ tx, onClose }) {
               </dd>
             </>
           )}
-          <dt>Date</dt><dd>{fmt(tx.date)}</dd>
-          <dt>Fee</dt><dd>{tx.fee} stroops</dd>
-          {tx.memo && <><dt>Memo</dt><dd>{tx.memo}</dd></>}
-          <dt>Status</dt><dd>{tx.successful ? '✓ Success' : '✗ Failed'}</dd>
+          <dt>Date</dt>
+          <dd>{fmt(tx.date)}</dd>
+          <dt>Fee</dt>
+          <dd>{tx.fee} stroops</dd>
+          {tx.memo && (
+            <>
+              <dt>Memo</dt>
+              <dd>{tx.memo}</dd>
+            </>
+          )}
+          <dt>Status</dt>
+          <dd>{tx.successful ? '✓ Success' : '✗ Failed'}</dd>
         </dl>
       </motion.div>
     </motion.div>
@@ -163,17 +214,17 @@ function TxModal({ tx, onClose }) {
 
 export function TransactionHistory({ publicKey }) {
   const [txs, setTxs] = useState([]);
-  const [hasMore, setHasMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [reachedEnd, setReachedEnd] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filters, setFilters] = useState({ type: '', dateFrom: '', dateTo: '', hash: '' });
-  const [page, setPage] = useState(1);
-  const [cursors, setCursors] = useState([]); // cursor per page index for back-navigation
   const [error, setError] = useState(null);
-  const [retrying, setRetrying] = useState({}); // { [txId]: 'pending' | 'success' | 'error' }
+  const [retrying, setRetrying] = useState({});
   const [exporting, setExporting] = useState(false);
-  const [nextCursor, setNextCursor] = useState(null); // eslint-disable-line no-unused-vars
+  const sentinelRef = useRef(null);
   const prefersReduced = useReducedMotion();
   const tap = tapScale(prefersReduced);
 
@@ -190,58 +241,104 @@ export function TransactionHistory({ publicKey }) {
     }
   };
 
-  const fetchPage = useCallback(async (targetPage = 1, cursor = null) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const params = { page: targetPage, pageSize: PAGE_SIZE, ...(cursor ? { cursor } : {}) };
+  const buildParams = useCallback(
+    (cursor = null) => {
+      const params = { limit: PAGE_SIZE };
+      if (cursor) params.cursor = cursor;
       if (filters.type) params.type = filters.type;
       if (filters.dateFrom) params.dateFrom = filters.dateFrom;
       if (filters.dateTo) params.dateTo = filters.dateTo;
       if (filters.hash) params.hash = filters.hash;
-      const { data: resp } = await axios.get(`/api/v1/transactions/${publicKey}`, { params });
-      const records = resp.data ?? resp.records ?? resp;
-      setTxs(Array.isArray(records) ? records : []);
-      setHasMore(!!resp.nextCursor || (Array.isArray(records) && records.length === PAGE_SIZE));
-      setPage(targetPage);
-      const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, { params });
-      setTxs(data.records);
-      setNextCursor(data.nextCursor);
-      setLoaded(true);
+      return params;
+    },
+    [filters],
+  );
 
-      if (targetPage > 1 && resp.nextCursor) {
-        setCursors(prev => {
-          const next = [...prev];
-          next[targetPage - 1] = resp.nextCursor;
-          return next;
-        });
-      }
+  const loadFirst = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    setTxs([]);
+    setNextCursor(null);
+    setReachedEnd(false);
+    try {
+      const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, {
+        params: buildParams(),
+      });
+      const records = data.records ?? [];
+      setTxs(records);
+      const cursor = data.nextCursor ?? null;
+      setNextCursor(cursor);
+      setReachedEnd(cursor === null);
+      setLoaded(true);
     } catch (e) {
       setError(e?.response?.data?.error ?? e?.message ?? 'Failed to load transactions.');
     } finally {
       setLoading(false);
     }
-  }, [publicKey, filters]);
+  }, [publicKey, buildParams]);
 
-  const handleLoad = () => { setCursors([]); setPage(1); fetchPage(1, null); };
-  const handleNext = () => fetchPage(page + 1, cursors[page - 1] ?? null);
-  const handleBack = () => fetchPage(page - 1, cursors[page - 2] ?? null);
-  const applyFilters = (e) => { e.preventDefault(); setCursors([]); setPage(1); fetchPage(1, null); };
+  const loadMore = useCallback(async () => {
+    if (!nextCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, {
+        params: buildParams(nextCursor),
+      });
+      const records = data.records ?? [];
+      setTxs((prev) => [...prev, ...records]);
+      const cursor = data.nextCursor ?? null;
+      setNextCursor(cursor);
+      if (cursor === null) setReachedEnd(true);
+    } catch (e) {
+      setError(e?.response?.data?.error ?? e?.message ?? 'Failed to load more transactions.');
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [publicKey, nextCursor, loadingMore, buildParams]);
+
+  useEffect(() => {
+    if (!loaded || reachedEnd || loadingMore || !nextCursor) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) loadMore();
+      },
+      { rootMargin: '200px' },
+    );
+    const el = sentinelRef.current;
+    if (el) observer.observe(el);
+    return () => {
+      if (el) observer.unobserve(el);
+    };
+  }, [loaded, reachedEnd, loadingMore, nextCursor, loadMore]);
+
+  const handleLoad = () => loadFirst();
+  const applyFilters = (e) => {
+    e.preventDefault();
+    loadFirst();
+  };
 
   const handleRetry = useCallback(async (tx) => {
-    setRetrying(r => ({ ...r, [tx.id]: 'pending' }));
+    setRetrying((r) => ({ ...r, [tx.id]: 'pending' }));
     try {
       await apiClient.post('/api/retry/transaction', { transactionHash: tx.hash });
-      setRetrying(r => ({ ...r, [tx.id]: 'success' }));
-      setTxs(prev => prev.map(t => t.id === tx.id ? { ...t, successful: true } : t));
+      setRetrying((r) => ({ ...r, [tx.id]: 'success' }));
+      setTxs((prev) => prev.map((t) => (t.id === tx.id ? { ...t, successful: true } : t)));
     } catch {
-      setRetrying(r => ({ ...r, [tx.id]: 'error' }));
+      setRetrying((r) => ({ ...r, [tx.id]: 'error' }));
     }
   }, []);
 
   return (
     <section className="section" aria-labelledby="tx-history-heading">
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: 8,
+        }}
+      >
         <h3 id="tx-history-heading">Transaction History</h3>
         <div style={{ display: 'flex', gap: 8 }}>
           <motion.button
@@ -267,41 +364,51 @@ export function TransactionHistory({ publicKey }) {
       </div>
 
       <form className="tx-filters" onSubmit={applyFilters} aria-label="Filter transactions">
-        <label htmlFor="tx-type-filter" className="sr-only">Transaction type</label>
+        <label htmlFor="tx-type-filter" className="sr-only">
+          Transaction type
+        </label>
         <select
           id="tx-type-filter"
           value={filters.type}
-          onChange={e => setFilters(f => ({ ...f, type: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, type: e.target.value }))}
           aria-label="Filter by transaction type"
         >
           <option value="">All types</option>
           <option value="payment">Payment</option>
           <option value="create_account">Account Created</option>
         </select>
-        <label htmlFor="tx-date-from" className="sr-only">From date</label>
+        <label htmlFor="tx-date-from" className="sr-only">
+          From date
+        </label>
         <input
           id="tx-date-from"
           type="date"
           value={filters.dateFrom}
-          onChange={e => setFilters(f => ({ ...f, dateFrom: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, dateFrom: e.target.value }))}
           aria-label="Filter from date"
         />
-        <label htmlFor="tx-date-to" className="sr-only">To date</label>
+        <label htmlFor="tx-date-to" className="sr-only">
+          To date
+        </label>
         <input
           id="tx-date-to"
           type="date"
           value={filters.dateTo}
-          onChange={e => setFilters(f => ({ ...f, dateTo: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, dateTo: e.target.value }))}
           aria-label="Filter to date"
         />
-        <button type="submit" className="tx-filter-btn">Filter</button>
-        <label htmlFor="tx-hash-filter" className="sr-only">Transaction hash</label>
+        <button type="submit" className="tx-filter-btn">
+          Filter
+        </button>
+        <label htmlFor="tx-hash-filter" className="sr-only">
+          Transaction hash
+        </label>
         <input
           id="tx-hash-filter"
           type="text"
           placeholder="Search by hash…"
           value={filters.hash}
-          onChange={e => setFilters(f => ({ ...f, hash: e.target.value }))}
+          onChange={(e) => setFilters((f) => ({ ...f, hash: e.target.value }))}
           aria-label="Filter by transaction hash"
           spellCheck={false}
         />
@@ -309,30 +416,87 @@ export function TransactionHistory({ publicKey }) {
 
       <AnimatePresence mode="wait">
         {error && (
-          <motion.div key="error" className="tx-error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div
+            key="error"
+            className="tx-error"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
             <p>{error}</p>
-            <button className="tx-page-btn" onClick={() => fetchPage(cursors[cursors.length - 1] ?? null)}>↺ Retry</button>
+            <button className="tx-page-btn" onClick={loadFirst}>
+              ↺ Retry
+            </button>
           </motion.div>
         )}
         {!error && loading && (
-          <motion.div key="skeleton" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} aria-label="Loading transactions" aria-busy="true">
-            {Array.from({ length: 5 }, (_, i) => <SkeletonCard key={i} />)}
+          <motion.div
+            key="skeleton"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            aria-label="Loading transactions"
+            aria-busy="true"
+          >
+            {Array.from({ length: 5 }, (_, i) => (
+              <SkeletonCard key={i} />
+            ))}
           </motion.div>
         )}
         {!error && !loading && loaded && (
-          <motion.div key="list" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+          <motion.div
+            key="list"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+          >
             {txs.length === 0 ? (
-              <div className="tx-empty" role="status" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '24px 0' }}>
-                <svg width="80" height="80" viewBox="0 0 80 80" fill="none" aria-hidden="true" xmlns="http://www.w3.org/2000/svg">
+              <div
+                className="tx-empty"
+                role="status"
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: 12,
+                  padding: '24px 0',
+                }}
+              >
+                <svg
+                  width="80"
+                  height="80"
+                  viewBox="0 0 80 80"
+                  fill="none"
+                  aria-hidden="true"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
                   <circle cx="40" cy="40" r="38" stroke="#e5e7eb" strokeWidth="2" />
                   <rect x="22" y="28" width="36" height="6" rx="3" fill="#e5e7eb" />
                   <rect x="22" y="38" width="28" height="6" rx="3" fill="#e5e7eb" />
                   <rect x="22" y="48" width="20" height="6" rx="3" fill="#e5e7eb" />
                   <circle cx="58" cy="54" r="10" fill="#f3f4f6" stroke="#e5e7eb" strokeWidth="2" />
-                  <line x1="55" y1="54" x2="61" y2="54" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
-                  <line x1="58" y1="51" x2="58" y2="57" stroke="#9ca3af" strokeWidth="2" strokeLinecap="round" />
+                  <line
+                    x1="55"
+                    y1="54"
+                    x2="61"
+                    y2="54"
+                    stroke="#9ca3af"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                  <line
+                    x1="58"
+                    y1="51"
+                    x2="58"
+                    y2="57"
+                    stroke="#9ca3af"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
                 </svg>
-                <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>No transactions yet — send your first payment above.</p>
+                <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>
+                  No transactions yet — send your first payment above.
+                </p>
               </div>
             ) : (
               <>
@@ -340,7 +504,11 @@ export function TransactionHistory({ publicKey }) {
                   <VirtualList
                     items={txs}
                     renderItem={(tx) => (
-                      <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
+                      <TxRow
+                        tx={tx}
+                        onClick={setSelected}
+                        onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null}
+                      />
                     )}
                     itemHeight={64}
                     height={Math.min(txs.length * 64 + 1, 480)}
@@ -349,16 +517,37 @@ export function TransactionHistory({ publicKey }) {
                   <ul className="tx-list">
                     {txs.map((tx) => (
                       <li key={tx.id || tx.hash}>
-                        <TxRow tx={tx} onClick={setSelected} onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null} />
+                        <TxRow
+                          tx={tx}
+                          onClick={setSelected}
+                          onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null}
+                        />
                       </li>
                     ))}
                   </ul>
                 )}
-                <nav className="tx-pagination" aria-label="Transaction page navigation">
-                  <button onClick={handleBack} disabled={page <= 1 || loading} className="tx-page-btn" aria-label="Previous page">← Prev</button>
-                  <span className="tx-page-info" aria-current="page">Page {page}</span>
-                  <button onClick={handleNext} disabled={!hasMore || loading} className="tx-page-btn" aria-label="Next page">Next →</button>
-                </nav>
+                <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+                {loadingMore && (
+                  <div aria-label="Loading more transactions" aria-busy="true">
+                    {Array.from({ length: 3 }, (_, i) => (
+                      <SkeletonCard key={i} />
+                    ))}
+                  </div>
+                )}
+                {reachedEnd && (
+                  <p
+                    className="tx-end-message"
+                    role="status"
+                    style={{
+                      textAlign: 'center',
+                      color: '#6b7280',
+                      fontSize: 14,
+                      padding: '12px 0',
+                    }}
+                  >
+                    You've reached the end
+                  </p>
+                )}
               </>
             )}
           </motion.div>

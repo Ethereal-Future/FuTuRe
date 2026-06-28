@@ -38,7 +38,6 @@ import { SkeletonBalance } from './components/Skeleton';
 import { TransactionHistory } from './components/TransactionHistory';
 import { StreamPayment } from './components/StreamPayment';
 import { PathPayment } from './components/PathPayment';
-import { AccountSettings } from './components/AccountSettings';
 import { FeeDisplay } from './components/FeeDisplay';
 import { InlineConfirmation } from './components/InlineConfirmation';
 import { logError } from './utils/errorLogger';
@@ -55,7 +54,6 @@ import { InstallBanner } from './components/InstallBanner';
 import { useTheme } from './contexts/ThemeContext';
 import { useAppState, useAppDispatch, A } from './store/index.js';
 import { useExchangeRate } from './hooks/useExchangeRate';
-import { useBalance, useSendPayment, useCreateAccount, useImportAccount, useKycStatus, useSaveAccountLabel, useNetworkStatusQuery } from './hooks/useQueryHooks';
 import {
   useBalance,
   useSendPayment,
@@ -65,27 +63,29 @@ import {
   useSaveAccountLabel,
   useNetworkStatusQuery,
 } from './hooks/useQueryHooks';
-import { AMMPoolBrowser } from './components/AMMPoolBrowser';
 import { ConvertWidget } from './components/ConvertWidget';
 import { XLMInfoIcon } from './components/XLMInfoIcon';
 import { AdminDashboard } from './components/AdminDashboard';
 
 // Heavy components loaded on-demand to keep the initial bundle small
 const AMMPoolBrowser = lazy(() =>
-  import('./components/AMMPoolBrowser').then((m) => ({ default: m.AMMPoolBrowser }))
+  import('./components/AMMPoolBrowser').then((m) => ({ default: m.AMMPoolBrowser })),
 );
 const AccountRecovery = lazy(() =>
-  import('./components/AccountRecovery').then((m) => ({ default: m.AccountRecovery }))
+  import('./components/AccountRecovery').then((m) => ({ default: m.AccountRecovery })),
 );
 const MultiSigTransactions = lazy(() =>
-  import('./components/MultiSigTransactions').then((m) => ({ default: m.MultiSigTransactions }))
+  import('./components/MultiSigTransactions').then((m) => ({ default: m.MultiSigTransactions })),
 );
 const KYCForm = lazy(() => import('./components/KYCForm').then((m) => ({ default: m.KYCForm })));
 const ComplianceDashboard = lazy(() =>
-  import('./components/ComplianceDashboard').then((m) => ({ default: m.ComplianceDashboard }))
+  import('./components/ComplianceDashboard').then((m) => ({ default: m.ComplianceDashboard })),
 );
 const BackupSettings = lazy(() =>
-  import('./components/BackupSettings').then((m) => ({ default: m.BackupSettings }))
+  import('./components/BackupSettings').then((m) => ({ default: m.BackupSettings })),
+);
+const AccountSettings = lazy(() =>
+  import('./components/AccountSettings').then((m) => ({ default: m.AccountSettings })),
 );
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
@@ -171,7 +171,7 @@ function App() {
         if (wsMsg.balance) dispatch({ type: A.SET_BALANCE, payload: { balances: wsMsg.balance } });
       }
     },
-    [msg, dispatch]
+    [msg, dispatch],
   );
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
@@ -181,7 +181,8 @@ function App() {
   const [fiatCurrency, setFiatCurrency] = useState('USD');
   useEffect(() => {
     if (!account?.publicKey) return;
-    apiClient.get(`/api/stellar/account/${account.publicKey}/settings`)
+    apiClient
+      .get(`/api/stellar/account/${account.publicKey}/settings`)
       .then(({ data }) => {
         const asset = data?.defaultAsset;
         // Use defaultAsset as fiat currency if it's not a Stellar asset (XLM/USDC/etc.)
@@ -189,7 +190,9 @@ function App() {
         if (asset && !STELLAR_ASSETS.has(asset)) setFiatCurrency(asset);
         else if (asset === 'EURC') setFiatCurrency('EUR');
       })
-      .catch(() => { /* use USD default */ });
+      .catch(() => {
+        /* use USD default */
+      });
   }, [account?.publicKey]);
 
   const { rate: xlmFiatRate, loading: rateLoading } = useExchangeRate(lastWsMessage, fiatCurrency);
@@ -295,12 +298,6 @@ function App() {
     }
   };
 
-  const loadLabel = useCallback(async (publicKey) => {
-    try {
-      const fetchedLabel = await getAccountLabel(publicKey);
-      dispatch({ type: A.SET_LABEL, payload: fetchedLabel });
-    } catch { /* non-critical */ }
-  }, [dispatch]);
   const loadLabel = useCallback(
     async (publicKey) => {
       try {
@@ -310,7 +307,7 @@ function App() {
         /* non-critical */
       }
     },
-    [dispatch]
+    [dispatch],
   );
 
   const fetchKycStatus = useCallback(async () => {
@@ -372,9 +369,6 @@ function App() {
     } catch (error) {
       logError(error, { context: 'createAccount' });
       msg.error(getFriendlyError(error), { retry: createAccount });
-    } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
@@ -406,9 +400,6 @@ function App() {
     } catch (error) {
       logError(error, { context: 'checkBalance' });
       msg.error(getFriendlyError(error), { retry: checkBalance });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    } finally { dispatch({ type: A.SET_LOADING, payload: '' }); }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
@@ -421,10 +412,16 @@ function App() {
   const selectedBalance = balance?.balances?.find((b) => b.asset === assetCode)?.balance ?? null;
   const xlmBalance = balance?.balances?.find((b) => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
-  const amountError = validateAmount(amount, selectedBalance !== null ? parseFloat(selectedBalance) : null);
+  const amountError = validateAmount(
+    amount,
+    selectedBalance !== null ? parseFloat(selectedBalance) : null,
+  );
   const amountValid = amountTouched && !amountError;
   const largeTransactionBlocked =
-    amountValid && kycStatus !== 'APPROVED' && assetCode === 'XLM' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+    amountValid &&
+    kycStatus !== 'APPROVED' &&
+    assetCode === 'XLM' &&
+    parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
   useEffect(() => {
     if (!recipientLooksFederated) {
@@ -443,7 +440,9 @@ function App() {
           setFederationStatus(`Resolved ${data.stellar_address}`);
         }
       } catch (error) {
-        setFederationStatus(error?.normalized?.message || error.message || 'Federation address not found');
+        setFederationStatus(
+          error?.normalized?.message || error.message || 'Federation address not found',
+        );
       }
     }, 500);
 
@@ -464,9 +463,13 @@ function App() {
 
   const confirmPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
-    if (assetCode === 'XLM' && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT) {
+    if (
+      assetCode === 'XLM' &&
+      kycStatus !== 'APPROVED' &&
+      parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT
+    ) {
       msg.error(
-        `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
+        `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`,
       );
       return;
     }
@@ -490,7 +493,7 @@ function App() {
               ...b,
               balance: String((parseFloat(b.balance) - parseFloat(amount) - fee).toFixed(7)),
             }
-          : b
+          : b,
       );
       dispatch({ type: A.SET_BALANCE_OPTIMISTIC, payload: { balances: optimisticBalances } });
     }
@@ -503,9 +506,12 @@ function App() {
       setShowPaymentConfirmation(false);
     } catch (error) {
       dispatch({ type: A.REVERT_BALANCE });
-      if (error?.response?.data?.error?.code === 'KYC_REQUIRED' || error?.response?.data?.error === 'KYC_REQUIRED') {
+      if (
+        error?.response?.data?.error?.code === 'KYC_REQUIRED' ||
+        error?.response?.data?.error === 'KYC_REQUIRED'
+      ) {
         msg.error(
-          `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`
+          `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`,
         );
         setShowPaymentConfirmation(false);
         setActiveSettingsSection('kyc');
@@ -517,7 +523,7 @@ function App() {
           assetCode: payload.assetCode,
         });
         msg.info(
-          "You are offline. Payment queued — you'll be prompted to re-enter your secret key when back online."
+          "You are offline. Payment queued — you'll be prompted to re-enter your secret key when back online.",
         );
       } else {
         logError(error, { context: 'sendPayment' });
@@ -530,7 +536,7 @@ function App() {
 
   const handleCreateTrustline = async () => {
     if (!account || !trustlineAsset) return;
-    
+
     setTrustlineLoading(true);
     try {
       await createTrustline(account.secretKey, trustlineAsset);
@@ -547,7 +553,7 @@ function App() {
 
   const handleAssetChange = async (newAssetCode) => {
     dispatch({ type: A.SET_ASSET_CODE, payload: newAssetCode });
-    
+
     // Check if non-native asset requires trustline
     if (newAssetCode !== 'XLM') {
       const hasTrustline = balance?.balances?.some((b) => b.asset === newAssetCode);
@@ -570,7 +576,7 @@ function App() {
 
   const confirmBatchPayment = async () => {
     if (!account || batchRecipients.length === 0) return;
-    
+
     dispatch({ type: A.SET_LOADING, payload: 'send' });
     const payload = {
       sourceSecret: account.secretKey,
@@ -598,7 +604,7 @@ function App() {
       const data = await batchPayment(payload);
       msg.success(
         `Batch payment sent to ${batchRecipients.length} recipients! Hash: ${data.hash.slice(0, 8)}…`,
-        { hash: data.hash }
+        { hash: data.hash },
       );
       setBatchRecipients([]);
       setBatchMode(false);
@@ -616,7 +622,7 @@ function App() {
 
   const handleRecoveryCodeSubmit = async () => {
     if (!account) return;
-    
+
     setShowRecoveryCodeEntry(false);
     try {
       const result = await verifyRecoveryCode(account.publicKey, recoveryCode);
@@ -905,7 +911,10 @@ function App() {
                     }}
                     aria-hidden="true"
                   />
-                  <span aria-hidden="true" className={wsStatus === 'failed' ? 'ws-status-failed' : ''}>
+                  <span
+                    aria-hidden="true"
+                    className={wsStatus === 'failed' ? 'ws-status-failed' : ''}
+                  >
                     {wsStatus === 'failed' ? 'Connection lost' : wsStatus}
                   </span>
                 </motion.span>
@@ -1057,18 +1066,33 @@ function App() {
                         animate="visible"
                         exit="exit"
                       >
-                        Invalid Stellar address format (must start with G and be 56 characters) or federation address
+                        Invalid Stellar address format (must start with G and be 56 characters) or
+                        federation address
                       </motion.p>
                     )}
                   </AnimatePresence>
                   {federationStatus && (
-                    <p style={{ color: federationStatus.startsWith('Resolved') ? '#16a34a' : '#64748b' }}>
+                    <p
+                      style={{
+                        color: federationStatus.startsWith('Resolved') ? '#16a34a' : '#64748b',
+                      }}
+                    >
                       {federationStatus}
                     </p>
                   )}
                   {/* Asset Selector */}
                   <div className="input-wrap">
-                    <label htmlFor="asset-select" style={{ fontSize: '0.875rem', fontWeight: 500, marginBottom: 4, display: 'block' }}>Asset</label>
+                    <label
+                      htmlFor="asset-select"
+                      style={{
+                        fontSize: '0.875rem',
+                        fontWeight: 500,
+                        marginBottom: 4,
+                        display: 'block',
+                      }}
+                    >
+                      Asset
+                    </label>
                     <select
                       id="asset-select"
                       value={assetCode}
@@ -1082,11 +1106,12 @@ function App() {
                       }}
                       aria-label="Select asset to send"
                     >
-                      {balance?.balances && balance.balances.map((b) => (
-                        <option key={b.asset} value={b.asset}>
-                          {b.asset} - {formatBalanceWithAsset(b.balance, b.asset)}
-                        </option>
-                      ))}
+                      {balance?.balances &&
+                        balance.balances.map((b) => (
+                          <option key={b.asset} value={b.asset}>
+                            {b.asset} - {formatBalanceWithAsset(b.balance, b.asset)}
+                          </option>
+                        ))}
                     </select>
                   </div>
                   {trustlineAsset && (
@@ -1151,7 +1176,12 @@ function App() {
                     <motion.button
                       onClick={batchMode ? addBatchRecipient : sendPayment}
                       {...tap}
-                      disabled={!recipientValid || !amountValid || loading === 'send' || (batchMode && batchRecipients.length >= 10)}
+                      disabled={
+                        !recipientValid ||
+                        !amountValid ||
+                        loading === 'send' ||
+                        (batchMode && batchRecipients.length >= 10)
+                      }
                     >
                       {loading === 'send' ? (
                         <Spinner label={batchMode ? 'Adding...' : 'Sending payment...'} />
@@ -1310,7 +1340,14 @@ function App() {
                     variants={v.fadeSlide}
                   >
                     <ErrorBoundary context="send-payment">
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center',
+                          marginBottom: 16,
+                        }}
+                      >
                         <h2 id="send-heading">Send Payment</h2>
                         <button
                           type="button"
@@ -1328,22 +1365,49 @@ function App() {
                           {batchMode ? 'Batch Mode (On)' : 'Batch Mode (Off)'}
                         </button>
                       </div>
-                      
+
                       {batchMode && batchRecipients.length > 0 && (
-                        <div style={{ padding: '12px', background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: '4px', marginBottom: 16 }}>
+                        <div
+                          style={{
+                            padding: '12px',
+                            background: '#f0f9ff',
+                            border: '1px solid #bfdbfe',
+                            borderRadius: '4px',
+                            marginBottom: 16,
+                          }}
+                        >
                           <h3 style={{ margin: '0 0 8px 0', fontSize: '0.95rem', fontWeight: 600 }}>
                             Recipients ({batchRecipients.length}/10)
                           </h3>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                             {batchRecipients.map((p, i) => (
-                              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px', background: '#fff', borderRadius: '3px' }}>
+                              <div
+                                key={i}
+                                style={{
+                                  display: 'flex',
+                                  justifyContent: 'space-between',
+                                  alignItems: 'center',
+                                  padding: '8px',
+                                  background: '#fff',
+                                  borderRadius: '3px',
+                                }}
+                              >
                                 <span style={{ fontSize: '0.85rem' }}>
-                                  {formatBalanceWithAsset(p.amount, p.assetCode)} to {p.destination.slice(0, 16)}...
+                                  {formatBalanceWithAsset(p.amount, p.assetCode)} to{' '}
+                                  {p.destination.slice(0, 16)}...
                                 </span>
                                 <button
                                   type="button"
                                   onClick={() => removeBatchRecipient(i)}
-                                  style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '4px 8px', borderRadius: '2px', cursor: 'pointer', fontSize: '0.8rem' }}
+                                  style={{
+                                    background: '#ef4444',
+                                    color: '#fff',
+                                    border: 'none',
+                                    padding: '4px 8px',
+                                    borderRadius: '2px',
+                                    cursor: 'pointer',
+                                    fontSize: '0.8rem',
+                                  }}
                                 >
                                   Remove
                                 </button>
@@ -1352,7 +1416,7 @@ function App() {
                           </div>
                         </div>
                       )}
-                      
+
                       <AddressBook
                         onSelect={(address) =>
                           dispatch({ type: A.SET_RECIPIENT, payload: address })
@@ -1401,9 +1465,11 @@ function App() {
                           <QRScanner
                             onScan={(parsed) => {
                               dispatch({ type: A.SET_RECIPIENT, payload: parsed.destination });
-                              if (parsed.amount) dispatch({ type: A.SET_AMOUNT, payload: parsed.amount });
+                              if (parsed.amount)
+                                dispatch({ type: A.SET_AMOUNT, payload: parsed.amount });
                               if (parsed.memo) dispatch({ type: A.SET_MEMO, payload: parsed.memo });
-                              if (parsed.memoType) dispatch({ type: A.SET_MEMO_TYPE, payload: parsed.memoType });
+                              if (parsed.memoType)
+                                dispatch({ type: A.SET_MEMO_TYPE, payload: parsed.memoType });
                               setShowScanner(false);
                             }}
                             onClose={() => setShowScanner(false)}
@@ -1421,11 +1487,18 @@ function App() {
                             animate="visible"
                             exit="exit"
                           >
-                            Invalid Stellar address format (must start with G and be 56 characters) or federation address
+                            Invalid Stellar address format (must start with G and be 56 characters)
+                            or federation address
                           </motion.p>
                         )}
                         {federationStatus && (
-                          <p style={{ color: federationStatus.startsWith('Resolved') ? '#16a34a' : '#64748b' }}>
+                          <p
+                            style={{
+                              color: federationStatus.startsWith('Resolved')
+                                ? '#16a34a'
+                                : '#64748b',
+                            }}
+                          >
                             {federationStatus}
                           </p>
                         )}
@@ -1517,16 +1590,19 @@ function App() {
                           <label htmlFor="memo-input" className="sr-only">
                             {memoType === 'text' && 'Payment memo (optional, max 28 bytes)'}
                             {memoType === 'id' && 'Numeric memo ID (uint64, exchange deposit)'}
-                            {(memoType === 'hash' || memoType === 'return') && `${memoType} memo (64 hex chars = 32 bytes)`}
+                            {(memoType === 'hash' || memoType === 'return') &&
+                              `${memoType} memo (64 hex chars = 32 bytes)`}
                           </label>
                           <input
                             id="memo-input"
                             type={memoType === 'id' ? 'number' : 'text'}
                             inputMode={memoType === 'id' ? 'numeric' : undefined}
                             placeholder={
-                              memoType === 'text' ? 'Memo (optional, max 28 bytes)' :
-                              memoType === 'id' ? 'Numeric memo ID (exchange deposit)' :
-                              `${memoType} memo (64 hex characters)`
+                              memoType === 'text'
+                                ? 'Memo (optional, max 28 bytes)'
+                                : memoType === 'id'
+                                  ? 'Numeric memo ID (exchange deposit)'
+                                  : `${memoType} memo (64 hex characters)`
                             }
                             value={memo}
                             onChange={(e) => {
@@ -1546,32 +1622,47 @@ function App() {
                             }}
                             onKeyDown={(e) => e.key === 'Enter' && sendPayment()}
                             aria-label={
-                              memoType === 'text' ? 'Payment memo (optional)' :
-                              memoType === 'id' ? 'Numeric memo ID for exchange deposit' :
-                              `${memoType} memo (64 hex characters)`
+                              memoType === 'text'
+                                ? 'Payment memo (optional)'
+                                : memoType === 'id'
+                                  ? 'Numeric memo ID for exchange deposit'
+                                  : `${memoType} memo (64 hex characters)`
                             }
-                            maxLength={memoType === 'id' ? 20 : memoType === 'text' ? undefined : 64}
+                            maxLength={
+                              memoType === 'id' ? 20 : memoType === 'text' ? undefined : 64
+                            }
                             style={{ paddingRight: memo ? '60px' : '10px' }}
                           />
                           {memo && (
                             <span className="input-icon" aria-hidden="true">
-                              {memoType === 'text' && `${new TextEncoder().encode(memo).length}/28 bytes`}
+                              {memoType === 'text' &&
+                                `${new TextEncoder().encode(memo).length}/28 bytes`}
                               {memoType === 'id' && memo.length > 0 && '✓'}
-                              {(memoType === 'hash' || memoType === 'return') && `${memo.length}/64`}
+                              {(memoType === 'hash' || memoType === 'return') &&
+                                `${memo.length}/64`}
                             </span>
                           )}
                         </div>
                       </div>
 
                       {memo && memoType === 'hash' && memo.length > 0 && memo.length !== 64 && (
-                        <p className="field-error" role="alert">Hash memo must be exactly 64 hex characters (32 bytes)</p>
+                        <p className="field-error" role="alert">
+                          Hash memo must be exactly 64 hex characters (32 bytes)
+                        </p>
                       )}
                       {memo && memoType === 'return' && memo.length > 0 && memo.length !== 64 && (
-                        <p className="field-error" role="alert">Return memo must be exactly 64 hex characters (32 bytes)</p>
+                        <p className="field-error" role="alert">
+                          Return memo must be exactly 64 hex characters (32 bytes)
+                        </p>
                       )}
-                      {memo && memoType === 'id' && memo && BigInt(memo) > 18446744073709551615n && (
-                        <p className="field-error" role="alert">Memo ID exceeds max uint64 value</p>
-                      )}
+                      {memo &&
+                        memoType === 'id' &&
+                        memo &&
+                        BigInt(memo) > 18446744073709551615n && (
+                          <p className="field-error" role="alert">
+                            Memo ID exceeds max uint64 value
+                          </p>
+                        )}
 
                       <FeeDisplay amount={amount} visible={amountValid} />
                       {amountValid &&
@@ -1596,7 +1687,9 @@ function App() {
                             !amountValid ||
                             loading === 'send' ||
                             largeTransactionBlocked ||
-                            ((memoType === 'hash' || memoType === 'return') && memo.length > 0 && memo.length !== 64)
+                            ((memoType === 'hash' || memoType === 'return') &&
+                              memo.length > 0 &&
+                              memo.length !== 64)
                           }
                           aria-busy={loading === 'send'}
                           aria-label="Send XLM payment"
@@ -1701,7 +1794,7 @@ function App() {
                               section.action();
                             } else {
                               setActiveSettingsSection(
-                                activeSettingsSection === section.id ? null : section.id
+                                activeSettingsSection === section.id ? null : section.id,
                               );
                             }
                           }}
@@ -1774,85 +1867,140 @@ function App() {
                       <PathPayment account={account} />
                     </ErrorBoundary>
                   </motion.div>
-                {/* Account Recovery */}
-                <motion.div variants={v.fadeSlide}>
-                  <Suspense fallback={<Spinner />}>
-                    <AccountRecovery />
-                  </Suspense>
-                </motion.div>
-                {/* Settings Sections Tabs */}
-                <motion.section className="section" variants={v.fadeSlide}>
-                  <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
-                    {[
-                      { id: 'multisig', label: '🔐 Multi-Sig', ariaLabel: 'Toggle multi-signature transactions panel' },
-                      { id: 'kyc', label: '📋 KYC', ariaLabel: 'Toggle KYC identity verification panel' },
-                      { id: 'notifications', label: '🔔 Notifications', ariaLabel: 'Toggle notification preferences panel' },
-                      { id: 'backup', label: '💾 Backup', ariaLabel: 'Open backup settings', action: () => setShowBackupSettings(true) },
-                      ...(['COMPLIANCE', 'ADMIN'].includes(userRole) ? [{ id: 'compliance', label: '🛡️ Compliance', ariaLabel: 'Open compliance dashboard', action: () => setShowComplianceDashboard(true) }] : []),
-                    ].map((section) => (
-                      <button
-                        key={section.id}
-                        type="button"
-                        aria-label={section.ariaLabel}
-                        aria-expanded={!section.action ? activeSettingsSection === section.id : undefined}
-                        aria-controls={!section.action ? `advanced-section-${section.id}` : undefined}
-                        onClick={() => {
-                          if (section.action) {
-                            section.action();
-                          } else {
-                            setActiveSettingsSection(activeSettingsSection === section.id ? null : section.id);
+                  {/* Account Recovery */}
+                  <motion.div variants={v.fadeSlide}>
+                    <Suspense fallback={<Spinner />}>
+                      <AccountRecovery />
+                    </Suspense>
+                  </motion.div>
+                  {/* Settings Sections Tabs */}
+                  <motion.section className="section" variants={v.fadeSlide}>
+                    <h2 style={{ marginBottom: 16 }}>Advanced Features</h2>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
+                      {[
+                        {
+                          id: 'multisig',
+                          label: '🔐 Multi-Sig',
+                          ariaLabel: 'Toggle multi-signature transactions panel',
+                        },
+                        {
+                          id: 'kyc',
+                          label: '📋 KYC',
+                          ariaLabel: 'Toggle KYC identity verification panel',
+                        },
+                        {
+                          id: 'notifications',
+                          label: '🔔 Notifications',
+                          ariaLabel: 'Toggle notification preferences panel',
+                        },
+                        {
+                          id: 'backup',
+                          label: '💾 Backup',
+                          ariaLabel: 'Open backup settings',
+                          action: () => setShowBackupSettings(true),
+                        },
+                        ...(['COMPLIANCE', 'ADMIN'].includes(userRole)
+                          ? [
+                              {
+                                id: 'compliance',
+                                label: '🛡️ Compliance',
+                                ariaLabel: 'Open compliance dashboard',
+                                action: () => setShowComplianceDashboard(true),
+                              },
+                            ]
+                          : []),
+                      ].map((section) => (
+                        <button
+                          key={section.id}
+                          type="button"
+                          aria-label={section.ariaLabel}
+                          aria-expanded={
+                            !section.action ? activeSettingsSection === section.id : undefined
                           }
-                        }}
-                        style={{
-                          padding: '10px 16px',
-                          background: activeSettingsSection === section.id ? '#2563eb' : '#f3f4f6',
-                          color: activeSettingsSection === section.id ? '#fff' : '#333',
-                          border: 'none',
-                          borderRadius: 4,
-                          cursor: 'pointer',
-                          fontWeight: 500,
-                          transition: 'all 0.2s',
-                        }}
-                      >
-                        {section.label}
-                      </button>
-                    ))}
-                  </div>
+                          aria-controls={
+                            !section.action ? `advanced-section-${section.id}` : undefined
+                          }
+                          onClick={() => {
+                            if (section.action) {
+                              section.action();
+                            } else {
+                              setActiveSettingsSection(
+                                activeSettingsSection === section.id ? null : section.id,
+                              );
+                            }
+                          }}
+                          style={{
+                            padding: '10px 16px',
+                            background:
+                              activeSettingsSection === section.id ? '#2563eb' : '#f3f4f6',
+                            color: activeSettingsSection === section.id ? '#fff' : '#333',
+                            border: 'none',
+                            borderRadius: 4,
+                            cursor: 'pointer',
+                            fontWeight: 500,
+                            transition: 'all 0.2s',
+                          }}
+                        >
+                          {section.label}
+                        </button>
+                      ))}
+                    </div>
 
-                  <AnimatePresence mode="wait">
-                    {activeSettingsSection === 'multisig' && (
-                      <motion.div id="advanced-section-multisig" key="multisig" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                        <Suspense fallback={<Spinner />}>
-                          <MultiSigTransactions publicKey={account.publicKey} />
-                        </Suspense>
-                        <ErrorBoundary context="Multi-Sig Transactions">
-                          <MultiSigTransactions publicKey={account.publicKey} />
-                        </ErrorBoundary>
-                      </motion.div>
-                    )}
-                    {activeSettingsSection === 'kyc' && (
-                      <motion.div id="advanced-section-kyc" key="kyc" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                        <Suspense fallback={<Spinner />}>
-                          <KYCForm />
-                        </Suspense>
-                        <ErrorBoundary context="KYC Form">
-                          <KYCForm />
-                        </ErrorBoundary>
-                      </motion.div>
-                    )}
-                    {activeSettingsSection === 'notifications' && (
-                      <motion.div id="advanced-section-notifications" key="notifications" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
-                        <NotificationPreferences />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.section>
-                {/* Path Payment */}
-                <motion.div variants={v.fadeSlide}>
-                  <ErrorBoundary context="Path Payment">
-                    <PathPayment account={account} />
-                  </ErrorBoundary>
+                    <AnimatePresence mode="wait">
+                      {activeSettingsSection === 'multisig' && (
+                        <motion.div
+                          id="advanced-section-multisig"
+                          key="multisig"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <Suspense fallback={<Spinner />}>
+                            <MultiSigTransactions publicKey={account.publicKey} />
+                          </Suspense>
+                          <ErrorBoundary context="Multi-Sig Transactions">
+                            <MultiSigTransactions publicKey={account.publicKey} />
+                          </ErrorBoundary>
+                        </motion.div>
+                      )}
+                      {activeSettingsSection === 'kyc' && (
+                        <motion.div
+                          id="advanced-section-kyc"
+                          key="kyc"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <Suspense fallback={<Spinner />}>
+                            <KYCForm />
+                          </Suspense>
+                          <ErrorBoundary context="KYC Form">
+                            <KYCForm />
+                          </ErrorBoundary>
+                        </motion.div>
+                      )}
+                      {activeSettingsSection === 'notifications' && (
+                        <motion.div
+                          id="advanced-section-notifications"
+                          key="notifications"
+                          variants={v.fadeSlide}
+                          initial="hidden"
+                          animate="visible"
+                          exit="exit"
+                        >
+                          <NotificationPreferences />
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.section>
+                  {/* Path Payment */}
+                  <motion.div variants={v.fadeSlide}>
+                    <ErrorBoundary context="Path Payment">
+                      <PathPayment account={account} />
+                    </ErrorBoundary>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1977,12 +2125,32 @@ function App() {
                   exit={{ scale: 0.9, y: 20 }}
                 >
                   <h3 style={{ marginTop: 0, marginBottom: 16 }}>Confirm Batch Payment</h3>
-                  <div style={{ marginBottom: 16, padding: '12px', background: '#f3f4f6', borderRadius: '4px' }}>
-                    <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>Recipients ({batchRecipients.length}/10):</p>
+                  <div
+                    style={{
+                      marginBottom: 16,
+                      padding: '12px',
+                      background: '#f3f4f6',
+                      borderRadius: '4px',
+                    }}
+                  >
+                    <p style={{ margin: '0 0 12px 0', fontWeight: 600 }}>
+                      Recipients ({batchRecipients.length}/10):
+                    </p>
                     {batchRecipients.map((p, i) => (
-                      <div key={i} style={{ fontSize: '0.875rem', marginBottom: 8, paddingBottom: 8, borderBottom: i < batchRecipients.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
+                      <div
+                        key={i}
+                        style={{
+                          fontSize: '0.875rem',
+                          marginBottom: 8,
+                          paddingBottom: 8,
+                          borderBottom:
+                            i < batchRecipients.length - 1 ? '1px solid #e5e7eb' : 'none',
+                        }}
+                      >
                         <p style={{ margin: '0 0 4px 0' }}>{p.destination.slice(0, 20)}...</p>
-                        <p style={{ margin: 0, color: '#666' }}>{formatBalanceWithAsset(p.amount, p.assetCode)}</p>
+                        <p style={{ margin: 0, color: '#666' }}>
+                          {formatBalanceWithAsset(p.amount, p.assetCode)}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -2050,21 +2218,19 @@ function App() {
               />
             )}
             {showSettings && account && (
-              <AccountSettings
-                publicKey={account.publicKey}
-                onClose={() => setShowSettings(false)}
-              />
+              <Suspense fallback={<Spinner />}>
+                <AccountSettings
+                  publicKey={account.publicKey}
+                  onClose={() => setShowSettings(false)}
+                />
+              </Suspense>
             )}
 
-        {showBackupSettings && (
-          <Suspense fallback={<Spinner />}>
-            <BackupSettings onClose={() => setShowBackupSettings(false)} />
-          </Suspense>
-        )}
-      </AnimatePresence>
-    </motion.div>
-    </div>
-  </>
+            {showBackupSettings && (
+              <Suspense fallback={<Spinner />}>
+                <BackupSettings onClose={() => setShowBackupSettings(false)} />
+              </Suspense>
+            )}
             {showComplianceDashboard && (
               <ErrorBoundary context="Compliance Dashboard">
                 <Suspense fallback={<Spinner />}>
