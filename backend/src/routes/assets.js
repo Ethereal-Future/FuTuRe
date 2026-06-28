@@ -74,6 +74,53 @@ router.get('/', (req, res) => {
 });
 
 /**
+ * @route GET /api/assets/trustlines/:publicKey
+ * @desc Get trustlines for account
+ */
+router.get('/trustlines/:publicKey', publicKeyParam('publicKey'), validate, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const trustlines = await trustlineManager.getTrustlines(publicKey);
+    res.json(trustlines);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @route GET /api/assets/portfolio/:publicKey/summary
+ * @desc Get portfolio summary
+ */
+router.get(
+  '/portfolio/:publicKey/summary',
+  publicKeyParam('publicKey'),
+  validate,
+  async (req, res) => {
+    try {
+      const { publicKey } = req.params;
+      const summary = await portfolioService.getPortfolioSummary(publicKey);
+      res.json(summary);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  },
+);
+
+/**
+ * @route GET /api/assets/portfolio/:publicKey
+ * @desc Get portfolio for account
+ */
+router.get('/portfolio/:publicKey', publicKeyParam('publicKey'), validate, async (req, res) => {
+  try {
+    const { publicKey } = req.params;
+    const portfolio = await portfolioService.getPortfolio(publicKey);
+    res.json(portfolio);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
  * @route GET /api/assets/:code/:issuer
  * @desc Get specific asset
  */
@@ -137,53 +184,6 @@ router.post(
       res.json(result);
     } catch (error) {
       res.status(400).json({ error: error.message });
-    }
-  },
-);
-
-/**
- * @route GET /api/assets/trustlines/:publicKey
- * @desc Get trustlines for account
- */
-router.get('/trustlines/:publicKey', publicKeyParam('publicKey'), validate, async (req, res) => {
-  try {
-    const { publicKey } = req.params;
-    const trustlines = await trustlineManager.getTrustlines(publicKey);
-    res.json(trustlines);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * @route GET /api/assets/portfolio/:publicKey
- * @desc Get portfolio for account
- */
-router.get('/portfolio/:publicKey', publicKeyParam('publicKey'), validate, async (req, res) => {
-  try {
-    const { publicKey } = req.params;
-    const portfolio = await portfolioService.getPortfolio(publicKey);
-    res.json(portfolio);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-/**
- * @route GET /api/assets/portfolio/:publicKey/summary
- * @desc Get portfolio summary
- */
-router.get(
-  '/portfolio/:publicKey/summary',
-  publicKeyParam('publicKey'),
-  validate,
-  async (req, res) => {
-    try {
-      const { publicKey } = req.params;
-      const summary = await portfolioService.getPortfolioSummary(publicKey);
-      res.json(summary);
-    } catch (error) {
-      res.status(500).json({ error: error.message });
     }
   },
 );
