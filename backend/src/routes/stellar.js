@@ -492,9 +492,18 @@ router.get('/account/:publicKey/trustlines', rules.publicKeyParam, validate, asy
 router.get('/account/:publicKey/transactions', rules.publicKeyParam, validate, async (req, res) => {
   try {
     const { cursor, limit, type, dateFrom, dateTo, hash } = req.query;
+
+    let parsedLimit = 20;
+    if (limit !== undefined) {
+      parsedLimit = parseInt(limit, 10);
+      if (isNaN(parsedLimit) || parsedLimit < 1 || parsedLimit > 100) {
+        return res.status(400).json({ error: 'limit must be an integer between 1 and 100' });
+      }
+    }
+
     const result = await StellarService.getTransactions(req.params.publicKey, {
       cursor,
-      limit: limit ? Math.min(parseInt(limit), 50) : 10,
+      limit: parsedLimit,
       type,
       dateFrom,
       dateTo,
@@ -1016,28 +1025,24 @@ router.post(
       ]);
 
       if (senderScreen.hit) {
-        return res
-          .status(403)
-          .json({
-            error: {
-              code: 'SANCTIONS_MATCH',
-              message: 'Sanctions screening failed',
-              reason: senderScreen.reason,
-            },
-          });
+        return res.status(403).json({
+          error: {
+            code: 'SANCTIONS_MATCH',
+            message: 'Sanctions screening failed',
+            reason: senderScreen.reason,
+          },
+        });
       }
 
       for (const screen of recipientScreens) {
         if (screen.hit) {
-          return res
-            .status(403)
-            .json({
-              error: {
-                code: 'SANCTIONS_MATCH',
-                message: 'Recipient sanctions screening failed',
-                reason: screen.reason,
-              },
-            });
+          return res.status(403).json({
+            error: {
+              code: 'SANCTIONS_MATCH',
+              message: 'Recipient sanctions screening failed',
+              reason: screen.reason,
+            },
+          });
         }
       }
 

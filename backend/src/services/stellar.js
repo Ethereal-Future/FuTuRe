@@ -5,6 +5,7 @@ import { getIssuer } from '../config/assets.js';
 import logger, { withContext } from '../config/logger.js';
 import prisma from '../db/client.js';
 import { callWithCircuitBreaker } from './circuitBreaker.js';
+import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -131,7 +132,13 @@ function isTransientHorizonError(err) {
   if (status === 429 || status === 503) return true;
   if (err.isTimeout) return true;
   const code = err?.code;
-  if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || code === 'ETIMEDOUT' || code === 'ECONNRESET') return true;
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'ENOTFOUND' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET'
+  )
+    return true;
   return false;
 }
 
@@ -240,15 +247,15 @@ export async function createAccount(correlationId = null) {
  */
 export async function getBalance(publicKey, correlationId = null) {
   logger.debug('stellar.getBalance', { publicKey, correlationId });
-  const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
-  const balances = account.balances.map((b) => ({
-    asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
-    balance: b.balance,
-  }));
-
-  logger.info('stellar.balanceFetched', { publicKey, balances, correlationId });
-
-  return { publicKey, balances };
+  return getCachedBalance(publicKey, async () => {
+    const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
+    const balances = account.balances.map((b) => ({
+      asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
+      balance: b.balance,
+    }));
+    logger.info('stellar.balanceFetched', { publicKey, balances, correlationId });
+    return { publicKey, balances };
+  });
 }
 
 /**
@@ -397,6 +404,8 @@ export async function sendPayment(
     memoType,
     correlationId,
   });
+
+  await invalidateBalanceCache(sourcePublicKey);
 
   await eventMonitor.publishEvent(sourcePublicKey, {
     type: 'PaymentSent',
