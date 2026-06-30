@@ -17,7 +17,7 @@
     "build-storybook": "storybook build"
   },
   "dependencies": {
-    "@sentry/react": "^8.3.0",
+    "@sentry/react": "^10.62.0",
     "@sentry/vite-plugin": "^2.16.0",
     "@stellar/stellar-base": "^12.1.1",
     "@stellar/stellar-sdk": "^12.3.0",
