@@ -1,3 +1,5 @@
+import { useRef, useState } from 'react';
+import axios from 'axios';
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import apiClient from './api/client.js';
@@ -32,6 +34,10 @@ import { NetworkBadge } from './components/NetworkBadge';
 import { NetworkStatusBanner } from './components/NetworkStatusBanner';
 import { OfflineIndicator } from './components/OfflineIndicator';
 import { StatusMessage } from './components/StatusMessage';
+import { Skeleton } from './components/Skeleton';
+import { CopyButton } from './components/CopyButton';
+import { EmptyState } from './components/EmptyState';
+import { PendingTimer } from './components/PendingTimer';
 import { CopyButton } from './components/CopyButton';
 import { Spinner } from './components/Spinner';
 import { SkeletonBalance } from './components/Skeleton';
@@ -88,6 +94,31 @@ const AccountSettings = lazy(() =>
   import('./components/AccountSettings').then((m) => ({ default: m.AccountSettings })),
 );
 
+function truncateKey(key) {
+  return key.length > 12 ? `${key.slice(0, 6)}…${key.slice(-4)}` : key;
+}
+
+function Spinner() {
+  return (
+    <motion.span
+      animate={{ rotate: 360 }}
+      transition={{ repeat: Infinity, duration: 0.7, ease: 'linear' }}
+      style={{ display: 'inline-block', marginLeft: 8 }}
+    >⟳</motion.span>
+  );
+}
+
+function App() {
+  const [account, setAccount] = useState(null);
+  const [balance, setBalance] = useState(null);
+  const [recipient, setRecipient] = useState('');
+  const [amount, setAmount] = useState('');
+  const [loading, setLoading] = useState('');
+  const [showQR, setShowQR] = useState(false);
+  const [sendStartTime, setSendStartTime] = useState(null);
+
+  const msg = useMessages();
+  const recipientInputRef = useRef(null);
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
 
 function App() {
@@ -458,6 +489,8 @@ function App() {
 
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
+    setLoading('send');
+    setSendStartTime(Date.now());
     setShowPaymentConfirmation(true);
   };
 
@@ -612,6 +645,9 @@ function App() {
       checkBalance();
       setShowPaymentConfirmation(false);
     } catch (error) {
+      logError(error, { context: 'sendPayment' });
+      msg.error(getFriendlyError(error), { retry: sendPayment });
+    } finally { setLoading(''); setSendStartTime(null); }
       dispatch({ type: A.REVERT_BALANCE });
       logError(error, { context: 'batchPayment' });
       msg.error(getFriendlyError(error));
@@ -695,6 +731,15 @@ function App() {
               animate="visible"
               exit="exit"
             >
+              <p>
+                <strong>Public Key:</strong>{' '}
+                <span title={account.publicKey}>{truncateKey(account.publicKey)}</span>{' '}
+                <CopyButton value={account.publicKey} label="Copy public key" />
+              </p>
+              <p><strong>Secret Key:</strong> {account.secretKey}</p>
+              <motion.button className="qr-trigger" onClick={() => setShowQR(true)} {...tap}>
+                🔲 Show QR Code
+              </motion.button>
               <div className="shortcuts-panel__header">
                 <strong>Keyboard Shortcuts</strong>
                 <button
@@ -768,6 +813,24 @@ function App() {
             )}
           </AnimatePresence>
 
+            {/* Balance */}
+            <motion.div className="section" variants={v.fadeSlide}>
+              <motion.button onClick={checkBalance} {...tap} disabled={loading === 'balance'}>
+                Check Balance {loading === 'balance' && <Spinner />}
+              </motion.button>
+              {loading === 'balance' && !balance && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Skeleton width="140px" height="1.2em" />
+                  <Skeleton width="100px" height="1.2em" />
+                </div>
+              )}
+              <AnimatePresence>
+                {balance && (
+                  <motion.div variants={v.pop} initial="hidden" animate="visible" exit="exit" style={{ marginTop: 10 }}>
+                    {balance.balances.map((b, i) => (
+                      <motion.p key={i} variants={v.fadeSlide}>{b.asset}: {b.balance}</motion.p>
+                    ))}
+                  </motion.div>
           <header>
             <div className="app-header-row">
               <div>
@@ -921,6 +984,20 @@ function App() {
               </div>
             </div>
 
+            {/* Send Payment */}
+            <motion.div className="section" variants={v.fadeSlide}>
+              <ErrorBoundary context="send-payment">
+              <h3>Send Payment</h3>
+              <div className="input-wrap">
+                <input
+                  ref={recipientInputRef}
+                  type="text"
+                  placeholder="Recipient Public Key"
+                  value={recipient}
+                  onChange={(e) => setRecipient(e.target.value)}
+                  style={{ border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}` }}
+                />
+                {recipientTouched && <span className="input-icon">{recipientValid ? '✅' : '❌'}</span>}
             <AnimatePresence>
               {updateAvailable && (
                 <motion.div
@@ -1275,6 +1352,16 @@ function App() {
                   </motion.div>
                 )}
               </AnimatePresence>
+              <motion.button onClick={sendPayment} {...tap} disabled={!recipientValid || !amountValid || loading === 'send'}>
+                Send {loading === 'send' && <Spinner />}
+              </motion.button>
+              {loading === 'send' && sendStartTime && (
+                <p className="field-hint">
+                  <PendingTimer startTime={sendStartTime} />
+                </p>
+              )}
+              </ErrorBoundary>
+            </motion.div>
             </motion.section>
 
             <AnimatePresence>
@@ -1335,6 +1422,23 @@ function App() {
                     </div>
                   </motion.section>
 
+      {/* Transaction history empty state */}
+      {account && msg.history.length === 0 && (
+        <EmptyState
+          heading="No transactions yet"
+          description="Your transaction history will appear here once you send or receive your first payment."
+          actionLabel="Send payment"
+          onAction={() => recipientInputRef.current?.focus()}
+        />
+      )}
+
+      {/* Status Messages */}
+      <StatusMessage
+        messages={msg.messages}
+        history={msg.history}
+        onRemove={msg.remove}
+        showHistory={true}
+      />
                   {/* Send Payment */}
                   <motion.section
                     className="section"
