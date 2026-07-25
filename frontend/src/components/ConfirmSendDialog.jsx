@@ -46,6 +46,8 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
 
   const amtNum = parseFloat(amount) || 0;
   const feeXLM = fee ? parseFloat(fee.feeXLM) : null;
+  const baseFeeXLM = fee ? parseFloat(fee.baseFeeXLM) : null;
+  const surgeMultiplier = fee ? parseFloat(fee.surgeMultiplier) : null;
   const totalXLM = feeXLM !== null ? (amtNum + feeXLM).toFixed(7).replace(/\.?0+$/, '') : null;
   const amtUsd = usdRate ? (amtNum * usdRate).toFixed(2) : null;
 
@@ -64,8 +66,20 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
             {amtUsd && <span className="confirm-dialog__usd"> ≈ ${amtUsd} USD</span>}
           </dd>
         </div>
+        {baseFeeXLM !== null && (
+          <div className="confirm-dialog__row">
+            <dt>Base fee</dt>
+            <dd>{baseFeeXLM} XLM</dd>
+          </div>
+        )}
+        {surgeMultiplier !== null && surgeMultiplier > 1 && (
+          <div className="confirm-dialog__row">
+            <dt>Surge multiplier</dt>
+            <dd>{surgeMultiplier}x</dd>
+          </div>
+        )}
         <div className="confirm-dialog__row">
-          <dt>Estimated fee</dt>
+          <dt>Transaction fee</dt>
           <dd>
             {feeXLM !== null
               ? <>{feeXLM} XLM<XLMInfoIcon />{fee?.feeUsd && <span className="confirm-dialog__usd"> ≈ ${fee.feeUsd} USD</span>}</>

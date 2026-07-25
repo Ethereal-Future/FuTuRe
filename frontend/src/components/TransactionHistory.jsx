@@ -2,6 +2,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { Spinner } from './Spinner';
+import { SlideOver } from './SlideOver';
+import { TransactionDetailPanel } from './TransactionDetailPanel';
 import { SkeletonCard } from './Skeleton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { CopyButton } from './CopyButton';
@@ -124,6 +126,7 @@ function TxRow({ tx, onClick, onRetry }) {
   );
 }
 
+export function TransactionHistory({ publicKey, network = 'public' }) {
 function TxModal({ tx, onClose }) {
   const modalRef = useRef(null);
   useFocusTrap(modalRef, true);
@@ -554,6 +557,10 @@ export function TransactionHistory({ publicKey }) {
         )}
       </AnimatePresence>
 
+      <SlideOver open={!!selected} onClose={() => setSelected(null)} title="Transaction Details">
+        <TransactionDetailPanel tx={selected} network={network} />
+      </SlideOver>
+    </div>
       <AnimatePresence>
         {selected && <TxModal tx={selected} onClose={() => setSelected(null)} />}
       </AnimatePresence>
