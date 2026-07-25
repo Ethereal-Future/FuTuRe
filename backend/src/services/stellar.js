@@ -7,6 +7,8 @@ import prisma from '../db/client.js';
 import { getIssuer } from '../config/assets.js';
 import { callWithCircuitBreaker } from './circuitBreaker.js';
 import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
+import { recordHorizonCall } from '../monitoring/horizonAlerter.js';
+import { withSpan } from '../config/otel.js';
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -155,15 +157,21 @@ export async function withHorizonRetry(fn) {
   let lastErr;
   for (let attempt = 0; attempt <= HORIZON_RETRY_BACKOFFS.length; attempt++) {
     try {
-      return await withHorizonTimeout(fn);
+      const result = await withHorizonTimeout(fn);
+      recordHorizonCall(false);
+      return result;
     } catch (err) {
       lastErr = err;
-      if (!isTransientHorizonError(err) || attempt === HORIZON_RETRY_BACKOFFS.length) throw err;
+      if (!isTransientHorizonError(err) || attempt === HORIZON_RETRY_BACKOFFS.length) {
+        recordHorizonCall(true);
+        throw err;
+      }
       const delay = HORIZON_RETRY_BACKOFFS[attempt];
       logger.warn('stellar.horizon.retry', { attempt: attempt + 1, delay, error: err.message });
       await new Promise((r) => setTimeout(r, delay));
     }
   }
+  recordHorizonCall(true);
   throw lastErr;
 }
 
@@ -198,6 +206,13 @@ export async function fundAccount(publicKey) {
  * const { publicKey, secretKey } = await createAccount('req-abc-123');
  */
 export async function createAccount(correlationId = null) {
+  return withSpan('stellar-service', 'stellar.createAccount', async (span) => {
+    const pair = StellarSDK.Keypair.random();
+    const publicKey = pair.publicKey();
+    span.setAttribute('stellar.publicKey', publicKey);
+    withContext(logger, { action: 'createAccount', correlationId }).info('stellar.createAccount', {
+      publicKey,
+    });
   const pair = StellarSDK.Keypair.random();
   const publicKey = pair.publicKey();
   logger.info('stellar.createAccount', { publicKey });
@@ -205,27 +220,34 @@ export async function createAccount(correlationId = null) {
     publicKey,
   });
 
-  if (isTestnet()) {
-    const friendbotRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
-    if (!friendbotRes.ok) {
-      throw new Error(
-        `Friendbot funding failed: ${friendbotRes.status} ${friendbotRes.statusText}`,
-      );
+    if (isTestnet()) {
+      const friendbotRes = await fetch(`https://friendbot.stellar.org?addr=${publicKey}`);
+      if (!friendbotRes.ok) {
+        throw new Error(
+          `Friendbot funding failed: ${friendbotRes.status} ${friendbotRes.statusText}`,
+        );
+      }
+      logger.debug('stellar.friendbotFunded', { publicKey, correlationId });
+      await eventMonitor.publishEvent(publicKey, {
+        type: 'AccountFunded',
+        data: { publicKey, correlationId },
+        version: 1,
+      });
     }
-    logger.debug('stellar.friendbotFunded', { publicKey, correlationId });
+
     await eventMonitor.publishEvent(publicKey, {
-      type: 'AccountFunded',
+      type: 'AccountCreated',
       data: { publicKey, correlationId },
       version: 1,
     });
-  }
 
-  await eventMonitor.publishEvent(publicKey, {
-    type: 'AccountCreated',
-    data: { publicKey, correlationId },
-    version: 1,
-  });
-
+    await prisma.user
+      .upsert({
+        where: { publicKey },
+        update: {},
+        create: { publicKey },
+      })
+      .catch((err) => logger.warn('db.user.upsert.failed', { error: err.message, correlationId }));
   await prisma.user.upsert({
     where: { publicKey },
     update: {},
@@ -239,10 +261,11 @@ export async function createAccount(correlationId = null) {
     })
     .catch((err) => logger.warn('db.user.upsert.failed', { error: err.message, correlationId }));
 
-  return {
-    publicKey,
-    secretKey: pair.secret(),
-  };
+    return {
+      publicKey,
+      secretKey: pair.secret(),
+    };
+  });
 }
 
 export async function getBalance(publicKey) {
@@ -266,15 +289,18 @@ export async function getBalance(publicKey) {
  * @throws {Error} If the account does not exist on the network
  */
 export async function getBalance(publicKey, correlationId = null) {
-  logger.debug('stellar.getBalance', { publicKey, correlationId });
-  return getCachedBalance(publicKey, async () => {
-    const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
-    const balances = account.balances.map((b) => ({
-      asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
-      balance: b.balance,
-    }));
-    logger.info('stellar.balanceFetched', { publicKey, balances, correlationId });
-    return { publicKey, balances };
+  return withSpan('stellar-service', 'stellar.getBalance', async (span) => {
+    span.setAttribute('stellar.publicKey', publicKey);
+    logger.debug('stellar.getBalance', { publicKey, correlationId });
+    return getCachedBalance(publicKey, async () => {
+      const account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
+      const balances = account.balances.map((b) => ({
+        asset: b.asset_type === 'native' ? 'XLM' : `${b.asset_code}:${b.asset_issuer}`,
+        balance: b.balance,
+      }));
+      logger.info('stellar.balanceFetched', { publicKey, balances, correlationId });
+      return { publicKey, balances };
+    });
   });
 }
 
@@ -752,6 +778,22 @@ export async function getTransactions(
  * @throws {Error} If the Horizon feeStats call fails
  */
 export async function getFeeStats() {
+  return withSpan('stellar-service', 'stellar.getFeeStats', async () => {
+    const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
+    const feeStroops = parseInt(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
+    const feeXLM = feeStroops / 1e7;
+
+    let xlmUsd = null;
+    try {
+      const usdc = new StellarSDK.Asset('USDC', getIssuer('USDC'));
+      const book = await withHorizonRetry(() =>
+        getHorizonServer().orderbook(StellarSDK.Asset.native(), usdc).limit(1).call(),
+      );
+      const ask = parseFloat(book.asks?.[0]?.price);
+      if (ask > 0) xlmUsd = ask;
+    } catch (_) {
+      /* non-critical: XLM/USD price lookup failure */
+    }
   const stats = await getHorizonServer().feeStats();
   const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
   const baseFeeStroops = parseInt(stats.last_ledger_base_fee ?? StellarSDK.BASE_FEE);
@@ -775,8 +817,16 @@ export async function getFeeStats() {
     /* non-critical: XLM/USD price lookup failure */
   }
 
-  const feeUsd = xlmUsd ? feeXLM * xlmUsd : null;
+    const feeUsd = xlmUsd ? feeXLM * xlmUsd : null;
 
+    return {
+      feeStroops,
+      feeXLM: feeXLM.toFixed(7),
+      feeUsd: feeUsd ? feeUsd.toFixed(6) : null,
+      xlmUsd: xlmUsd ? xlmUsd.toFixed(4) : null,
+      traditionalFeeUsd: 25,
+    };
+  });
   return {
     feeStroops,
     feeXLM: feeXLM.toFixed(7),
@@ -842,6 +892,30 @@ export async function getExchangeRate(from, to) {
  * @returns {Promise<{network: string, horizonUrl: string, online: boolean, horizonVersion?: string, networkPassphrase?: string, currentProtocolVersion?: number}>}
  */
 export async function getNetworkStatus() {
+  return withSpan('stellar-service', 'stellar.getNetworkStatus', async (span) => {
+    const { horizonUrl } = getConfig().stellar;
+    span.setAttribute('stellar.horizonUrl', horizonUrl);
+    try {
+      const root = await withHorizonRetry(() => getHorizonServer().root());
+      const status = {
+        network: isTestnet() ? 'testnet' : 'mainnet',
+        horizonUrl,
+        online: true,
+        horizonVersion: root.horizon_version,
+        networkPassphrase: root.network_passphrase,
+        currentProtocolVersion: root.current_protocol_version,
+      };
+      logger.debug('stellar.networkStatus', status);
+      return status;
+    } catch (err) {
+      logger.warn('stellar.networkStatus.offline', { error: err.message });
+      return {
+        network: isTestnet() ? 'testnet' : 'mainnet',
+        horizonUrl,
+        online: false,
+      };
+    }
+  });
   const { horizonUrl } = getConfig().stellar;
   try {
     const root = await withHorizonRetry(() => getHorizonServer().root());
