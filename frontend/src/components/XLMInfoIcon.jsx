@@ -1,16 +1,48 @@
-import { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+
+const HOVER_DELAY_MS = 300;
 
 /**
- * XLMInfoIcon - Info icon with tooltip explaining XLM currency
- * Accessible, keyboard navigable, mobile friendly
+ * XLMInfoIcon - Info icon with tooltip explaining XLM currency.
+ * Shows on hover (with a short delay) or focus (immediately), dismisses on
+ * mouse-out, blur, or Escape. Accessible, keyboard navigable, mobile friendly.
  */
 export function XLMInfoIcon({ className = '' }) {
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const tooltipRef = useRef(null);
+  const hoverTimerRef = useRef(null);
+  const prefersReducedMotion = useReducedMotion();
 
-  // Close on outside click
+  const clearHoverTimer = () => {
+    if (hoverTimerRef.current) {
+      clearTimeout(hoverTimerRef.current);
+      hoverTimerRef.current = null;
+    }
+  };
+
+  const open = useCallback(() => setIsOpen(true), []);
+  const close = useCallback(() => {
+    clearHoverTimer();
+    setIsOpen(false);
+  }, []);
+
+  const handleMouseEnter = () => {
+    clearHoverTimer();
+    hoverTimerRef.current = setTimeout(open, HOVER_DELAY_MS);
+  };
+
+  const handleMouseLeave = () => close();
+
+  const handleFocus = () => {
+    clearHoverTimer();
+    open();
+  };
+
+  const handleBlur = () => close();
+
+  // Close on outside click (covers the tap-to-toggle mobile fallback)
   useEffect(() => {
     if (!isOpen) return;
 
@@ -19,7 +51,7 @@ export function XLMInfoIcon({ className = '' }) {
         buttonRef.current && !buttonRef.current.contains(e.target) &&
         tooltipRef.current && !tooltipRef.current.contains(e.target)
       ) {
-        setIsOpen(false);
+        close();
       }
     };
 
@@ -29,7 +61,7 @@ export function XLMInfoIcon({ className = '' }) {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, close]);
 
   // Close on Escape key
   useEffect(() => {
@@ -37,31 +69,39 @@ export function XLMInfoIcon({ className = '' }) {
 
     const handleEscape = (e) => {
       if (e.key === 'Escape') {
-        setIsOpen(false);
+        close();
         buttonRef.current?.focus();
       }
     };
 
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen]);
+  }, [isOpen, close]);
 
-  const handleToggle = () => setIsOpen(!isOpen);
+  useEffect(() => clearHoverTimer, []);
+
+  const handleClick = () => setIsOpen((prev) => !prev);
 
   return (
-    <span className={`xlm-info-wrapper ${className}`}>
+    <span
+      className={`xlm-info-wrapper ${className}`}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       <button
         ref={buttonRef}
         type="button"
         className="xlm-info-btn"
-        onClick={handleToggle}
+        onClick={handleClick}
+        onFocus={handleFocus}
+        onBlur={handleBlur}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault();
-            handleToggle();
+            handleClick();
           }
         }}
-        aria-label="Information about XLM currency"
+        aria-label="What is XLM?"
         aria-expanded={isOpen}
         aria-describedby={isOpen ? 'xlm-tooltip' : undefined}
       >
@@ -74,13 +114,14 @@ export function XLMInfoIcon({ className = '' }) {
             id="xlm-tooltip"
             className="xlm-tooltip"
             role="tooltip"
-            initial={{ opacity: 0, scale: 0.95, y: -5 }}
+            initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.95, y: -5 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: -5 }}
-            transition={{ duration: 0.15 }}
+            exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, y: -5 }}
+            transition={{ duration: prefersReducedMotion ? 0 : 0.15 }}
           >
-            <strong>XLM (Lumens)</strong> is the native currency of the Stellar network. 
-            It's used to pay transaction fees and maintain minimum account balances.
+            <strong>XLM is the native currency of the Stellar network.</strong>{' '}
+            It is used to pay small transaction fees (typically less than $0.001) and
+            to maintain a minimum account reserve of 1 XLM.
           </motion.div>
         )}
       </AnimatePresence>
