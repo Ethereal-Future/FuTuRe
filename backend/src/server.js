@@ -2,6 +2,7 @@ import { initializeOTel } from './config/otel.js';
 initializeOTel();
 
 import { createServer } from 'http';
+import dotenv from 'dotenv';
 import express from 'express';
 import compression from 'compression';
 import cors from 'cors';
@@ -12,6 +13,8 @@ import logger from './config/logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { connectDB, checkDBHealth, disconnectDB } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
+import stellarRoutes from './routes/stellar.js';
+import { startHorizonLatencyMonitor } from './services/stellar.js';
 import stellarRoutes from './routes/stellar/index.js';
 import multiSigRoutes from './routes/multiSig.js';
 import authRoutes from './routes/auth.js';
@@ -208,6 +211,7 @@ app.use(errorHandler);
 
 const httpServer = createServer(app);
 initWebSocket(httpServer);
+startHorizonLatencyMonitor();
 
 // Track active intervals for cleanup
 const activeIntervals = [];
