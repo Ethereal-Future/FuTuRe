@@ -46,6 +46,7 @@ import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { performanceMiddleware } from './monitoring/middleware.js';
+import { toPrometheusText } from './monitoring/metrics.js';
 import { cdnMiddleware } from './cdn/index.js';
 import {
   requestIdMiddleware,
@@ -190,6 +191,14 @@ app.get('/.well-known/stellar.toml', (_req, res) => {
 
 // Health routes (not versioned - used by load balancers)
 app.use('/', healthRoutes);
+
+// Dedicated Prometheus scrape endpoint — unauthenticated, no CSRF, not under /api/v1
+// Prometheus must be able to reach this without auth headers.
+// Restrict access at the network/ingress level in production.
+app.get('/metrics', (_req, res) => {
+  res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
+  res.send(toPrometheusText());
+});
 
 // Deprecation middleware for unversioned /api/* paths
 app.use('/api/*', (req, res, next) => {

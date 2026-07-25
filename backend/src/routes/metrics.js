@@ -4,6 +4,7 @@ import { getWsStats } from '../services/websocket.js';
 import { getFeeBumpStats } from '../services/stellar.js';
 import { getCdnStats } from '../cdn/index.js';
 import { checkShardHealth, getShardStats } from '../db/sharding.js';
+import { getHorizonErrorStats } from '../monitoring/horizonAlerter.js';
 
 const router = express.Router();
 
@@ -14,7 +15,9 @@ router.get('/', (req, res) => {
     res.set('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     return res.send(toPrometheusText());
   }
-  res.json(getSnapshot());
+  const snapshot = getSnapshot();
+  snapshot.horizon = getHorizonErrorStats();
+  res.json(snapshot);
 });
 
 // DELETE /api/metrics — reset collected metrics

@@ -115,6 +115,20 @@ function addAlert(type, data) {
   if (metrics.alerts.length > 100) metrics.alerts.shift(); // keep last 100
 }
 
+// ── Extra metric providers ───────────────────────────────────────────────────
+// Modules that want to contribute Prometheus metrics without creating circular
+// imports can register a provider function here. Called synchronously inside
+// toPrometheusText().
+const extraProviders = [];
+
+/**
+ * Register a custom metric provider.
+ * @param {(lines: string[], helpers: {counter, gauge, histogram}) => void} fn
+ */
+export function registerMetricProvider(fn) {
+  extraProviders.push(fn);
+}
+
 // ── Prometheus text format ───────────────────────────────────────────────────
 
 export function toPrometheusText() {
@@ -175,6 +189,13 @@ export function toPrometheusText() {
   lines.push('# TYPE http_errors_total counter');
   for (const [route, m] of metrics.requests) {
     lines.push(`http_errors_total{route="${route}"} ${m.errors}`);
+  }
+
+  // Extra metric providers (e.g. horizon stats) registered via registerMetricProvider()
+  for (const provider of extraProviders) {
+    try {
+      provider(lines, { counter, gauge, histogram });
+    } catch (_) { /* non-critical */ }
   }
 
   return lines.join('\n') + '\n';
