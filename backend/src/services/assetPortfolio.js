@@ -1,6 +1,8 @@
 /**
  * Asset Portfolio Management Service
  */
+import logger from '../config/logger.js';
+
 class AssetPortfolioService {
   constructor(assetRegistry, trustlineManager) {
     this.assetRegistry = assetRegistry;
@@ -47,7 +49,7 @@ class AssetPortfolioService {
       this.portfolios.set(publicKey, portfolio);
       return portfolio;
     } catch (error) {
-      console.error('Get portfolio error:', error);
+      logger.error('assetPortfolio.getPortfolio.failed', { publicKey, error: error.message });
       throw error;
     }
   }

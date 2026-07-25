@@ -1,4 +1,5 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
+import logger from '../config/logger.js';
 
 /**
  * Trustline Manager Service
@@ -42,7 +43,7 @@ class TrustlineManagerService {
         limit: limit
       };
     } catch (error) {
-      console.error('Trustline creation error:', error);
+      logger.error('trustlineManager.createTrustline.failed', { assetCode, assetIssuer, error: error.message });
       throw error;
     }
   }
@@ -85,7 +86,7 @@ class TrustlineManagerService {
         asset: { code: assetCode, issuer: assetIssuer }
       };
     } catch (error) {
-      console.error('Trustline removal error:', error);
+      logger.error('trustlineManager.removeTrustline.failed', { assetCode, assetIssuer, error: error.message });
       throw error;
     }
   }
@@ -108,7 +109,7 @@ class TrustlineManagerService {
           sellingLiabilities: balance.selling_liabilities
         }));
     } catch (error) {
-      console.error('Get trustlines error:', error);
+      logger.error('trustlineManager.getTrustlines.failed', { publicKey, error: error.message });
       throw error;
     }
   }
@@ -123,7 +124,7 @@ class TrustlineManagerService {
         tl => tl.assetCode === assetCode && tl.assetIssuer === assetIssuer
       );
     } catch (error) {
-      console.error('Check trustline error:', error);
+      logger.error('trustlineManager.hasTrustline.failed', { publicKey, assetCode, assetIssuer, error: error.message });
       return false;
     }
   }
@@ -139,7 +140,7 @@ class TrustlineManagerService {
       );
       return balance ? balance.balance : null;
     } catch (error) {
-      console.error('Get balance error:', error);
+      logger.error('trustlineManager.getAssetBalance.failed', { publicKey, assetCode, assetIssuer, error: error.message });
       return null;
     }
   }
@@ -177,7 +178,7 @@ class TrustlineManagerService {
         newLimit: newLimit
       };
     } catch (error) {
-      console.error('Update trustline limit error:', error);
+      logger.error('trustlineManager.updateTrustlineLimit.failed', { assetCode, assetIssuer, newLimit, error: error.message });
       throw error;
     }
   }

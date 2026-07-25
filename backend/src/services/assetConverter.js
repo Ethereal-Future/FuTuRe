@@ -1,4 +1,5 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
+import logger from '../config/logger.js';
 
 /**
  * Asset Conversion Utility Service
@@ -10,9 +11,10 @@ class AssetConverterService {
     this._rateCache = new Map();
     this._rateTtl = parseInt(process.env.RATE_CACHE_TTL_SECONDS ?? '30', 10);
     if (this._rateTtl < 5) {
-      console.warn(
-        `[assetConverter] RATE_CACHE_TTL_SECONDS=${this._rateTtl}s is very low — possible misconfiguration`,
-      );
+      logger.warn('assetConverter.config.lowCacheTtl', {
+        rateTtlSeconds: this._rateTtl,
+        message: 'RATE_CACHE_TTL_SECONDS is very low — possible misconfiguration',
+      });
     }
   }
 
@@ -35,7 +37,7 @@ class AssetConverterService {
         })),
       }));
     } catch (error) {
-      console.error('Find conversion path error:', error);
+      logger.error('assetConverter.findConversionPath.failed', { sourceAsset, destAsset, amount, error: error.message });
       throw error;
     }
   }
@@ -79,7 +81,7 @@ class AssetConverterService {
         destAmount: destMin,
       };
     } catch (error) {
-      console.error('Asset conversion error:', error);
+      logger.error('assetConverter.convertAsset.failed', { sourceAsset, destAsset, amount, error: error.message });
       throw error;
     }
   }
@@ -112,7 +114,7 @@ class AssetConverterService {
       this._rateCache.set(cacheKey, rate);
       return rate;
     } catch (error) {
-      console.error('Get conversion rate error:', error);
+      logger.error('assetConverter.getConversionRate.failed', { sourceAsset, destAsset, error: error.message });
       return null;
     }
   }

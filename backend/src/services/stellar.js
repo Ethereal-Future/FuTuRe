@@ -1,4 +1,5 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
+import { randomUUID } from 'crypto';
 import { eventMonitor } from '../eventSourcing/index.js';
 import { getConfig } from '../config/env.js';
 import { getIssuer } from '../config/assets.js';
@@ -283,6 +284,11 @@ export async function sendPayment(
   memoType = 'text',
   correlationId = null,
 ) {
+  // Auto-generate a UUID correlation ID if the caller didn't supply one.
+  // This ID is stamped on every log line for this transaction attempt so
+  // engineers can filter the full lifecycle with a single query.
+  const txCorrelationId = correlationId ?? randomUUID();
+
   const { assetIssuer } = getConfig().stellar;
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
@@ -293,7 +299,7 @@ export async function sendPayment(
     assetCode,
     memo,
     memoType,
-    correlationId,
+    correlationId: txCorrelationId,
   });
 
   // Sequence Numbers
@@ -367,7 +373,7 @@ export async function sendPayment(
         source: sourcePublicKey,
         xlmBalance: xlmAmount,
         threshold: feeBumpThreshold,
-        correlationId,
+        correlationId: txCorrelationId,
       });
       // Track stats for cost monitoring
       await incrementFeeBumpStats(
@@ -387,7 +393,7 @@ export async function sendPayment(
       amount,
       assetCode,
       error: err.message,
-      correlationId,
+      correlationId: txCorrelationId,
     });
     throw err;
   }
@@ -402,7 +408,7 @@ export async function sendPayment(
     feeBump: usedFeeBump,
     memo,
     memoType,
-    correlationId,
+    correlationId: txCorrelationId,
   });
 
   await invalidateBalanceCache(sourcePublicKey);
@@ -416,7 +422,7 @@ export async function sendPayment(
       feeBump: usedFeeBump,
       memo,
       memoType,
-      correlationId,
+      correlationId: txCorrelationId,
     },
     version: 1,
   });
@@ -451,7 +457,7 @@ export async function sendPayment(
       });
     })
     .catch((err) =>
-      logger.warn('db.transaction.save.failed', { error: err.message, correlationId }),
+      logger.warn('db.transaction.save.failed', { error: err.message, correlationId: txCorrelationId }),
     );
 
   return {
@@ -483,7 +489,8 @@ export async function createTrustline(sourceSecret, assetCode) {
 
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
-  logger.info('stellar.createTrustline', { publicKey: sourcePublicKey, assetCode });
+  const correlationId = randomUUID();
+  logger.info('stellar.createTrustline', { publicKey: sourcePublicKey, assetCode, correlationId });
 
   const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
@@ -493,7 +500,7 @@ export async function createTrustline(sourceSecret, assetCode) {
     (b) => b.asset_code === assetCode && b.asset_issuer === issuer,
   );
   if (alreadyTrusted) {
-    logger.info('stellar.createTrustline.exists', { publicKey: sourcePublicKey, assetCode });
+    logger.info('stellar.createTrustline.exists', { publicKey: sourcePublicKey, assetCode, correlationId });
     return { alreadyExists: true, assetCode, issuer };
   }
 
@@ -516,6 +523,7 @@ export async function createTrustline(sourceSecret, assetCode) {
     logger.error('stellar.createTrustline.failed', {
       publicKey: sourcePublicKey,
       assetCode,
+      correlationId,
       error: err.message,
     });
     throw err;
@@ -524,6 +532,7 @@ export async function createTrustline(sourceSecret, assetCode) {
   logger.info('stellar.createTrustline.success', {
     publicKey: sourcePublicKey,
     assetCode,
+    correlationId,
     hash: result.hash,
   });
 
@@ -549,7 +558,8 @@ export async function removeTrustline(sourceSecret, assetCode) {
 
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
-  logger.info('stellar.removeTrustline', { publicKey: sourcePublicKey, assetCode });
+  const correlationId = randomUUID();
+  logger.info('stellar.removeTrustline', { publicKey: sourcePublicKey, assetCode, correlationId });
 
   const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
@@ -586,6 +596,7 @@ export async function removeTrustline(sourceSecret, assetCode) {
     logger.error('stellar.removeTrustline.failed', {
       publicKey: sourcePublicKey,
       assetCode,
+      correlationId,
       error: err.message,
     });
     throw err;
@@ -594,6 +605,7 @@ export async function removeTrustline(sourceSecret, assetCode) {
   logger.info('stellar.removeTrustline.success', {
     publicKey: sourcePublicKey,
     assetCode,
+    correlationId,
     hash: result.hash,
   });
 
@@ -800,7 +812,8 @@ export async function getTrustlines(publicKey) {
 export async function mergeAccount(sourceSecret, destination) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   const sourcePublicKey = sourceKeypair.publicKey();
-  logger.info('stellar.mergeAccount.start', { source: sourcePublicKey, destination });
+  const correlationId = randomUUID();
+  logger.info('stellar.mergeAccount.start', { source: sourcePublicKey, destination, correlationId });
 
   const sourceAccount = await withHorizonRetry(() =>
     getHorizonServer().loadAccount(sourcePublicKey),
@@ -823,6 +836,7 @@ export async function mergeAccount(sourceSecret, destination) {
     logger.error('stellar.mergeAccount.failed', {
       source: sourcePublicKey,
       destination,
+      correlationId,
       error: err.message,
     });
     throw err;
@@ -831,6 +845,7 @@ export async function mergeAccount(sourceSecret, destination) {
   logger.info('stellar.mergeAccount.success', {
     source: sourcePublicKey,
     destination,
+    correlationId,
     hash: result.hash,
     ledger: result.ledger,
   });

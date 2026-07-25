@@ -1,4 +1,5 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
+import logger from '../config/logger.js';
 
 /**
  * Asset Registry Service for managing Stellar assets
@@ -53,7 +54,7 @@ class AssetRegistryService {
 
       return assets.records.length > 0;
     } catch (error) {
-      console.error('Asset validation error:', error);
+      logger.error('assetRegistry.validateAsset.failed', { code, issuer, error: error.message });
       return false;
     }
   }
@@ -84,7 +85,7 @@ class AssetRegistryService {
         flags: record.flags
       }));
     } catch (error) {
-      console.error('Asset discovery error:', error);
+      logger.error('assetRegistry.discoverAssets.failed', { filters, error: error.message });
       throw error;
     }
   }
@@ -181,7 +182,7 @@ class AssetRegistryService {
       this.priceCache.set(key, priceData);
       return avgPrice;
     } catch (error) {
-      console.error('Price tracking error:', error);
+      logger.error('assetRegistry.trackAssetPrice.failed', { code, issuer, baseAsset, error: error.message });
       return null;
     }
   }

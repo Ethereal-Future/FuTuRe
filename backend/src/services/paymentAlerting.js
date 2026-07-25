@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { getConfig } from '../config/env.js';
+import logger from '../config/logger.js';
 
 class PaymentAlertingService {
   constructor() {
@@ -131,16 +132,16 @@ class PaymentAlertingService {
       if (!config.alerts?.email) return;
 
       // Stub implementation — integrate with your email service
-      console.log('[Alert Email]', {
+      logger.info('paymentAlerting.emailAlert.sent', {
         to: config.alerts.email,
         subject: `FuTuRe Alert: ${alert.type}`,
-        body: JSON.stringify(alert, null, 2),
+        body: JSON.stringify(alert),
       });
 
       // Example using axios to send via email service:
       // await axios.post('https://api.mailgun.net/v3/...', {...})
     } catch (error) {
-      console.error('[Alert Email Failed]', error.message);
+      logger.error('paymentAlerting.emailAlert.failed', { error: error.message });
     }
   }
 
@@ -171,7 +172,7 @@ class PaymentAlertingService {
 
       await axios.post(config.alerts.slackWebhookUrl, message, { timeout: 5000 });
     } catch (error) {
-      console.error('[Alert Slack Failed]', error.message);
+      logger.error('paymentAlerting.slackAlert.failed', { error: error.message });
     }
   }
 
