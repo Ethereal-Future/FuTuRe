@@ -2,6 +2,8 @@ import { useState, useCallback } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Spinner } from './Spinner';
+import { SlideOver } from './SlideOver';
+import { TransactionDetailPanel } from './TransactionDetailPanel';
 
 const TYPE_LABELS = { payment: 'Payment', create_account: 'Account Created', unknown: 'Other' };
 const PAGE_SIZE = 10;
@@ -35,37 +37,7 @@ function TxRow({ tx, onClick }) {
   );
 }
 
-function TxModal({ tx, onClose }) {
-  return (
-    <motion.div className="tx-overlay" onClick={onClose} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <motion.div
-        className="tx-modal"
-        onClick={e => e.stopPropagation()}
-        initial={{ scale: 0.9, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.9, opacity: 0 }}
-      >
-        <div className="tx-modal-header">
-          <h3>Transaction Details</h3>
-          <button className="qr-close" onClick={onClose}>✕</button>
-        </div>
-        <dl className="tx-detail-list">
-          <dt>Hash</dt><dd className="tx-hash">{tx.hash}</dd>
-          <dt>Type</dt><dd>{TYPE_LABELS[tx.type] ?? tx.type}</dd>
-          {tx.direction && <><dt>Direction</dt><dd>{tx.direction}</dd></>}
-          {tx.amount && <><dt>Amount</dt><dd>{tx.amount} {tx.asset}</dd></>}
-          {tx.counterparty && <><dt>Counterparty</dt><dd className="tx-hash">{tx.counterparty}</dd></>}
-          <dt>Date</dt><dd>{fmt(tx.date)}</dd>
-          <dt>Fee</dt><dd>{tx.fee} stroops</dd>
-          {tx.memo && <><dt>Memo</dt><dd>{tx.memo}</dd></>}
-          <dt>Status</dt><dd>{tx.successful ? '✓ Success' : '✗ Failed'}</dd>
-        </dl>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-export function TransactionHistory({ publicKey }) {
+export function TransactionHistory({ publicKey, network = 'public' }) {
   const [txs, setTxs] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -152,9 +124,9 @@ export function TransactionHistory({ publicKey }) {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {selected && <TxModal tx={selected} onClose={() => setSelected(null)} />}
-      </AnimatePresence>
+      <SlideOver open={!!selected} onClose={() => setSelected(null)} title="Transaction Details">
+        <TransactionDetailPanel tx={selected} network={network} />
+      </SlideOver>
     </div>
   );
 }

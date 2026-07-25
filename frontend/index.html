@@ -7,6 +7,20 @@
     <meta name="description" content="Send and receive XLM payments on the Stellar network" />
     <link rel="manifest" href="/manifest.json" />
     <title>Stellar Remittance</title>
+    <script>
+      // Apply the stored/OS theme synchronously, before CSS/React load, so
+      // there's no flash of the wrong theme. Mirrors ThemeContext's logic
+      // (frontend/src/contexts/ThemeContext.jsx) — keep both in sync.
+      (function () {
+        try {
+          var stored = localStorage.getItem('theme_preference');
+          var theme = stored === 'dark' || stored === 'light'
+            ? stored
+            : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+          document.documentElement.classList.add('theme-' + theme);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

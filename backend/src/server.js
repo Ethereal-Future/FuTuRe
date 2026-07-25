@@ -1,4 +1,5 @@
 import { createServer } from 'http';
+import dotenv from 'dotenv';
 import express from 'express';
 import cors from 'cors';
 import swaggerUi from 'swagger-ui-express';
@@ -8,6 +9,7 @@ import { requestLogger } from './middleware/requestLogger.js';
 import { connectDB, checkDBHealth } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
 import stellarRoutes from './routes/stellar.js';
+import { startHorizonLatencyMonitor } from './services/stellar.js';
 import multiSigRoutes from './routes/multiSig.js';
 import authRoutes from './routes/auth.js';
 import { initWebSocket } from './services/websocket.js';
@@ -84,6 +86,7 @@ app.get('/health', async (req, res) => {
 
 const httpServer = createServer(app);
 initWebSocket(httpServer);
+startHorizonLatencyMonitor();
 
 httpServer.listen(PORT, () => {
   const { stellar, meta } = getConfig();
