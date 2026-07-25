@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import axios from 'axios';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { isValidStellarAddress } from './utils/validateStellarAddress';
@@ -12,9 +12,17 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
 import { NetworkBadge } from './components/NetworkBadge';
 import { StatusMessage } from './components/StatusMessage';
+import { Skeleton } from './components/Skeleton';
+import { CopyButton } from './components/CopyButton';
+import { EmptyState } from './components/EmptyState';
+import { PendingTimer } from './components/PendingTimer';
 import { logError } from './utils/errorLogger';
 
 const STATUS_COLORS = { connected: '#22c55e', disconnected: '#ef4444', reconnecting: '#f59e0b' };
+
+function truncateKey(key) {
+  return key.length > 12 ? `${key.slice(0, 6)}…${key.slice(-4)}` : key;
+}
 
 function Spinner() {
   return (
@@ -33,8 +41,10 @@ function App() {
   const [amount, setAmount] = useState('');
   const [loading, setLoading] = useState('');
   const [showQR, setShowQR] = useState(false);
+  const [sendStartTime, setSendStartTime] = useState(null);
 
   const msg = useMessages();
+  const recipientInputRef = useRef(null);
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
@@ -87,6 +97,7 @@ function App() {
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     setLoading('send');
+    setSendStartTime(Date.now());
     try {
       const { data } = await axios.post('/api/stellar/payment/send', {
         sourceSecret: account.secretKey,
@@ -99,7 +110,7 @@ function App() {
     } catch (error) {
       logError(error, { context: 'sendPayment' });
       msg.error(getFriendlyError(error), { retry: sendPayment });
-    } finally { setLoading(''); }
+    } finally { setLoading(''); setSendStartTime(null); }
   };
 
   return (
@@ -131,7 +142,11 @@ function App() {
               variants={v.pop}
               initial="hidden" animate="visible" exit="exit"
             >
-              <p><strong>Public Key:</strong> {account.publicKey}</p>
+              <p>
+                <strong>Public Key:</strong>{' '}
+                <span title={account.publicKey}>{truncateKey(account.publicKey)}</span>{' '}
+                <CopyButton value={account.publicKey} label="Copy public key" />
+              </p>
               <p><strong>Secret Key:</strong> {account.secretKey}</p>
               <motion.button className="qr-trigger" onClick={() => setShowQR(true)} {...tap}>
                 🔲 Show QR Code
@@ -150,6 +165,12 @@ function App() {
               <motion.button onClick={checkBalance} {...tap} disabled={loading === 'balance'}>
                 Check Balance {loading === 'balance' && <Spinner />}
               </motion.button>
+              {loading === 'balance' && !balance && (
+                <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <Skeleton width="140px" height="1.2em" />
+                  <Skeleton width="100px" height="1.2em" />
+                </div>
+              )}
               <AnimatePresence>
                 {balance && (
                   <motion.div variants={v.pop} initial="hidden" animate="visible" exit="exit" style={{ marginTop: 10 }}>
@@ -167,6 +188,7 @@ function App() {
               <h3>Send Payment</h3>
               <div className="input-wrap">
                 <input
+                  ref={recipientInputRef}
                   type="text"
                   placeholder="Recipient Public Key"
                   value={recipient}
@@ -202,12 +224,27 @@ function App() {
               <motion.button onClick={sendPayment} {...tap} disabled={!recipientValid || !amountValid || loading === 'send'}>
                 Send {loading === 'send' && <Spinner />}
               </motion.button>
+              {loading === 'send' && sendStartTime && (
+                <p className="field-hint">
+                  <PendingTimer startTime={sendStartTime} />
+                </p>
+              )}
               </ErrorBoundary>
             </motion.div>
 
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Transaction history empty state */}
+      {account && msg.history.length === 0 && (
+        <EmptyState
+          heading="No transactions yet"
+          description="Your transaction history will appear here once you send or receive your first payment."
+          actionLabel="Send payment"
+          onAction={() => recipientInputRef.current?.focus()}
+        />
+      )}
 
       {/* Status Messages */}
       <StatusMessage
