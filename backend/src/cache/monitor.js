@@ -81,7 +81,7 @@ export class CachePerformanceMonitor {
   }
 
   setThreshold(key, value) {
-    if (this.thresholds.hasOwnProperty(key)) {
+    if (Object.prototype.hasOwnProperty.call(this.thresholds, key)) {
       this.thresholds[key] = value;
     }
   }

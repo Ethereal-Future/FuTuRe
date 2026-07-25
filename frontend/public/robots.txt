@@ -1,0 +1,6 @@
+User-agent: *
+Disallow: /
+
+# Disallow all crawling since this is a private financial application.
+# If public marketing pages are added later, update this file accordingly.
+# Reference sitemap: /sitemap.xml

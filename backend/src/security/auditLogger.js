@@ -1,41 +1,38 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const AUDIT_DIR = path.join(__dirname, '../../data/audit');
+import { getClient } from '../db/client.js';
 
 class SecurityAuditLogger {
   async initialize() {
-    await fs.mkdir(AUDIT_DIR, { recursive: true });
   }
 
-  async logEvent(eventType, userId, details, severity = 'INFO') {
-    await this.initialize();
-
-    const auditEntry = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
-      eventType,
-      userId,
-      severity,
-      details,
-      ipAddress: details.ipAddress || 'unknown',
-      userAgent: details.userAgent || 'unknown'
-    };
-
-    const auditFile = path.join(AUDIT_DIR, `audit-${new Date().toISOString().split('T')[0]}.jsonl`);
-    await fs.appendFile(auditFile, JSON.stringify(auditEntry) + '\n');
-
-    return auditEntry;
+  async logEvent(actionType, userId, details, severity = 'INFO', ipAddress = null, userAgent = null) {
+    try {
+      const client = getClient();
+      return await client.auditLog.create({
+        data: {
+          userId: userId || null,
+          actionType,
+          resourceType: details.resourceType || null,
+          resourceId: details.resourceId || null,
+          details: JSON.stringify(details),
+          ipAddress: ipAddress || details.ipAddress || null,
+          userAgent: userAgent || details.userAgent || null,
+          outcome: details.outcome || 'SUCCESS',
+          severity,
+        },
+      });
+    } catch (error) {
+      console.error('[AuditLog] Failed to create audit entry:', error.message);
+    }
   }
 
   async logAuthAttempt(userId, success, ipAddress, userAgent) {
     return this.logEvent(
-      'AUTH_ATTEMPT',
+      success ? 'LOGIN' : 'FAILED_LOGIN',
       userId,
-      { success, ipAddress, userAgent },
-      success ? 'INFO' : 'WARNING'
+      { ipAddress, userAgent },
+      success ? 'INFO' : 'WARNING',
+      ipAddress,
+      userAgent
     );
   }
 
@@ -44,7 +41,8 @@ class SecurityAuditLogger {
       'MFA_EVENT',
       userId,
       { action, ipAddress },
-      'INFO'
+      'INFO',
+      ipAddress
     );
   }
 
@@ -57,48 +55,93 @@ class SecurityAuditLogger {
       'DATA_ACCESS',
       userId,
       { resource, action, ipAddress },
-      'INFO'
+      'INFO',
+      ipAddress
     );
   }
 
-  async getAuditLog(date = null) {
-    await this.initialize();
+  async logPayment(userId, resourceId, ipAddress) {
+    return this.logEvent(
+      'PAYMENT',
+      userId,
+      { resourceType: 'transaction', resourceId, ipAddress },
+      'INFO',
+      ipAddress
+    );
+  }
 
-    const targetDate = date || new Date().toISOString().split('T')[0];
-    const auditFile = path.join(AUDIT_DIR, `audit-${targetDate}.jsonl`);
+  async logKYCSubmission(userId, ipAddress) {
+    return this.logEvent(
+      'KYC_SUBMISSION',
+      userId,
+      { resourceType: 'kyc', resourceId: userId, ipAddress },
+      'INFO',
+      ipAddress
+    );
+  }
 
+  async logPasswordChange(userId, ipAddress) {
+    return this.logEvent(
+      'PASSWORD_CHANGE',
+      userId,
+      { ipAddress },
+      'INFO',
+      ipAddress
+    );
+  }
+
+  async logAccountDeletion(userId, ipAddress) {
+    return this.logEvent(
+      'ACCOUNT_DELETION',
+      userId,
+      { resourceType: 'user', resourceId: userId, ipAddress },
+      'WARNING',
+      ipAddress
+    );
+  }
+
+  async logAdminAction(adminId, action, resourceType, resourceId, ipAddress) {
+    return this.logEvent(
+      `ADMIN_${action}`,
+      adminId,
+      { resourceType, resourceId, ipAddress },
+      'WARNING',
+      ipAddress
+    );
+  }
+
+  async getAuditLog(filters = {}) {
     try {
-      const content = await fs.readFile(auditFile, 'utf-8');
-      return content
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line));
+      const client = getClient();
+      const { userId, actionType, severity, limit = 100, offset = 0 } = filters;
+
+      const where = {};
+      if (userId) where.userId = userId;
+      if (actionType) where.actionType = actionType;
+      if (severity) where.severity = severity;
+
+      return await client.auditLog.findMany({
+        where,
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+        skip: offset,
+      });
     } catch (error) {
-      if (error.code === 'ENOENT') return [];
-      throw error;
+      console.error('[AuditLog] Failed to retrieve audit log:', error.message);
+      return [];
     }
   }
 
-  async getSecurityEvents(severity = 'CRITICAL') {
-    await this.initialize();
-
+  async getSecurityEvents(severity = 'CRITICAL', limit = 100) {
     try {
-      const files = await fs.readdir(AUDIT_DIR);
-      const allEvents = [];
-
-      for (const file of files) {
-        const content = await fs.readFile(path.join(AUDIT_DIR, file), 'utf-8');
-        const events = content
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line))
-          .filter(e => e.severity === severity);
-        allEvents.push(...events);
-      }
-
-      return allEvents.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      const client = getClient();
+      return await client.auditLog.findMany({
+        where: { severity },
+        orderBy: { timestamp: 'desc' },
+        take: limit,
+      });
     } catch (error) {
-      console.error('Failed to get security events:', error);
+      console.error('[AuditLog] Failed to get security events:', error.message);
       return [];
     }
   }

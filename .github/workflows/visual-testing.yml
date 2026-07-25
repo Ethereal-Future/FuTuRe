@@ -1,0 +1,56 @@
+name: Visual Testing
+
+on:
+  push:
+    branches: [main, 'feature/**']
+  pull_request:
+    branches: [main]
+
+jobs:
+  visual-tests:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run visual regression tests
+        run: npx vitest run frontend/tests/visual-testing.test.jsx --reporter=verbose
+        env:
+          NODE_ENV: test
+
+      - name: Upload visual diff artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diffs-${{ github.sha }}
+          path: __visual-diffs__/
+          retention-days: 14
+
+      - name: Upload visual baselines
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-baselines
+          path: __visual-baselines__/
+          retention-days: 30
+
+      - name: Comment PR on visual diff failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Visual regression detected.** Download the `visual-diffs` artifact to review changes. Approve the new baseline if the change is intentional.'
+            })

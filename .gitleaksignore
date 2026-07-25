@@ -1,0 +1,8 @@
+# Suppress false positives from test fixtures that use intentionally fake keys.
+# Stellar testnet test vectors and clearly fake keys used only in unit tests.
+#
+# Format: <commit-hash>:<file-path>:<rule-id>
+# Use `gitleaks detect --verbose` to get the exact fingerprints to add here.
+#
+# Example (replace with real fingerprints after running gitleaks):
+# abc123:backend/tests/fixtures/stellar.js:stellar-secret-key

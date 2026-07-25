@@ -1,0 +1,27 @@
+# docker-compose.override.yml.example
+#
+# Copy to docker-compose.override.yml to apply local customisations without
+# touching the shared docker-compose.yml:
+#
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# docker-compose.override.yml is git-ignored — changes stay local.
+
+services:
+  postgres:
+    # Use a non-default host port to avoid conflicts with a local Postgres instance
+    ports:
+      - "5433:5432"
+
+  backend:
+    environment:
+      LOG_LEVEL: debug
+      # Override with a real Stellar testnet account secret for payment tests
+      # PLATFORM_FEE_ACCOUNT_SECRET: S...
+    # Uncomment to load all env vars from a local file instead of inline values
+    # env_file: ./backend/.env
+
+  frontend:
+    environment:
+      # Point directly at the backend when not using the Vite proxy
+      VITE_API_URL: http://localhost:3001

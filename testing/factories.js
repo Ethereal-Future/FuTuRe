@@ -3,27 +3,27 @@
  * Generate consistent test data for unit and integration tests
  */
 
+import { fakeStellarKeypair, fakeStellarPublicKey } from './privacy.js';
+
 export const stellarAccountFactory = {
-  create: (overrides = {}) => ({
-    publicKey: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H',
-    secretKey: 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH',
-    balance: '1000.0000000',
-    ...overrides,
-  }),
+  create: (overrides = {}) => {
+    const { publicKey, secretKey } = fakeStellarKeypair();
+    return {
+      publicKey,
+      secretKey,
+      balance: '1000.0000000',
+      ...overrides,
+    };
+  },
   createMany: (count, overrides = {}) =>
-    Array.from({ length: count }, (_, i) =>
-      stellarAccountFactory.create({
-        publicKey: `GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP${String(i).padStart(2, '0')}`,
-        ...overrides,
-      })
-    ),
+    Array.from({ length: count }, () => stellarAccountFactory.create(overrides)),
 };
 
 export const transactionFactory = {
   create: (overrides = {}) => ({
     id: 'tx-' + Math.random().toString(36).substr(2, 9),
-    from: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H',
-    to: 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6',
+    from: fakeStellarPublicKey(),
+    to: fakeStellarPublicKey(),
     amount: '100.0000000',
     asset: 'native',
     status: 'success',
