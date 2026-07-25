@@ -1,9 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 const WS_BASE = `ws://${window.location.hostname}:3001`;
-const RECONNECT_DELAY = 3000;
-const MAX_RECONNECT = 5;
-const WS_URL = `ws://${window.location.hostname}:3001`;
 const BACKOFF_BASE_MS = 1000;
 const BACKOFF_MAX_MS = 30000;
 const MAX_RECONNECT = 10;
@@ -32,8 +29,6 @@ export function useWebSocket(publicKey, onMessage) {
       attempts.current = 0;
       setStatus('connected');
       // JWT was validated at handshake; subscribe immediately.
-      if (publicKey) socket.send(JSON.stringify({ type: 'subscribe', publicKey }));
-      socket.send(JSON.stringify({ type: 'subscribe', publicKey: 'rates' }));
       const since = lastEventTime.current;
       if (publicKey) socket.send(JSON.stringify({ type: 'subscribe', publicKey, ...(since ? { since } : {}) }));
       socket.send(JSON.stringify({ type: 'subscribe', publicKey: 'rates', ...(since ? { since } : {}) }));
