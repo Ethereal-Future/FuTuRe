@@ -8,6 +8,9 @@ import { KYCForm } from '../components/KYCForm';
 import { NotificationPreferences } from '../components/NotificationPreferences';
 import { BackupSettings } from '../components/BackupSettings';
 import { AccountSettings } from '../components/AccountSettings';
+import { Breadcrumb } from '../components/Breadcrumb';
+
+const SETTINGS_BREADCRUMB = { label: 'Home', path: '/' };
 
 export function SettingsPage() {
   const { account } = useAppState();
@@ -21,6 +24,7 @@ export function SettingsPage() {
   if (!account) {
     return (
       <motion.section className="section" variants={v.fadeSlide}>
+        <Breadcrumb items={[SETTINGS_BREADCRUMB, { label: 'Settings', path: null }]} />
         <p>No account loaded. Create or import an account to access settings.</p>
       </motion.section>
     );
@@ -34,9 +38,17 @@ export function SettingsPage() {
     { id: 'account', label: '⚙️ Account', action: () => setShowAccountSettings(true) },
   ];
 
+  const activeSectionLabel = sections.find((s) => s.id === activeSection)?.label;
+  const breadcrumbTrail = [
+    SETTINGS_BREADCRUMB,
+    { label: 'Settings', path: activeSectionLabel ? '/settings' : null },
+    ...(activeSectionLabel ? [{ label: activeSectionLabel, path: null }] : []),
+  ];
+
   return (
     <motion.section className="section" variants={v.fadeSlide}>
       <h2>Settings</h2>
+      <Breadcrumb items={breadcrumbTrail} />
 
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16 }}>
         {sections.map((section) => (

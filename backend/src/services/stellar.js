@@ -683,13 +683,17 @@ export async function getTransactions(
 
 /**
  * Retrieve current network fee statistics from Horizon with an XLM/USD conversion via the SDEX.
- * @returns {Promise<{feeStroops: number, feeXLM: string, feeUsd: string|null, xlmUsd: string|null, traditionalFeeUsd: number}>}
+ * @returns {Promise<{feeStroops: number, feeXLM: string, feeUsd: string|null, xlmUsd: string|null,
+ *   traditionalFeeUsd: number, baseFeeStroops: number, baseFeeXLM: string, surgeMultiplier: string}>}
  * @throws {Error} If the Horizon feeStats call fails
  */
 export async function getFeeStats() {
   const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
-  const feeStroops = parseInt(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
+  const baseFeeStroops = parseInt(stats.last_ledger_base_fee ?? StellarSDK.BASE_FEE);
+  const feeStroops = parseInt(stats.fee_charged?.mode ?? stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
   const feeXLM = feeStroops / 1e7;
+  const baseFeeXLM = baseFeeStroops / 1e7;
+  const surgeMultiplier = baseFeeStroops > 0 ? feeStroops / baseFeeStroops : 1;
 
   // Fetch XLM/USD price via Stellar SDEX (XLM/USDC order book)
   let xlmUsd = null;
@@ -713,6 +717,9 @@ export async function getFeeStats() {
     xlmUsd: xlmUsd ? xlmUsd.toFixed(4) : null,
     // Traditional wire transfer benchmark for comparison
     traditionalFeeUsd: 25,
+    baseFeeStroops,
+    baseFeeXLM: baseFeeXLM.toFixed(7),
+    surgeMultiplier: surgeMultiplier.toFixed(2),
   };
 }
 

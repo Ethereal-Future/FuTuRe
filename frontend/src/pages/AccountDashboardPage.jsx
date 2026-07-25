@@ -7,10 +7,16 @@ import { useAppState, useAppDispatch, A } from '../store/index.js';
 import { useMessages } from '../hooks/useMessages';
 import { makeVariants } from '../utils/animations';
 import { useReducedMotion } from 'framer-motion';
+import { useCountUp } from '../hooks/useCountUp';
 import { CopyButton } from '../components/CopyButton';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { FeeDisplay } from '../components/FeeDisplay';
 import { logError } from '../utils/errorLogger';
+
+function AnimatedBalance({ balance, asset }) {
+  const animated = useCountUp(balance);
+  return <span>{formatBalanceWithAsset(animated, asset)}</span>;
+}
 
 export function AccountDashboardPage() {
   const { account, balance, loading, accountLabel } = useAppState();
@@ -159,7 +165,7 @@ export function AccountDashboardPage() {
               <div key={i} style={{ padding: '8px 0', borderBottom: i < balance.balances.length - 1 ? '1px solid #e5e7eb' : 'none' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ fontWeight: 500 }}>{b.asset}</span>
-                  <span>{formatBalanceWithAsset(b.balance, b.asset)}</span>
+                  <AnimatedBalance balance={b.balance} asset={b.asset} />
                 </div>
               </div>
             ))}
