@@ -12,23 +12,20 @@ const THEMES = {
   dark: 'dark',
 };
 
+function getInitialTheme() {
+  const systemDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
+  const systemDefault = systemDark ? THEMES.dark : THEMES.light;
+  try {
+    const saved = window.localStorage.getItem(THEME_KEY);
+    if (saved === THEMES.dark || saved === THEMES.light) return saved;
+  } catch {
+    // ignore localStorage failures in private mode
+  }
+  return systemDefault;
+}
+
 export function ThemeProvider({ children }) {
-  const [theme, setTheme] = useState(THEMES.light);
-
-  useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(THEME_KEY);
-      if (saved === THEMES.dark || saved === THEMES.light) {
-        setTheme(saved);
-        return;
-      }
-
-      const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches;
-      setTheme(prefersDark ? THEMES.dark : THEMES.light);
-    } catch {
-      setTheme(THEMES.light);
-    }
-  }, []);
+  const [theme, setTheme] = useState(getInitialTheme);
 
   useEffect(() => {
     document.documentElement.classList.toggle('theme-dark', theme === THEMES.dark);

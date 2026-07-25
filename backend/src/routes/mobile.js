@@ -7,6 +7,12 @@ import {
   mobileSecurity,
   mobileAnalytics,
 } from '../mobile/index.js';
+import {
+  generateRegistrationOptions,
+  verifyAndStoreRegistration,
+  generateAuthenticationOptions,
+  verifyAuthentication,
+} from '../mobile/webAuthn.js';
 import * as StellarService from '../services/stellar.js';
 
 const router = express.Router();
@@ -73,6 +79,56 @@ router.post('/auth/biometric/verify', (req, res) => {
   try {
     const { challengeId, signature } = req.body;
     res.json(mobileAuth.verifyBiometric(challengeId, signature));
+  } catch (e) {
+    res.status(401).json({ error: e.message });
+  }
+});
+
+// ─── WebAuthn ─────────────────────────────────────────────────────────────────
+
+/**
+ * POST /api/mobile/auth/webauthn/register
+ * Phase 1 (no credential in body): returns registration options.
+ * Phase 2 (credential in body):    verifies and persists credential in DB.
+ */
+router.post('/auth/webauthn/register', (req, res) => {
+  try {
+    const { userId, username, challengeId, credential, deviceName } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    if (!challengeId) {
+      // Phase 1 — return options for navigator.credentials.create()
+      return res.json(generateRegistrationOptions(userId, username));
+    }
+
+    // Phase 2 — store the credential
+    verifyAndStoreRegistration(challengeId, credential, deviceName)
+      .then((result) => res.status(201).json(result))
+      .catch((e) => res.status(400).json({ error: e.message }));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+/**
+ * POST /api/mobile/auth/webauthn/authenticate
+ * Phase 1 (no assertion in body): returns authentication options.
+ * Phase 2 (assertion in body):    verifies assertion and returns JWT.
+ */
+router.post('/auth/webauthn/authenticate', async (req, res) => {
+  try {
+    const { userId, challengeId, assertion } = req.body;
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+
+    if (!challengeId) {
+      // Phase 1 — return options for navigator.credentials.get()
+      const options = await generateAuthenticationOptions(userId);
+      return res.json(options);
+    }
+
+    // Phase 2 — verify assertion and issue JWT
+    const result = await verifyAuthentication(challengeId, assertion);
+    res.json(result);
   } catch (e) {
     res.status(401).json({ error: e.message });
   }
@@ -218,8 +274,8 @@ router.get('/account/:publicKey/balance', requireMobileAuth, async (req, res) =>
 router.get('/account/:publicKey/transactions', requireMobileAuth, async (req, res) => {
   try {
     const { limit = 10, cursor } = req.query;
-    const txns = await StellarService.getTransactionHistory(req.params.publicKey, { limit: Number(limit), cursor });
-    res.json(txns);
+    const result = await StellarService.getTransactions(req.params.publicKey, { limit: Number(limit), cursor });
+    res.json({ publicKey: req.params.publicKey, transactions: result.records, nextCursor: result.nextCursor, hasMore: result.hasMore });
   } catch (e) {
     res.status(404).json({ error: e.message });
   }

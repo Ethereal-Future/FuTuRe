@@ -5,6 +5,7 @@
 
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
+import { redactSensitiveData } from './privacy.js';
 
 const SNAPSHOTS_DIR = './__snapshots__';
 
@@ -22,10 +23,11 @@ export class VisualRegressionTester {
   }
 
   captureSnapshot(data) {
+    const sanitized = redactSensitiveData(data);
     return {
       timestamp: new Date().toISOString(),
-      hash: this.hashData(data),
-      data,
+      hash: this.hashData(sanitized),
+      data: sanitized,
     };
   }
 

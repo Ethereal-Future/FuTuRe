@@ -17,6 +17,7 @@ export function cacheMiddleware(ttlSeconds, keyFn = (req) => req.originalUrl) {
 
     if (cached !== null) {
       res.setHeader('X-Cache', 'HIT');
+      res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}`);
       return res.json(cached);
     }
 
@@ -26,6 +27,7 @@ export function cacheMiddleware(ttlSeconds, keyFn = (req) => req.originalUrl) {
     const originalJson = res.json.bind(res);
     res.json = (body) => {
       if (res.statusCode < 400) {
+        res.setHeader('Cache-Control', `public, max-age=${ttlSeconds}`);
         cacheSet(key, body, ttlSeconds).catch(() => {});
       }
       return originalJson(body);

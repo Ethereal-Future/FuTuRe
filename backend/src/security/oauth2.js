@@ -90,6 +90,59 @@ class OAuth2Provider {
       throw new Error('Invalid token');
     }
   }
+
+  /**
+   * Generate OAuth2 authorization URL for Google
+   */
+  getGoogleAuthURL(clientId, redirectUri, state) {
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'openid profile email',
+      state
+    });
+    return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  /**
+   * Exchange Google authorization code for tokens
+   */
+  async exchangeGoogleCode(code, clientId, clientSecret, redirectUri) {
+    const params = new URLSearchParams({
+      code,
+      client_id: clientId,
+      client_secret: clientSecret,
+      redirect_uri: redirectUri,
+      grant_type: 'authorization_code'
+    });
+
+    const response = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      body: params
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to exchange Google code');
+    }
+
+    return response.json();
+  }
+
+  /**
+   * Get Google user info from access token
+   */
+  async getGoogleUserInfo(accessToken) {
+    const response = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to get Google user info');
+    }
+
+    return response.json();
+  }
 }
 
 export default new OAuth2Provider();

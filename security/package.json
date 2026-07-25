@@ -1,0 +1,18 @@
+{
+  "name": "security-tests",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:zap": "node zap-scanner.js",
+    "test:dependencies": "npm audit --json > reports/dependency-audit.json",
+    "test:secrets": "node secrets-scanner.js",
+    "test:all": "npm run test && npm run test:zap && npm run test:dependencies && npm run test:secrets",
+    "test:compliance": "vitest run tests/compliance.test.js"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0",
+    "axios": "^1.6.0",
+    "OWASP-ZAP": "^2.14.0"
+  }
+}

@@ -1,20 +1,29 @@
-// In-memory user store (replace with DB in production)
-const users = new Map();
+import prisma from '../db/client.js';
 
-export function createUser(username, passwordHash) {
-  if (users.has(username)) throw new Error('User already exists');
-  const user = { id: crypto.randomUUID(), username, passwordHash, createdAt: Date.now() };
-  users.set(username, user);
+export async function createUser(username, passwordHash) {
+  const existing = await prisma.user.findUnique({ where: { username } });
+  if (existing) throw new Error('User already exists');
+  
+  const user = await prisma.user.create({
+    data: { username, passwordHash, publicKey: `temp-${Date.now()}` },
+  });
+  
   return { id: user.id, username: user.username };
 }
 
-export function findUser(username) {
-  return users.get(username) ?? null;
+export async function findUser(username) {
+  return await prisma.user.findUnique({ where: { username } });
 }
 
-export function getUserById(id) {
-  for (const user of users.values()) {
-    if (user.id === id) return user;
+export async function getUserById(id) {
+  return await prisma.user.findUnique({ where: { id } });
+}
+
+export async function updateUserPassword(id, passwordHash) {
+  try {
+    await prisma.user.update({ where: { id }, data: { passwordHash } });
+    return true;
+  } catch {
+    return false;
   }
-  return null;
 }

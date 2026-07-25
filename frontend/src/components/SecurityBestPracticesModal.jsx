@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 
 /**
  * SecurityBestPracticesModal — comprehensive security guide modal.
@@ -7,6 +8,16 @@ import { motion, AnimatePresence } from 'framer-motion';
  */
 export function SecurityBestPracticesModal({ isOpen, onClose }) {
   const [currentTab, setCurrentTab] = useState('overview');
+  const modalRef = useRef(null);
+
+  useFocusTrap(modalRef, isOpen);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
   const tabs = {
     overview: {
@@ -39,7 +50,7 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
                   borderRadius: 6,
                   border: '1px solid #e5e7eb'
                 }}>
-                  <div style={{ fontSize: 18, marginBottom: 4 }}>{item.icon}</div>
+                  <div style={{ fontSize: 18, marginBottom: 4 }} aria-hidden="true">{item.icon}</div>
                   <div style={{ fontWeight: 600, fontSize: 12 }}>{item.title}</div>
                   <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>{item.desc}</div>
                 </div>
@@ -68,23 +79,23 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#7f1d1d' }}>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✗</span>
+                <span aria-hidden="true">✗</span>
                 <span>Share your secret key via email, chat, or messaging apps</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✗</span>
+                <span aria-hidden="true">✗</span>
                 <span>Paste your key into unknown websites or applications</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✗</span>
+                <span aria-hidden="true">✗</span>
                 <span>Store keys in plain text files on your computer</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✗</span>
+                <span aria-hidden="true">✗</span>
                 <span>Take screenshots of your key and share them</span>
               </li>
               <li style={{ display: 'flex', gap: 8 }}>
-                <span>✗</span>
+                <span aria-hidden="true">✗</span>
                 <span>Ever give your key to anyone, even support staff</span>
               </li>
             </ul>
@@ -106,23 +117,23 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#166534' }}>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <span>Store your key in a password manager (1Password, Bitwarden, etc.)</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <span>Use hardware wallets for significant amounts (Ledger, Trezor)</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <span>Create an encrypted backup on secure cloud storage (iCloud/Google Drive)</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <span>Keep backups on external drives in a safe location</span>
               </li>
               <li style={{ display: 'flex', gap: 8 }}>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <span>Consider a multi-sig setup for large accounts</span>
               </li>
             </ul>
@@ -148,23 +159,23 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
 
           <div style={{ padding: 12, background: '#fef3c7', borderRadius: 6, borderLeft: '4px solid #f59e0b' }}>
             <div style={{ fontWeight: 600, marginBottom: 6, display: 'flex', gap: 6, alignItems: 'center', color: '#92400e' }}>
-              ⚡ <span>Large Transaction Checklist</span>
+              <span aria-hidden="true">⚡</span> <span>Large Transaction Checklist</span>
             </div>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#92400e' }}>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} />
+                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} aria-label="Contact recipient to confirm they're expecting the transfer" />
                 <span>Contact recipient to confirm they're expecting the transfer</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} />
+                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} aria-label="Use a test transaction with a smaller amount first" />
                 <span>Use a test transaction with a smaller amount first</span>
               </li>
               <li style={{ marginBottom: 6, display: 'flex', gap: 8 }}>
-                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} />
+                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} aria-label="Compare recipient address character by character" />
                 <span>Compare recipient address character by character</span>
               </li>
               <li style={{ display: 'flex', gap: 8 }}>
-                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} />
+                <input type="checkbox" disabled style={{ accentColor: '#f59e0b' }} aria-label="Send from a secure device if possible" />
                 <span>Send from a secure device if possible</span>
               </li>
             </ul>
@@ -180,19 +191,19 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
             <h4 style={{ margin: '0 0 8px 0', fontSize: 13, fontWeight: 600, color: '#0c4a6e' }}>Testnet</h4>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#0c4a6e' }}>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>🧪</span>
+                <span aria-hidden="true">🧪</span>
                 <span><strong>For testing and development only</strong></span>
               </li>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>💰</span>
+                <span aria-hidden="true">💰</span>
                 <span>Funds have <strong>no real value</strong></span>
               </li>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>🔄</span>
+                <span aria-hidden="true">🔄</span>
                 <span>Testnet can be reset without notice</span>
               </li>
               <li style={{ display: 'flex', gap: 6 }}>
-                <span>🆓</span>
+                <span aria-hidden="true">🆓</span>
                 <span>Get free test funds from the friendbot</span>
               </li>
             </ul>
@@ -202,19 +213,19 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
             <h4 style={{ margin: '0 0 8px 0', fontSize: 13, fontWeight: 600, color: '#991b1b' }}>Mainnet</h4>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 13, color: '#991b1b' }}>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>💎</span>
+                <span aria-hidden="true">💎</span>
                 <span><strong>Real money and real value</strong></span>
               </li>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>⚠️</span>
+                <span aria-hidden="true">⚠️</span>
                 <span>Transactions are permanent and irrevocable</span>
               </li>
               <li style={{ marginBottom: 4, display: 'flex', gap: 6 }}>
-                <span>🚫</span>
+                <span aria-hidden="true">🚫</span>
                 <span>No undo button — exercise extreme caution</span>
               </li>
               <li style={{ display: 'flex', gap: 6 }}>
-                <span>🎯</span>
+                <span aria-hidden="true">🎯</span>
                 <span>Always verify network before sending real funds</span>
               </li>
             </ul>
@@ -286,11 +297,15 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
       }}
     >
       <motion.div
+        ref={modalRef}
         className="security-modal"
         initial={{ scale: 0.95, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         exit={{ scale: 0.95, opacity: 0 }}
         onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="security-modal-title"
         style={{
           background: 'white',
           borderRadius: 12,
@@ -310,11 +325,12 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <h2 style={{ margin: 0, fontSize: 18, display: 'flex', gap: 8, alignItems: 'center' }}>
-            🛡️ Security Best Practices
+          <h2 id="security-modal-title" style={{ margin: 0, fontSize: 18, display: 'flex', gap: 8, alignItems: 'center' }}>
+            <span aria-hidden="true">🛡️</span> Security Best Practices
           </h2>
           <button
             onClick={onClose}
+            aria-label="Close security best practices dialog"
             style={{
               background: 'none',
               border: 'none',
@@ -334,16 +350,24 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
         </div>
 
         {/* Tabs */}
-        <div style={{
-          display: 'flex',
-          gap: 0,
-          borderBottom: '1px solid #e5e7eb',
-          background: '#f9fafb',
-          overflowX: 'auto',
-        }}>
+        <div
+          role="tablist"
+          aria-label="Security topics"
+          style={{
+            display: 'flex',
+            gap: 0,
+            borderBottom: '1px solid #e5e7eb',
+            background: '#f9fafb',
+            overflowX: 'auto',
+          }}
+        >
           {Object.entries(tabs).map(([key, tab]) => (
             <button
               key={key}
+              role="tab"
+              id={`security-tab-${key}`}
+              aria-selected={currentTab === key}
+              aria-controls={`security-panel-${key}`}
               onClick={() => setCurrentTab(key)}
               style={{
                 flex: 1,
@@ -365,11 +389,16 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
         </div>
 
         {/* Content */}
-        <div style={{
-          flex: 1,
-          overflow: 'auto',
-          padding: 16,
-        }}>
+        <div
+          role="tabpanel"
+          id={`security-panel-${currentTab}`}
+          aria-labelledby={`security-tab-${currentTab}`}
+          style={{
+            flex: 1,
+            overflow: 'auto',
+            padding: 16,
+          }}
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={currentTab}
@@ -395,6 +424,7 @@ export function SecurityBestPracticesModal({ isOpen, onClose }) {
             onClick={onClose}
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
+            aria-label="I understand — close security best practices dialog"
             style={{
               flex: 1,
               padding: '10px 16px',

@@ -1,0 +1,17 @@
+{
+  "name": "performance",
+  "version": "1.0.0",
+  "description": "Performance / load tests",
+  "vars": {
+    "NODE_ENV": "test",
+    "STELLAR_NETWORK": "testnet",
+    "HORIZON_URL": "https://horizon-testnet.stellar.org",
+    "PORT": "3103",
+    "LOG_LEVEL": "error",
+    "JWT_SECRET": "test-secret-perf",
+    "DATABASE_URL": "postgresql://future_admin:test_password@localhost:5433/future_test",
+    "RATE_LIMIT_MAX": "10000"
+  },
+  "isolation": "process",
+  "cleanup": ["env"]
+}

@@ -26,5 +26,4 @@
     "@wdio/mocha-framework": "^8.32.0",
     "@wdio/spec-reporter": "^8.32.0"
   }
-}</content>
-<parameter name="filePath">/workspaces/FuTuRe/mobile-tests/package.json
+}

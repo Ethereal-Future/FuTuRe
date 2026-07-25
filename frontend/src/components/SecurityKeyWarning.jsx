@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { makeVariants, tapScale } from '../utils/animations';
 
 /**
  * SecurityKeyWarning — displays when secret key is shown.
@@ -7,92 +8,50 @@ import { motion, AnimatePresence } from 'framer-motion';
  * Props: onAcknowledge
  */
 export function SecurityKeyWarning({ onAcknowledge }) {
-  const [copied, setCopied] = useState(null);
-
-  const handleCopy = (text, label) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(label);
-      setTimeout(() => setCopied(null), 2000);
-    });
-  };
-
+  const prefersReduced = useReducedMotion();
+  const v = makeVariants(prefersReduced);
+  const tap = tapScale(prefersReduced);
   return (
     <motion.div
       className="security-warning"
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      exit={{ opacity: 0, scale: 0.95 }}
-      style={{
-        background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-        border: '2px solid #ef4444',
-        borderRadius: 8,
-        padding: 16,
-        marginBottom: 16,
-      }}
+      variants={v.pop} initial="hidden" animate="visible" exit="exit"
     >
-      {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'start', gap: 12, marginBottom: 12 }}>
-        <span style={{ fontSize: 24 }}>🔐</span>
+      <div className="security-warning__header">
+        <span className="security-warning__icon">🔐</span>
         <div>
-          <h3 style={{ margin: '0 0 4px 0', color: '#991b1b', fontSize: 16 }}>
-            Secret Key Security Alert
-          </h3>
-          <p style={{ margin: 0, fontSize: 12, color: '#7f1d1d' }}>
-            Your secret key is displayed. Keep it secure and private.
-          </p>
+          <h3 className="security-warning__title">Secret Key Security Alert</h3>
+          <p className="security-warning__subtitle">Your secret key is displayed. Keep it secure and private.</p>
         </div>
       </div>
 
-      {/* Warning list */}
-      <div style={{ background: 'white', borderRadius: 6, padding: 12, marginBottom: 12 }}>
-        <ul style={{
-          listStyle: 'none',
-          padding: 0,
-          margin: 0,
-          fontSize: 13,
-          color: '#7f1d1d',
-        }}>
-          <li style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <span>⚠️</span>
-            <span><strong>Never share</strong> your secret key with anyone, including support staff</span>
-          </li>
-          <li style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <span>⚠️</span>
-            <span><strong>Never paste</strong> your secret key into websites or applications you don't trust</span>
-          </li>
-          <li style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <span>⚠️</span>
-            <span><strong>Store offline</strong> in a secure location (hardware wallet, encrypted file, etc.)</span>
-          </li>
-          <li style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <span>⚠️</span>
-            <span><strong>Screenshot carefully</strong> and store in encrypted cloud storage only</span>
-          </li>
-          <li style={{ display: 'flex', gap: 8 }}>
-            <span>⚠️</span>
-            <span><strong>Anyone with this key</strong> can access and transfer all your funds</span>
-          </li>
-        </ul>
-      </div>
+      <ul className="security-warning__list">
+        <li className="security-warning__list-item">
+          <span className="security-warning__list-icon">⚠️</span>
+          <span><strong>Never share</strong> your secret key with anyone, including support staff</span>
+        </li>
+        <li className="security-warning__list-item">
+          <span className="security-warning__list-icon">⚠️</span>
+          <span><strong>Never paste</strong> your secret key into websites or applications you don't trust</span>
+        </li>
+        <li className="security-warning__list-item">
+          <span className="security-warning__list-icon">⚠️</span>
+          <span><strong>Store offline</strong> in a secure location (hardware wallet, encrypted file, etc.)</span>
+        </li>
+        <li className="security-warning__list-item">
+          <span className="security-warning__list-icon">⚠️</span>
+          <span><strong>Screenshot carefully</strong> and store in encrypted cloud storage only</span>
+        </li>
+        <li className="security-warning__list-item">
+          <span className="security-warning__list-icon">⚠️</span>
+          <span><strong>Anyone with this key</strong> can access and transfer all your funds</span>
+        </li>
+      </ul>
 
-      {/* Action buttons */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="security-warning__actions">
         <motion.button
           onClick={() => onAcknowledge?.()}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          style={{
-            background: '#ef4444',
-            color: 'white',
-            border: 'none',
-            borderRadius: 4,
-            padding: '8px 12px',
-            fontSize: 13,
-            fontWeight: 600,
-            cursor: 'pointer',
-            flex: 1,
-            minWidth: 120,
-          }}
+          {...tap}
+          className="security-warning__button"
         >
           I Understand the Risks
         </motion.button>
@@ -109,6 +68,9 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
   const [revealed, setRevealed] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [copied, setCopied] = useState(null);
+  const prefersReduced = useReducedMotion();
+  const v = makeVariants(prefersReduced);
+  const tap = tapScale(prefersReduced);
 
   const handleCopy = (text, label) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -121,9 +83,8 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
 
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      style={{ marginTop: 16 }}
+      className="secret-key-display"
+      variants={v.fadeSlide} initial="hidden" animate="visible"
     >
       {!acknowledged && (
         <SecurityKeyWarning onAcknowledge={() => setAcknowledged(true)} />
@@ -132,124 +93,41 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
       <AnimatePresence>
         {acknowledged && (
           <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
+            variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit"
             style={{ marginBottom: 16 }}
           >
-            <div style={{ marginBottom: 12 }}>
-              <label style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                marginBottom: 6,
-                color: '#555',
-              }}>
-                Public Key (safe to share)
-              </label>
-              <div style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                background: '#f0f9ff',
-                border: '1px solid #bfdbfe',
-                borderRadius: 4,
-                padding: 10,
-              }}>
-                <code style={{
-                  flex: 1,
-                  fontSize: 12,
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  wordBreak: 'break-all',
-                }}>
-                  {publicKey}
-                </code>
+            <div className="secret-key-display__field">
+              <label className="secret-key-display__label">Public Key (safe to share)</label>
+              <div className="secret-key-display__input-group secret-key-display__input-group--public">
+                <code className="secret-key-display__code">{publicKey}</code>
                 <motion.button
                   onClick={() => handleCopy(publicKey, 'public')}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  style={{
-                    background: 'white',
-                    border: '1px solid #bfdbfe',
-                    borderRadius: 4,
-                    padding: '4px 8px',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    width: 'auto',
-                    minHeight: 'unset',
-                  }}
+                  {...tap}
+                  className="secret-key-display__button"
                 >
                   {copied === 'public' ? '✓ Copied' : 'Copy'}
                 </motion.button>
               </div>
             </div>
 
-            <div>
-              <label style={{
-                display: 'block',
-                fontSize: 12,
-                fontWeight: 600,
-                marginBottom: 6,
-                color: '#555',
-              }}>
-                Secret Key (Keep Private & Secure)
-              </label>
-              <div style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'center',
-                background: '#fef2f2',
-                border: '2px solid #ef4444',
-                borderRadius: 4,
-                padding: 10,
-              }}>
-                <code style={{
-                  flex: 1,
-                  fontSize: 12,
-                  overflow: 'auto',
-                  fontFamily: 'monospace',
-                  wordBreak: 'break-all',
-                  color: revealed ? '#991b1b' : '#999',
-                }}>
+            <div className="secret-key-display__field">
+              <label className="secret-key-display__label">Secret Key (Keep Private & Secure)</label>
+              <div className="secret-key-display__input-group secret-key-display__input-group--secret">
+                <code className={`secret-key-display__code ${revealed ? 'secret-key-display__code--secret' : 'secret-key-display__code--masked'}`}>
                   {revealed ? secretKey : masked}
                 </code>
                 <motion.button
                   onClick={() => setRevealed(!revealed)}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  style={{
-                    background: revealed ? '#fecaca' : 'white',
-                    color: revealed ? '#991b1b' : '#666',
-                    border: '1px solid #ef4444',
-                    borderRadius: 4,
-                    padding: '4px 8px',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    width: 'auto',
-                    minHeight: 'unset',
-                    fontWeight: 600,
-                  }}
+                  {...tap}
+                  className="secret-key-display__button secret-key-display__button--reveal"
                 >
                   {revealed ? '👁 Hide' : '👁 Show'}
                 </motion.button>
                 <motion.button
                   onClick={() => handleCopy(secretKey, 'secret')}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  {...tap}
                   disabled={!revealed}
-                  style={{
-                    background: revealed ? '#ef4444' : '#e5e7eb',
-                    color: revealed ? 'white' : '#999',
-                    border: 'none',
-                    borderRadius: 4,
-                    padding: '4px 8px',
-                    fontSize: 12,
-                    cursor: revealed ? 'pointer' : 'not-allowed',
-                    width: 'auto',
-                    minHeight: 'unset',
-                    fontWeight: 600,
-                  }}
+                  className="secret-key-display__button secret-key-display__button--copy"
                 >
                   {copied === 'secret' ? '✓ Copied' : 'Copy'}
                 </motion.button>
@@ -257,18 +135,8 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
             </div>
 
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.3 }}
-              style={{
-                background: '#fef3c7',
-                border: '1px solid #fbbf24',
-                borderRadius: 4,
-                padding: 10,
-                marginTop: 10,
-                fontSize: 12,
-                color: '#78350f',
-              }}
+              className="secret-key-display__tip"
+              variants={v.fadeSlide} initial="hidden" animate="visible"
             >
               💡 <strong>Tip:</strong> Save both keys somewhere secure before leaving this page.
               They will not be displayed again.

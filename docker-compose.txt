@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL 16 — persistent local database
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: future_remittance
+      POSTGRES_USER: future_admin
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - '5432:5432'
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U future_admin -d future_remittance']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------------------------------------------------------------------------
+  # Backend — Node.js + Express with hot-reload (node --watch)
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '3001:3001'
+    volumes:
+      # Mount source for hot-reload; exclude node_modules from the bind mount
+      - ./backend/src:/app/src
+      - ./backend/prisma:/app/prisma
+    environment:
+      APP_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://future_admin:dev_password@db:5432/future_remittance
+      STELLAR_NETWORK: testnet
+      HORIZON_URL: https://horizon-testnet.stellar.org
+      ALLOWED_ORIGINS: http://localhost:3000
+      # Change these before committing any real data
+      JWT_SECRET: dev-jwt-secret-change-me
+      STREAM_SECRET_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      FEE_BUMP_THRESHOLD_XLM: "2"
+      LOG_LEVEL: info
+      CACHE_TTL_BALANCE_S: "30"
+      RATE_CACHE_TTL_S: "60"
+      CACHE_TTL_FEE_S: "120"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX: "100"
+      DB_POOL_MAX: "10"
+      DB_SHARD_COUNT: "1"
+      BACKUP_DIR: ./backups
+      BACKUP_RETENTION_DAYS: "7"
+      BACKUP_INTERVAL_HOURS: "24"
+      CDN_ENABLED: "false"
+    command: sh -c "npx prisma migrate deploy && node --watch src/server.js"
+
+  # ---------------------------------------------------------------------------
+  # Frontend — Vite dev server with HMR
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - '3000:3000'
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
+    environment:
+      # Proxy /api -> backend is configured in vite.config.js
+      VITE_API_URL: http://localhost:3001
+
+volumes:
+  db_data:

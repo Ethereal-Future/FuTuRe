@@ -5,6 +5,7 @@
 
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
+import { redactSensitiveData } from './privacy.js';
 
 const REPORTS_DIR = './test-reports';
 
@@ -53,7 +54,7 @@ export class TestReporter {
   }
 
   saveReport(format = 'json') {
-    const report = this.generateReport();
+    const report = redactSensitiveData(this.generateReport());
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const filename = `report-${timestamp}.${format}`;
     const filepath = join(REPORTS_DIR, filename);

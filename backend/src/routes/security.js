@@ -75,10 +75,37 @@ router.post('/mfa/verify', (req, res) => {
 });
 
 // Audit log endpoints
+router.get('/audit-log', async (req, res) => {
+  try {
+    // Restrict to authenticated users (admin role check can be added)
+    if (!req.user) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    const { userId, actionType, severity, limit, offset } = req.query;
+    const logs = await auditLogger.getAuditLog({
+      userId,
+      actionType,
+      severity,
+      limit: parseInt(limit) || 100,
+      offset: parseInt(offset) || 0,
+    });
+    res.json({ logs });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get('/audit/logs', async (req, res) => {
   try {
-    const date = req.query.date;
-    const logs = await auditLogger.getAuditLog(date);
+    const filters = {
+      userId: req.query.userId,
+      actionType: req.query.actionType,
+      severity: req.query.severity,
+      limit: parseInt(req.query.limit) || 100,
+      offset: parseInt(req.query.offset) || 0,
+    };
+    const logs = await auditLogger.getAuditLog(filters);
     res.json({ logs });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -88,7 +115,8 @@ router.get('/audit/logs', async (req, res) => {
 router.get('/audit/security-events', async (req, res) => {
   try {
     const severity = req.query.severity || 'CRITICAL';
-    const events = await auditLogger.getSecurityEvents(severity);
+    const limit = parseInt(req.query.limit) || 100;
+    const events = await auditLogger.getSecurityEvents(severity, limit);
     res.json({ events });
   } catch (error) {
     res.status(500).json({ error: error.message });

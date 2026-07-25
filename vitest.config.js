@@ -6,17 +6,17 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
-    setupFiles: ['./frontend/src/setupTests.js'],
+    setupFiles: ['./testing/vitest.privacy.setup.js', './frontend/src/setupTests.js'],
     include: ['**/*.{test,spec}.{js,jsx}'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
       reportsDirectory: './coverage',
       thresholds: {
-        lines: 70,
-        functions: 70,
-        branches: 60,
-        statements: 70,
+        lines: 80,
+        functions: 80,
+        branches: 75,
+        statements: 80,
       },
       exclude: [
         'node_modules/**',

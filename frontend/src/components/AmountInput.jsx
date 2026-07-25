@@ -19,8 +19,10 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
     if (availableBalance != null) onChange?.(String(availableBalance));
   };
 
+  // Always use '.' as decimal separator in the input display so the raw value
+  // fed into blockchain APIs is never locale-ambiguous.
   const formatted = !focused && value
-    ? Number(value).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 7 })
+    ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 7, useGrouping: false }).format(Number(value))
     : value;
 
   return (
@@ -43,6 +45,7 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
             onClick={setMax}
             style={maxBtnStyle}
             title={`Max: ${availableBalance}`}
+            aria-label={`Send maximum available amount: ${availableBalance}`}
           >
             MAX
           </button>

@@ -1,0 +1,2 @@
+node scripts/pii-scan.mjs
+npx lint-staged

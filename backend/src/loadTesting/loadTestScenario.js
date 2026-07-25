@@ -15,8 +15,8 @@ class LoadTestScenario {
     this.concurrency = 10;
   }
 
-  addRequest(method, path, body = null, weight = 1) {
-    this.requests.push({ method, path, body, weight });
+  addRequest(method, routePath, body = null, weight = 1) {
+    this.requests.push({ method, path: routePath, body, weight });
     return this;
   }
 

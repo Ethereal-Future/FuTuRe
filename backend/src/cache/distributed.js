@@ -57,14 +57,14 @@ export class DistributedCache {
     this.analytics.reads += 1;
 
     if (this.cluster.length > 0) {
-      const value = this._clusterGet(key);
+      const clusterValue = this._clusterGet(key);
       this._recordLatency(started);
-      if (value == null) {
+      if (clusterValue == null) {
         this.analytics.misses += 1;
         return null;
       }
       this.analytics.hits += 1;
-      return this._decodeValue(value);
+      return this._decodeValue(clusterValue);
     }
 
     if (!this.backend) return null;

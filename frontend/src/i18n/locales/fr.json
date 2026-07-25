@@ -1,0 +1,121 @@
+{
+  "app": {
+    "title": "Plateforme de Transfert Stellar",
+    "loading": "Chargement…",
+    "description": "Envoyez et recevez des paiements XLM en toute sécurité sur le réseau Stellar"
+  },
+  "page": {
+    "dashboard": "Tableau de bord | Stellar",
+    "settings": "Paramètres du compte | Stellar",
+    "txLookup": "Recherche de transaction | Stellar",
+    "compliance": "Conformité | Stellar"
+  },
+  "nav": {
+    "switchToLight": "Passer en mode clair",
+    "switchToDark": "Passer en mode sombre",
+    "light": "☀️ Clair",
+    "dark": "🌙 Sombre",
+    "install": "⬇ Installer",
+    "shortcuts": "Raccourcis clavier (?)"
+  },
+  "account": {
+    "create": "Créer un compte",
+    "creating": "Création du compte...",
+    "import": "Importer un compte",
+    "cancelImport": "Annuler l'importation",
+    "publicKey": "Clé publique :",
+    "secretKey": "Clé secrète :",
+    "copyPublicKey": "Copier la clé publique",
+    "copySecretKey": "Copier la clé secrète",
+    "showQR": "🔲 Afficher le QR Code",
+    "created": "Compte créé ! Sauvegardez votre clé secrète en lieu sûr.",
+    "imported": "Compte importé avec succès !"
+  },
+  "balance": {
+    "check": "Vérifier le solde",
+    "checking": "Vérification du solde..."
+  },
+  "payment": {
+    "title": "Envoyer un paiement",
+    "recipientPlaceholder": "Clé publique du destinataire",
+    "recipientLabel": "Clé publique du destinataire",
+    "amountPlaceholder": "Montant (XLM)",
+    "amountLabel": "Montant du paiement en XLM",
+    "send": "Envoyer",
+    "sending": "Envoi du paiement...",
+    "clear": "Effacer",
+    "clearConfirm": "Effacer le formulaire de paiement ?",
+    "sent": "Paiement envoyé ! Hash : {{hash}}",
+    "queued": "Vous êtes hors ligne. Paiement mis en file d'attente.",
+    "largeWarning": "⚠️ Veuillez examiner et confirmer l'avertissement de grande transaction ci-dessous."
+  },
+  "validation": {
+    "invalidAddress": "Format d'adresse Stellar invalide (doit commencer par G et comporter 56 caractères)"
+  },
+  "pwa": {
+    "updateAvailable": "Une nouvelle version est disponible.",
+    "updateNow": "Mettre à jour",
+    "queued_one": "{{count}} paiement en attente — sera synchronisé en ligne.",
+    "queued_other": "{{count}} paiements en attente — seront synchronisés en ligne."
+  },
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "close": "Fermer",
+    "createAccount": "Créer un nouveau compte",
+    "copyKey": "Copier la clé",
+    "escape": "Fermer les modales",
+    "help": "Afficher/masquer cette aide",
+    "tab": "Naviguer entre les champs",
+    "enter": "Soumettre le formulaire"
+  },
+  "network": {
+    "connected": "connecté",
+    "disconnected": "déconnecté",
+    "reconnecting": "reconnexion"
+  },
+  "errors": {
+    "timeout": "La requête a expiré. Veuillez réessayer."
+  },
+  "stellarErrors": {
+    "tx_success": "Transaction effectuée avec succès.",
+    "tx_failed": "La transaction a échoué.",
+    "tx_too_early": "L'horodatage de la transaction est trop tôt.",
+    "tx_too_late": "L'horodatage de la transaction est trop tardif.",
+    "tx_missing_operation": "La transaction ne contient aucune opération.",
+    "tx_bad_seq": "Erreur de séquence. Veuillez actualiser et réessayer.",
+    "tx_bad_auth": "Échec de l'authentification de la transaction.",
+    "tx_insufficient_balance": "Solde insuffisant pour cette transaction.",
+    "tx_no_source_account": "Le compte source n'existe pas.",
+    "tx_insufficient_fee": "Les frais de transaction sont trop bas.",
+    "tx_fee_bump_inner_failed": "La transaction interne du fee bump a échoué.",
+    "tx_bad_auth_extra": "Des signataires supplémentaires ont été fournis mais ne sont pas requis.",
+    "tx_internal_error": "Erreur interne du réseau Stellar.",
+    "tx_not_supported": "Ce type de transaction n'est pas pris en charge.",
+    "tx_bad_sponsorship": "La configuration du parrainage est invalide.",
+    "tx_bad_min_seq_age": "L'exigence d'âge de séquence minimum n'est pas respectée.",
+    "tx_malformed": "La transaction est malformée.",
+    "op_success": "Opération effectuée avec succès.",
+    "op_inner": "Opération échouée avec une erreur interne.",
+    "op_bad_auth": "Échec de l'authentification de l'opération.",
+    "op_no_destination": "Le compte de destination n'existe pas.",
+    "op_no_trust": "Le destinataire n'a pas de ligne de confiance pour cet actif.",
+    "op_not_authorized": "Opération non autorisée.",
+    "op_underfunded": "Fonds insuffisants — veuillez recharger votre compte.",
+    "op_line_full": "La ligne de confiance du destinataire est pleine.",
+    "op_self_not_allowed": "Impossible d'envoyer à votre propre compte.",
+    "op_not_supported": "Ce type d'opération n'est pas pris en charge.",
+    "op_too_many_subentries": "Le compte a trop de sous-entrées.",
+    "op_exceed_work_limit": "L'opération a dépassé la limite de travail du réseau.",
+    "op_too_many_sponsoring": "Trop d'entrées sponsorisées."
+  },
+  "language": {
+    "select": "Langue",
+    "en": "English",
+    "ar": "العربية",
+    "he": "עברית",
+    "fr": "Français",
+    "es": "Español",
+    "zh": "中文",
+    "pt": "Português"
+  }
+}

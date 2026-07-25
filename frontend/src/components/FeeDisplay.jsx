@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import axios from 'axios';
+import apiClient from '../api/client.js';
 
 const TOOLTIP = `Stellar charges a small network fee per transaction (base fee × operations). `
   + `The fee is burned and not collected by any party. `
@@ -13,7 +13,7 @@ export function FeeDisplay({ amount, visible }) {
   useEffect(() => {
     if (!visible) return;
     if (cache.current) { setFee(cache.current); return; }
-    axios.get('/api/stellar/fee-stats')
+    apiClient.get('/api/stellar/fee-stats')
       .then(({ data }) => { cache.current = data; setFee(data); })
       .catch(() => {});
   }, [visible]);
@@ -23,6 +23,8 @@ export function FeeDisplay({ amount, visible }) {
   const amtNum = parseFloat(amount) || 0;
   const feeXLM = parseFloat(fee.feeXLM);
   const total = (amtNum + feeXLM).toFixed(7).replace(/\.?0+$/, '');
+  const xlmUsd = fee.xlmUsd ? parseFloat(fee.xlmUsd) : null;
+  const totalUsd = xlmUsd ? ((amtNum + feeXLM) * xlmUsd).toFixed(2) : null;
   const savingsUsd = fee.feeUsd
     ? (fee.traditionalFeeUsd - parseFloat(fee.feeUsd)).toFixed(2)
     : null;
@@ -52,7 +54,10 @@ export function FeeDisplay({ amount, visible }) {
       {amtNum > 0 && (
         <div className="fee-row fee-total">
           <span className="fee-label">Total (amount + fee)</span>
-          <span className="fee-val">{total} XLM</span>
+          <span className="fee-val">
+            {total} XLM
+            {totalUsd && <span className="fee-usd"> ≈ ${totalUsd}</span>}
+          </span>
         </div>
       )}
 

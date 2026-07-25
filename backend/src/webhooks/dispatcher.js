@@ -1,4 +1,5 @@
 import { getWebhooksForAccount, signPayload } from './store.js';
+import logger from '../config/logger.js';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // ms
@@ -11,7 +12,7 @@ async function deliverOnce(webhook, event) {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Webhook-Signature': `sha256=${signature}`,
+      'X-FuTuRe-Signature': `sha256=${signature}`,
       'X-Webhook-Id': webhook.id,
     },
     body: JSON.stringify(payload),
@@ -28,7 +29,7 @@ async function deliverWithRetry(webhook, event, attempt = 0) {
     if (attempt < MAX_RETRIES - 1) {
       setTimeout(() => deliverWithRetry(webhook, event, attempt + 1), RETRY_DELAYS[attempt]);
     } else {
-      console.error(`Webhook ${webhook.id} failed after ${MAX_RETRIES} attempts: ${err.message}`);
+      logger.error({ webhookId: webhook.id, error: err.message }, `Webhook delivery failed after ${MAX_RETRIES} attempts`);
     }
   }
 }

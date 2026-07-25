@@ -1,5 +1,6 @@
 import { body, param, validationResult } from 'express-validator';
-import { SUPPORTED_ASSETS } from '../config/assets.js';
+import { SUPPORTED_ASSETS, getSupportedAssets } from '../config/assets.js';
+import { sanitizeText, MAX_LENGTHS, MEMO_TYPES } from '../utils/sanitize.js';
 
 // Stellar public key: starts with G, 56 chars, base32
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
@@ -12,12 +13,42 @@ const ASSET_CODE = /^[A-Z0-9]{1,12}$/;
 export function validate(req, res, next) {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(422).json({ errors: errors.array().map(e => ({ field: e.path, message: e.msg })) });
+    return res
+      .status(422)
+      .json({ errors: errors.array().map((e) => ({ field: e.path, message: e.msg })) });
   }
   next();
 }
 
 export const rules = {
+  // Reusable sanitized free-text field rule
+  textField: (field, maxLength = MAX_LENGTHS.text) =>
+    body(field)
+      .optional()
+      .trim()
+      .isLength({ max: maxLength })
+      .withMessage(`${field} exceeds max length of ${maxLength}`)
+      .customSanitizer((v) => sanitizeText(v, maxLength)),
+
+  memoField: () =>
+    body('memo')
+      .optional()
+      .trim()
+      .isLength({ max: MAX_LENGTHS.memo })
+      .withMessage(`Memo exceeds ${MAX_LENGTHS.memo} characters`)
+      .customSanitizer((v) => sanitizeText(v, MAX_LENGTHS.memo)),
+
+  publicKeyBody: body('publicKey')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid Stellar public key'),
+  memoTypeField: () =>
+    body('memoType')
+      .optional()
+      .trim()
+      .isIn(MEMO_TYPES)
+      .withMessage(`memoType must be one of: ${MEMO_TYPES.join(', ')}`),
+
   publicKeyParam: param('publicKey')
     .trim()
     .matches(STELLAR_PUBLIC_KEY)
@@ -28,36 +59,82 @@ export const rules = {
     .matches(STELLAR_PUBLIC_KEY)
     .withMessage('Invalid Stellar account ID'),
 
+  addressParam: param('address')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid Stellar address'),
+
   importAccount: [
-    body('secretKey')
-      .trim()
-      .matches(STELLAR_SECRET_KEY)
-      .withMessage('Invalid Stellar secret key'),
+    body('secretKey').trim().matches(STELLAR_SECRET_KEY).withMessage('Invalid Stellar secret key'),
   ],
 
-  sendPayment: [
-    body('sourceSecret')
-      .trim()
-      .matches(STELLAR_SECRET_KEY)
-      .withMessage('Invalid Stellar secret key'),
-    body('destination')
-      .trim()
-      .matches(STELLAR_PUBLIC_KEY)
-      .withMessage('Invalid destination public key'),
-    body('amount')
-      .trim()
-      .isFloat({ gt: 0 })
-      .withMessage('Amount must be a positive number')
-      .isLength({ max: 20 })
-      .withMessage('Amount too long'),
-    body('assetCode')
-      .optional()
-      .trim()
-      .matches(ASSET_CODE)
-      .withMessage('Invalid asset code')
-      .isIn(SUPPORTED_ASSETS)
-      .withMessage(`Unsupported asset. Supported: ${SUPPORTED_ASSETS.join(', ')}`),
-  ],
+  get sendPayment() {
+    return [
+      body('sourceSecret')
+        .trim()
+        .matches(STELLAR_SECRET_KEY)
+        .withMessage('Invalid Stellar secret key'),
+      body('destination')
+        .trim()
+        .matches(STELLAR_PUBLIC_KEY)
+        .withMessage('Invalid destination public key'),
+      body('amount')
+        .trim()
+        .isFloat({ gt: 0 })
+        .withMessage('Amount must be a positive number')
+        .isLength({ max: 20 })
+        .withMessage('Amount too long')
+        .custom((amount) => {
+          const parsed = parseFloat(amount);
+          if (isNaN(parsed)) throw new Error('Amount must be a valid number');
+          const decimalPlaces = parsed.toFixed(7).split('.')[1].replace(/0+$/, '').length;
+          if (decimalPlaces > 7) throw new Error('Amount cannot have more than 7 decimal places');
+          return true;
+        })
+        .customSanitizer((amount) => parseFloat(amount).toFixed(7)),
+      body('assetCode')
+        .optional()
+        .trim()
+        .matches(ASSET_CODE)
+        .withMessage('Invalid asset code')
+        .isIn(getSupportedAssets())
+        .withMessage(`Unsupported asset. Supported: ${getSupportedAssets().join(', ')}`),
+      this.memoField(),
+      this.memoTypeField(),
+      // Cross-field validation for memo types
+      body('memo').custom((memo, { req }) => {
+        const memoType = req.body.memoType || 'text';
+
+        if (!memo && memoType !== 'none') return true; // Optional memo
+
+        switch (memoType) {
+          case 'id':
+            if (!memo) throw new Error('Memo is required when memoType is "id"');
+            if (!/^\d{1,20}$/.test(memo))
+              throw new Error('Memo must be a numeric ID when memoType is "id"');
+            if (BigInt(memo) > 18446744073709551615n)
+              throw new Error('Memo ID exceeds maximum uint64 value');
+            break;
+          case 'hash':
+          case 'return':
+            if (!memo) throw new Error(`Memo is required when memoType is "${memoType}"`);
+            // Must be 32-byte hex string (64 hex chars)
+            if (!/^[0-9a-fA-F]{64}$/.test(memo)) {
+              throw new Error(
+                `Memo must be a 64-character hex string (32 bytes) when memoType is "${memoType}"`,
+              );
+            }
+            break;
+          case 'text':
+          case 'none':
+          default:
+            // Text memos already validated by memoField()
+            break;
+        }
+        return true;
+      }),
+    ];
+  },
 
   createTrustline: [
     body('sourceSecret')
@@ -68,10 +145,29 @@ export const rules = {
       .trim()
       .matches(ASSET_CODE)
       .withMessage('Invalid asset code')
-      .custom(v => v !== 'XLM')
+      .custom((v) => v !== 'XLM')
       .withMessage('Cannot create trustline for native XLM asset')
-      .isIn(SUPPORTED_ASSETS.filter(a => a !== 'XLM'))
-      .withMessage(`Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter(a => a !== 'XLM').join(', ')}`),
+      .isIn(SUPPORTED_ASSETS.filter((a) => a !== 'XLM'))
+      .withMessage(
+        `Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter((a) => a !== 'XLM').join(', ')}`,
+      ),
+  ],
+
+  removeTrustline: [
+    body('sourceSecret')
+      .trim()
+      .matches(STELLAR_SECRET_KEY)
+      .withMessage('Invalid Stellar secret key'),
+    body('assetCode')
+      .trim()
+      .matches(ASSET_CODE)
+      .withMessage('Invalid asset code')
+      .custom((v) => v !== 'XLM')
+      .withMessage('Cannot remove trustline for native XLM asset')
+      .isIn(SUPPORTED_ASSETS.filter((a) => a !== 'XLM'))
+      .withMessage(
+        `Unsupported asset. Supported non-native assets: ${SUPPORTED_ASSETS.filter((a) => a !== 'XLM').join(', ')}`,
+      ),
   ],
 
   assetCodeParams: [
@@ -84,20 +180,21 @@ export const rules = {
       .trim()
       .matches(STELLAR_SECRET_KEY)
       .withMessage('Invalid Stellar secret key'),
-    body('signers')
-      .isArray({ min: 1 })
-      .withMessage('signers must be a non-empty array'),
+    body('signers').isArray({ min: 1 }).withMessage('signers must be a non-empty array'),
     body('signers.*.publicKey')
       .trim()
       .matches(STELLAR_PUBLIC_KEY)
       .withMessage('Invalid signer public key'),
-    body('signers.*.weight')
-      .isInt({ min: 0, max: 255 })
-      .withMessage('Signer weight must be 0-255'),
+    body('signers.*.weight').isInt({ min: 0, max: 255 }).withMessage('Signer weight must be 0-255'),
     body('thresholds.low').isInt({ min: 0, max: 255 }).withMessage('Low threshold must be 0-255'),
-    body('thresholds.medium').isInt({ min: 0, max: 255 }).withMessage('Medium threshold must be 0-255'),
+    body('thresholds.medium')
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Medium threshold must be 0-255'),
     body('thresholds.high').isInt({ min: 0, max: 255 }).withMessage('High threshold must be 0-255'),
-    body('masterWeight').optional().isInt({ min: 0, max: 255 }).withMessage('Master weight must be 0-255'),
+    body('masterWeight')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Master weight must be 0-255'),
   ],
 
   updateMultiSig: [
@@ -105,15 +202,38 @@ export const rules = {
       .trim()
       .matches(STELLAR_SECRET_KEY)
       .withMessage('Invalid Stellar secret key'),
-    body('masterWeight').optional().isInt({ min: 0, max: 255 }).withMessage('Master weight must be 0-255'),
-    body('thresholds.low').optional().isInt({ min: 0, max: 255 }).withMessage('Low threshold must be 0-255'),
-    body('thresholds.medium').optional().isInt({ min: 0, max: 255 }).withMessage('Medium threshold must be 0-255'),
-    body('thresholds.high').optional().isInt({ min: 0, max: 255 }).withMessage('High threshold must be 0-255'),
+    body('masterWeight')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Master weight must be 0-255'),
+    body('thresholds.low')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Low threshold must be 0-255'),
+    body('thresholds.medium')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Medium threshold must be 0-255'),
+    body('thresholds.high')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('High threshold must be 0-255'),
     body('addSigners').optional().isArray().withMessage('addSigners must be an array'),
-    body('addSigners.*.publicKey').optional().trim().matches(STELLAR_PUBLIC_KEY).withMessage('Invalid signer public key'),
-    body('addSigners.*.weight').optional().isInt({ min: 0, max: 255 }).withMessage('Signer weight must be 0-255'),
+    body('addSigners.*.publicKey')
+      .optional()
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid signer public key'),
+    body('addSigners.*.weight')
+      .optional()
+      .isInt({ min: 0, max: 255 })
+      .withMessage('Signer weight must be 0-255'),
     body('removeSigners').optional().isArray().withMessage('removeSigners must be an array'),
-    body('removeSigners.*').optional().trim().matches(STELLAR_PUBLIC_KEY).withMessage('Invalid signer public key to remove'),
+    body('removeSigners.*')
+      .optional()
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid signer public key to remove'),
   ],
 
   buildMultiSigTx: [
@@ -130,12 +250,25 @@ export const rules = {
       .isFloat({ gt: 0 })
       .withMessage('Amount must be a positive number')
       .isLength({ max: 20 })
-      .withMessage('Amount too long'),
-    body('assetCode')
-      .optional()
-      .trim()
-      .matches(ASSET_CODE)
-      .withMessage('Invalid asset code'),
+      .withMessage('Amount too long')
+      .custom((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        const parsed = parseFloat(amount);
+        if (isNaN(parsed)) throw new Error('Amount must be a valid number');
+
+        const normalized = parsed.toFixed(7);
+        const decimalPlaces = normalized.split('.')[1].replace(/0+$/, '').length;
+
+        if (decimalPlaces > 7) {
+          throw new Error('Amount cannot have more than 7 decimal places');
+        }
+        return true;
+      })
+      .customSanitizer((amount) => {
+        // Normalize to fixed-decimal string with max 7 decimal places
+        return parseFloat(amount).toFixed(7);
+      }),
+    body('assetCode').optional().trim().matches(ASSET_CODE).withMessage('Invalid asset code'),
   ],
 
   signMultiSigTx: [
@@ -146,9 +279,7 @@ export const rules = {
       .withMessage('Invalid signer secret key'),
   ],
 
-  submitMultiSigTx: [
-    body('txId').trim().notEmpty().withMessage('txId is required'),
-  ],
+  submitMultiSigTx: [body('txId').trim().notEmpty().withMessage('txId is required')],
 
   verifyMultiSigTx: [
     body('txXdr').trim().notEmpty().withMessage('txXdr is required'),
@@ -159,5 +290,16 @@ export const rules = {
       .trim()
       .matches(STELLAR_PUBLIC_KEY)
       .withMessage('Invalid expected signer public key'),
+  ],
+
+  mergeAccount: [
+    body('sourceSecret')
+      .trim()
+      .matches(STELLAR_SECRET_KEY)
+      .withMessage('Invalid Stellar secret key'),
+    body('destination')
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid destination public key'),
   ],
 };

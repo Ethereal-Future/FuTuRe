@@ -14,11 +14,14 @@ import {
   mockNetworkStatus,
 } from './helpers/testUtils';
 
-// ── Mock axios ────────────────────────────────────────────────────────────────
-vi.mock('axios', () => ({
+// ── Mock API client ─────────────────────────────────────────────────────────
+vi.mock('../src/api/client.js', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn(),
+    put: vi.fn(),
+    patch: vi.fn(),
+    delete: vi.fn(),
   },
 }));
 
@@ -36,7 +39,7 @@ vi.mock('qrcode', () => ({
   default: { toCanvas: vi.fn(() => Promise.resolve()) },
 }));
 
-import axios from 'axios';
+import apiClient from '../src/api/client.js';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -69,16 +72,16 @@ describe('App — initial render', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('App — account creation', () => {
   it('calls POST /api/stellar/account/create on button click', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
 
-    await waitFor(() => expect(axios.post).toHaveBeenCalledWith('/api/stellar/account/create'));
+    await waitFor(() => expect(apiClient.post).toHaveBeenCalledWith('/api/stellar/account/create'));
   });
 
   it('displays public and secret key after successful creation', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
@@ -90,7 +93,7 @@ describe('App — account creation', () => {
   });
 
   it('shows success status message after account creation', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
@@ -101,7 +104,7 @@ describe('App — account creation', () => {
   });
 
   it('reveals Check Balance and Send Payment sections after creation', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
@@ -113,7 +116,7 @@ describe('App — account creation', () => {
   });
 
   it('shows error message when account creation fails', async () => {
-    axios.post.mockRejectedValueOnce(new Error('Network error'));
+    apiClient.post.mockRejectedValueOnce(new Error('Network error'));
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
@@ -125,7 +128,7 @@ describe('App — account creation', () => {
 
   it('disables Create Account button while loading', async () => {
     // Never resolves — keeps loading state active
-    axios.post.mockReturnValueOnce(new Promise(() => {}));
+    apiClient.post.mockReturnValueOnce(new Promise(() => {}));
 
     render(<App />);
     const btn = screen.getByRole('button', { name: /Create Account/i });
@@ -138,7 +141,7 @@ describe('App — account creation', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('App — balance retrieval', () => {
   async function renderWithAccount() {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
     await waitFor(() => screen.getByRole('button', { name: /Check Balance/i }));
@@ -146,18 +149,18 @@ describe('App — balance retrieval', () => {
 
   it('calls GET /api/stellar/account/:publicKey on Check Balance click', async () => {
     await renderWithAccount();
-    axios.get.mockResolvedValueOnce({ data: mockBalance });
+    apiClient.get.mockResolvedValueOnce({ data: mockBalance });
 
     fireEvent.click(screen.getByRole('button', { name: /Check Balance/i }));
 
     await waitFor(() =>
-      expect(axios.get).toHaveBeenCalledWith(`/api/stellar/account/${mockAccount.publicKey}`)
+      expect(apiClient.get).toHaveBeenCalledWith(`/api/stellar/account/${mockAccount.publicKey}`)
     );
   });
 
   it('displays XLM balance after successful fetch', async () => {
     await renderWithAccount();
-    axios.get.mockResolvedValueOnce({ data: mockBalance });
+    apiClient.get.mockResolvedValueOnce({ data: mockBalance });
 
     fireEvent.click(screen.getByRole('button', { name: /Check Balance/i }));
 
@@ -168,7 +171,7 @@ describe('App — balance retrieval', () => {
 
   it('shows error alert when balance fetch fails', async () => {
     await renderWithAccount();
-    axios.get.mockRejectedValueOnce({ message: 'Network error' });
+    apiClient.get.mockRejectedValueOnce({ message: 'Network error' });
 
     fireEvent.click(screen.getByRole('button', { name: /Check Balance/i }));
 
@@ -181,8 +184,8 @@ describe('App — balance retrieval', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('App — send payment form interactions', () => {
   async function renderWithAccountAndBalance() {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
-    axios.get.mockResolvedValue({ data: mockBalance });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.get.mockResolvedValue({ data: mockBalance });
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
     await waitFor(() => screen.getByPlaceholderText(/Recipient Public Key/i));
@@ -262,7 +265,7 @@ describe('App — send payment form interactions', () => {
 
   it('calls POST /api/stellar/payment/send with correct payload', async () => {
     await renderWithAccountAndBalance();
-    axios.post.mockResolvedValueOnce({ data: mockPaymentResult });
+    apiClient.post.mockResolvedValueOnce({ data: mockPaymentResult });
 
     fireEvent.change(screen.getByPlaceholderText(/Recipient Public Key/i), {
       target: { value: mockRecipient },
@@ -278,7 +281,7 @@ describe('App — send payment form interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: /^Send/i }));
 
     await waitFor(() =>
-      expect(axios.post).toHaveBeenCalledWith('/api/stellar/payment/send', {
+      expect(apiClient.post).toHaveBeenCalledWith('/api/stellar/payment/send', {
         sourceSecret: mockAccount.secretKey,
         destination: mockRecipient,
         amount: '10',
@@ -289,7 +292,7 @@ describe('App — send payment form interactions', () => {
 
   it('shows success message with tx hash after payment', async () => {
     await renderWithAccountAndBalance();
-    axios.post.mockResolvedValueOnce({ data: mockPaymentResult });
+    apiClient.post.mockResolvedValueOnce({ data: mockPaymentResult });
 
     fireEvent.change(screen.getByPlaceholderText(/Recipient Public Key/i), {
       target: { value: mockRecipient },
@@ -310,7 +313,7 @@ describe('App — send payment form interactions', () => {
 
   it('shows error alert when payment fails', async () => {
     await renderWithAccountAndBalance();
-    axios.post.mockRejectedValueOnce({ message: 'insufficient balance' });
+    apiClient.post.mockRejectedValueOnce({ message: 'insufficient balance' });
 
     fireEvent.change(screen.getByPlaceholderText(/Recipient Public Key/i), {
       target: { value: mockRecipient },
@@ -333,7 +336,7 @@ describe('App — send payment form interactions', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 describe('App — QR code modal', () => {
   it('opens QR modal when Show QR Code is clicked', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));
@@ -347,7 +350,7 @@ describe('App — QR code modal', () => {
   });
 
   it('closes QR modal when close button is clicked', async () => {
-    axios.post.mockResolvedValueOnce({ data: mockAccount });
+    apiClient.post.mockResolvedValueOnce({ data: mockAccount });
 
     render(<App />);
     fireEvent.click(screen.getByRole('button', { name: /Create Account/i }));

@@ -263,6 +263,14 @@ export function optimizeAMMPerformance() {
   };
 }
 
+export function getAllPools() {
+  return Array.from(pools.values()).map(pool => ({
+    ...pool,
+    midPrice: pool.reserveB / pool.reserveA,
+    liquidity: Math.sqrt(pool.reserveA * pool.reserveB),
+  }));
+}
+
 export function resetAMMState() {
   pools.clear();
   positions.clear();

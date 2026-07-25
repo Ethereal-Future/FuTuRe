@@ -1,0 +1,16 @@
+{
+  "name": "e2e",
+  "version": "1.0.0",
+  "description": "End-to-end tests — full stack with Docker Compose",
+  "vars": {
+    "NODE_ENV": "test",
+    "STELLAR_NETWORK": "testnet",
+    "HORIZON_URL": "https://horizon-testnet.stellar.org",
+    "PORT": "3102",
+    "LOG_LEVEL": "info",
+    "JWT_SECRET": "test-secret-e2e",
+    "DATABASE_URL": "postgresql://future_admin:test_password@localhost:5433/future_test"
+  },
+  "isolation": "docker",
+  "cleanup": ["env", "db", "docker"]
+}

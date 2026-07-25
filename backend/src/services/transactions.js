@@ -6,7 +6,7 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { MultiLevelCache } from '../cache/multi-level.js';
 import { eventMonitor } from '../eventSourcing/index.js';
-import logger from '../config/logger.js';
+import logger, { withContext } from '../config/logger.js';
 import { getConfig } from '../config/env.js';
 
 const TRANSACTION_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
@@ -30,7 +30,19 @@ class TransactionService {
   }
 
   /**
-   * Fetch transactions for an account with pagination and filtering
+   * Fetch transactions for an account with pagination and filtering.
+   * Results are cached for {@link TRANSACTION_CACHE_TTL} ms.
+   * @param {string} accountId - Stellar public key of the account
+   * @param {object} [options={}]
+   * @param {number} [options.limit=20] - Max records to return (up to {@link MAX_TRANSACTIONS_PER_PAGE})
+   * @param {string} [options.cursor] - Paging token for cursor-based pagination
+   * @param {'asc'|'desc'} [options.order='desc'] - Sort order
+   * @param {boolean} [options.includeFailed=false] - Whether to include failed transactions
+   * @param {{code: string, issuer: string}} [options.asset] - Filter to transactions involving this asset
+   * @param {string} [options.startTime] - ISO date string lower bound
+   * @param {string} [options.endTime] - ISO date string upper bound
+   * @returns {Promise<object[]>} Array of enriched transaction records
+   * @throws {Error} If the Horizon API call fails
    */
   async getTransactions(accountId, options = {}) {
     const {
@@ -48,7 +60,7 @@ class TransactionService {
     // Check cache first
     let transactions = await this.cache.get(cacheKey);
     if (transactions) {
-      logger.debug('Transaction cache hit', { accountId, count: transactions.length });
+      withContext(logger, { action: 'getTransactions', accountId }).debug('Transaction cache hit', { count: transactions.length });
       return transactions;
     }
 
@@ -91,22 +103,26 @@ class TransactionService {
       // Store in event store for persistence
       await this.storeTransactions(accountId, enrichedTransactions);
 
-      logger.info('Fetched transactions from Horizon', {
-        accountId,
+      withContext(logger, { action: 'getTransactions', accountId }).info('Fetched transactions from Horizon', {
         count: enrichedTransactions.length,
         cursor,
-        limit
+        limit,
       });
 
       return enrichedTransactions;
     } catch (error) {
-      logger.error('Failed to fetch transactions', { accountId, error: error.message });
+      withContext(logger, { action: 'getTransactions', accountId }).error('Failed to fetch transactions', { error: error.message });
       throw error;
     }
   }
 
   /**
-   * Search transactions by various criteria
+   * Search transactions by hash, source account, memo, or asset details.
+   * Fetches up to 1000 records and filters in-memory.
+   * @param {string} accountId - Stellar public key of the account
+   * @param {string} searchTerm - Case-insensitive substring to match against transaction fields
+   * @param {object} [options={}] - Additional options passed to {@link getTransactions}
+   * @returns {Promise<object[]>} Matching enriched transaction records
    */
   async searchTransactions(accountId, searchTerm, options = {}) {
     const transactions = await this.getTransactions(accountId, {
@@ -131,7 +147,10 @@ class TransactionService {
   }
 
   /**
-   * Get transaction analytics
+   * Calculate transaction analytics for an account over a given timeframe.
+   * @param {string} accountId - Stellar public key of the account
+   * @param {'24h'|'7d'|'30d'|'90d'} [timeframe='30d'] - Lookback window
+   * @returns {Promise<{totalTransactions: number, successfulTransactions: number, failedTransactions: number, totalVolume: number, averageFee: number, operationTypes: object, dailyVolume: object, assets: string[]}>}
    */
   async getTransactionAnalytics(accountId, timeframe = '30d') {
     const cacheKey = `analytics:${accountId}:${timeframe}`;
@@ -173,7 +192,10 @@ class TransactionService {
   }
 
   /**
-   * Start real-time transaction monitoring for an account
+   * Start polling for new transactions on an account. Broadcasts via WebSocket on each new transaction.
+   * No-op if monitoring is already running for this account.
+   * @param {string} accountId - Stellar public key of the account to monitor
+   * @returns {void}
    */
   startMonitoring(accountId) {
     this.monitoringAccounts.add(accountId);
@@ -188,7 +210,9 @@ class TransactionService {
   }
 
   /**
-   * Stop monitoring an account
+   * Stop polling for new transactions on an account. Clears the interval when no accounts remain.
+   * @param {string} accountId - Stellar public key of the account to stop monitoring
+   * @returns {void}
    */
   stopMonitoring(accountId) {
     this.monitoringAccounts.delete(accountId);
@@ -202,7 +226,8 @@ class TransactionService {
   }
 
   /**
-   * Check for new transactions across monitored accounts
+   * Poll each monitored account for its latest transaction and broadcast it via WebSocket.
+   * @returns {Promise<void>}
    */
   async checkForNewTransactions() {
     for (const accountId of this.monitoringAccounts) {
@@ -224,7 +249,9 @@ class TransactionService {
   }
 
   /**
-   * Get the latest transaction for an account
+   * Fetch the most recent transaction for an account.
+   * @param {string} accountId - Stellar public key of the account
+   * @returns {Promise<object|null>} The latest enriched transaction, or null if none
    */
   async getLatestTransaction(accountId) {
     const transactions = await this.getTransactions(accountId, { limit: 1 });
@@ -232,7 +259,9 @@ class TransactionService {
   }
 
   /**
-   * Enrich transaction with additional data
+   * Enrich a raw Horizon transaction record with its operations and status.
+   * @param {object} tx - Raw transaction record from Horizon
+   * @returns {Promise<object>} Enriched transaction with `operations` and `status` fields
    */
   async enrichTransaction(tx) {
     const enriched = { ...tx };
@@ -251,7 +280,9 @@ class TransactionService {
   }
 
   /**
-   * Get operations for a transaction
+   * Fetch all operations for a transaction hash from Horizon.
+   * @param {string} txHash - Transaction hash
+   * @returns {Promise<object[]>} Array of operation records (empty array on error)
    */
   async getTransactionOperations(txHash) {
     try {
@@ -265,7 +296,10 @@ class TransactionService {
   }
 
   /**
-   * Check if transaction involves a specific asset
+   * Check whether any operation in a transaction involves a specific asset.
+   * @param {object} tx - Enriched transaction record
+   * @param {{code: string, issuer: string}} asset - Asset to match
+   * @returns {boolean}
    */
   transactionInvolvesAsset(tx, asset) {
     return tx.operations.some(op => {
@@ -277,7 +311,9 @@ class TransactionService {
   }
 
   /**
-   * Calculate analytics from transactions
+   * Compute aggregate analytics from an array of enriched transaction records.
+   * @param {object[]} transactions - Enriched transaction records
+   * @returns {{totalTransactions: number, successfulTransactions: number, failedTransactions: number, totalVolume: number, averageFee: number, operationTypes: object, dailyVolume: object, assets: string[]}}
    */
   calculateAnalytics(transactions) {
     const analytics = {
@@ -324,7 +360,10 @@ class TransactionService {
   }
 
   /**
-   * Store transactions in event store for persistence
+   * Persist fetched transactions to the event store for audit and replay purposes.
+   * @param {string} accountId - Stellar public key of the account
+   * @param {object[]} transactions - Enriched transaction records to persist
+   * @returns {Promise<void>}
    */
   async storeTransactions(accountId, transactions) {
     for (const tx of transactions) {
@@ -344,6 +383,41 @@ class TransactionService {
       });
     }
   }
+
+  /**
+   * Convert transactions array to CSV format
+   * @param {object[]} transactions - Array of enriched transaction records
+   * @returns {string} CSV formatted string with header and rows
+   */
+  transactionsToCSV(transactions) {
+    const csvEscape = (val) => {
+      const s = val == null ? '' : String(val);
+      return s.includes(',') || s.includes('"') || s.includes('\n') 
+        ? `"${s.replace(/"/g, '""')}"` 
+        : s;
+    };
+
+    const headers = ['date', 'hash', 'sender', 'recipient', 'amount', 'asset', 'memo', 'fee', 'status'];
+    const rows = transactions.map(tx => [
+      tx.created_at ? new Date(tx.created_at).toISOString() : '',
+      tx.hash || '',
+      tx.source_account || '',
+      tx.id || '',
+      tx.amount || '',
+      tx.asset || 'XLM',
+      tx.memo || '',
+      tx.fee_charged || '',
+      tx.successful ? 'success' : 'failed'
+    ]);
+
+    const lines = [
+      headers.map(csvEscape).join(','),
+      ...rows.map(row => row.map(csvEscape).join(','))
+    ];
+
+    return lines.join('\n');
+  }
 }
 
+/** Singleton {@link TransactionService} instance for use throughout the application. */
 export const transactionService = new TransactionService();
