@@ -323,6 +323,23 @@ export class APIGateway {
   getRoutes() {
     return Array.from(this.routes.values()).map(config => ({ ...config }));
   }
+
+  /**
+   * Returns a health snapshot for the gateway.
+   * Reports uptime, total registered routes, and a per-service instance summary
+   * sourced from the underlying registry.
+   * @returns {{ status: 'healthy'|'degraded'|'unhealthy', uptime: number, timestamp: string, routes: number, services: object[] }}
+   */
+  health() {
+    const registryHealth = this.registry.health();
+    return {
+      status: registryHealth.status,
+      uptime: process.uptime(),
+      timestamp: new Date().toISOString(),
+      routes: this.routes.size,
+      services: registryHealth.services,
+    };
+  }
 }
 
 export const createAPIGateway = (registry) => new APIGateway(registry);

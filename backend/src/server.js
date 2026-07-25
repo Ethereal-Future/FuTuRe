@@ -24,6 +24,7 @@ import securityRoutes from './routes/security.js';
 import loadTestingRoutes from './routes/loadTesting.js';
 import chaosRoutes from './routes/chaos.js';
 import healthRoutes from './routes/health.js';
+import microservicesHealthRoutes from './routes/microservicesHealth.js';
 import mobileRoutes from './routes/mobile.js';
 import webhookRoutes from './routes/webhooks.js';
 import metricsRoutes from './routes/metrics.js';
@@ -194,6 +195,7 @@ app.get('/.well-known/stellar.toml', (_req, res) => {
 
 // Health routes (not versioned - used by load balancers)
 app.use('/', healthRoutes);
+app.use('/', microservicesHealthRoutes);
 
 // Dedicated Prometheus scrape endpoint — unauthenticated, no CSRF, not under /api/v1
 // Prometheus must be able to reach this without auth headers.

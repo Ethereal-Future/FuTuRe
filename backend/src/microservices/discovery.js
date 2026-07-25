@@ -77,6 +77,33 @@ export class ServiceRegistry {
       })),
     };
   }
+
+  /**
+   * Returns a health snapshot for every registered service.
+   * Used by load balancers and orchestration systems to check service status.
+   * @returns {{ status: 'healthy'|'degraded'|'unhealthy', uptime: number, timestamp: string, services: object[] }}
+   */
+  health() {
+    const uptime = process.uptime();
+    const services = Array.from(this.services.keys()).map((name) => {
+      const instances = this.discoverInstances(name);
+      const total = instances.length;
+      const healthy = instances.filter((i) => i.status === 'healthy').length;
+      const status = total === 0 ? 'unknown' : healthy === total ? 'healthy' : healthy > 0 ? 'degraded' : 'unhealthy';
+      return { name, status, totalInstances: total, healthyInstances: healthy };
+    });
+
+    const unhealthy = services.filter((s) => s.status === 'unhealthy').length;
+    const degraded = services.filter((s) => s.status === 'degraded').length;
+    const overallStatus = unhealthy > 0 ? 'unhealthy' : degraded > 0 ? 'degraded' : 'healthy';
+
+    return {
+      status: overallStatus,
+      uptime,
+      timestamp: new Date().toISOString(),
+      services,
+    };
+  }
 }
 
 export const createServiceRegistry = () => new ServiceRegistry();
