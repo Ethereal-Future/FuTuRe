@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * Read-only AMM pool browser: lists pools, liquidity, price, and arbitrage opportunities.
@@ -60,10 +61,10 @@ export function AMMPoolBrowser() {
               <strong>{pool.assetA} / {pool.assetB}</strong>
               <span style={{ marginLeft: 8, fontSize: '0.8rem', color: '#888' }}>({pool.poolId})</span>
               <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', marginTop: 4, fontSize: '0.9rem' }}>
-                <span>Reserve A: <strong>{pool.reserveA.toFixed(4)}</strong></span>
-                <span>Reserve B: <strong>{pool.reserveB.toFixed(4)}</strong></span>
-                <span>Liquidity: <strong>{pool.liquidity.toFixed(4)}</strong></span>
-                <span>Price: <strong>{pool.midPrice.toFixed(6)}</strong> {pool.assetB}/{pool.assetA}</span>
+                <span>Reserve A: <strong>{formatAssetAmount(pool.reserveA, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</strong></span>
+                <span>Reserve B: <strong>{formatAssetAmount(pool.reserveB, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</strong></span>
+                <span>Liquidity: <strong>{formatAssetAmount(pool.liquidity, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</strong></span>
+                <span>Price: <strong>{formatAssetAmount(pool.midPrice, { minimumFractionDigits: 6, maximumFractionDigits: 6 })}</strong> {pool.assetB}/{pool.assetA}</span>
                 <span>Fee: <strong>{pool.feeBps} bps</strong></span>
               </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { CopyButton } from './CopyButton';
 import { XdrExportModal } from './XdrExportModal';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 const TYPE_LABELS = { payment: 'Payment', create_account: 'Account Created', unknown: 'Other' };
 
@@ -28,7 +29,7 @@ export function TransactionDetailPanel({ tx, network = 'public' }) {
   const ledgerExplorerUrl = tx.ledger != null
     ? `https://stellar.expert/explorer/${explorerNetwork}/ledger/${tx.ledger}`
     : null;
-  const feeXlm = tx.fee != null ? (Number(tx.fee) / 1e7).toFixed(7) : null;
+  const feeXlm = tx.fee != null ? formatAssetAmount(Number(tx.fee) / 1e7) : null;
 
   return (
     <dl className="tx-detail-list">

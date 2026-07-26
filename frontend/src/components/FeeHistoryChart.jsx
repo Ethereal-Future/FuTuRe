@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { Charts } from './Charts.jsx';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * Display 24-hour base-fee history chart with current and recommended fee annotations
@@ -103,10 +104,10 @@ export function FeeHistoryChart() {
         >
           <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666' }}>Current Fee</p>
           <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
-            {(currentFee / 10000000).toFixed(7)} XLM
+            {formatAssetAmount(currentFee / 10000000)} XLM
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#888' }}>
-            {currentFee} stroops
+            {formatAssetAmount(currentFee, { maximumFractionDigits: 0 })} stroops
           </p>
         </div>
 
@@ -120,10 +121,10 @@ export function FeeHistoryChart() {
         >
           <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666' }}>Recommended</p>
           <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
-            {(recommendedFee / 10000000).toFixed(7)} XLM
+            {formatAssetAmount(recommendedFee / 10000000)} XLM
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#888' }}>
-            {recommendedFee} stroops
+            {formatAssetAmount(recommendedFee, { maximumFractionDigits: 0 })} stroops
           </p>
         </div>
 
@@ -137,7 +138,7 @@ export function FeeHistoryChart() {
         >
           <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666' }}>Min (24h)</p>
           <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
-            {(minFee / 10000000).toFixed(7)} XLM
+            {formatAssetAmount(minFee / 10000000)} XLM
           </p>
         </div>
 
@@ -151,7 +152,7 @@ export function FeeHistoryChart() {
         >
           <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666' }}>Max (24h)</p>
           <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
-            {(maxFee / 10000000).toFixed(7)} XLM
+            {formatAssetAmount(maxFee / 10000000)} XLM
           </p>
         </div>
 
@@ -165,7 +166,7 @@ export function FeeHistoryChart() {
         >
           <p style={{ margin: '0 0 4px 0', fontSize: '0.85rem', color: '#666' }}>Avg (24h)</p>
           <p style={{ margin: 0, fontSize: '1.2rem', fontWeight: 'bold' }}>
-            {(avgFee / 10000000).toFixed(7)} XLM
+            {formatAssetAmount(avgFee / 10000000)} XLM
           </p>
         </div>
       </div>

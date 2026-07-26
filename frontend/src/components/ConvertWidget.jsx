@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import apiClient from '../api/client.js';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 const ASSETS = ['XLM', 'USDC', 'BTC', 'ETH'];
 
@@ -70,7 +71,7 @@ export function ConvertWidget() {
 
       {result && (
         <p style={{ marginTop: 8 }} aria-live="polite">
-          <strong>{result.amount} {result.from}</strong> = <strong>{Number(result.converted).toFixed(7)} {result.to}</strong>
+          <strong>{formatAssetAmount(result.amount)} {result.from}</strong> = <strong>{formatAssetAmount(result.converted)} {result.to}</strong>
         </p>
       )}
     </section>

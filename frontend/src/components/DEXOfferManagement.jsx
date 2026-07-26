@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { AmountInput } from './AmountInput.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * Component for creating, viewing, modifying, and canceling DEX offers
@@ -254,14 +255,14 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
                         Sell: <strong>{offer.amount}</strong>
                       </p>
                       <p style={{ margin: '0 0 4px 0', color: '#3b82f6' }}>
-                        Price: <strong>{(parseFloat(offer.price_r.n) / parseFloat(offer.price_r.d)).toFixed(7)}</strong>
+                        Price: <strong>{formatAssetAmount(parseFloat(offer.price_r.n) / parseFloat(offer.price_r.d))}</strong>
                       </p>
                     </div>
                   </div>
 
                   <div style={{ marginTop: 8, paddingTop: 8, borderTop: '1px solid #e5e7eb' }}>
                     <p style={{ margin: 0, fontSize: '0.85rem' }}>
-                      Est. Receive: {(parseFloat(offer.amount) * (parseFloat(offer.price_r.n) / parseFloat(offer.price_r.d))).toFixed(7)}
+                      Est. Receive: {formatAssetAmount(parseFloat(offer.amount) * (parseFloat(offer.price_r.n) / parseFloat(offer.price_r.d)))}
                     </p>
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: '#666' }}>
                       Created: {new Date(offer.created_at).toLocaleDateString()}

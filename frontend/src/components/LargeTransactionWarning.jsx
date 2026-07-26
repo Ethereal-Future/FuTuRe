@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * LargeTransactionWarning — warns when transferring large amounts.
@@ -38,7 +39,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
             Large Transaction
           </h3>
           <p style={{ margin: '0 0 10px 0', fontSize: 13, color: '#b45309' }}>
-            You are about to send <strong>{numAmount.toLocaleString()} {assetCode}</strong>.
+            You are about to send <strong>{formatAssetAmount(numAmount)} {assetCode}</strong>.
             Please verify the details carefully:
           </p>
 
@@ -55,7 +56,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
             </li>
             <li style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <span>✓</span>
-              <span><strong>Amount</strong> ({numAmount.toLocaleString()}) is correct</span>
+              <span><strong>Amount</strong> ({formatAssetAmount(numAmount)}) is correct</span>
             </li>
             <li style={{ display: 'flex', gap: 6 }}>
               <span>✓</span>
@@ -157,13 +158,13 @@ export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', ba
         <div>
           <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>Amount:</p>
           <p style={{ margin: 0, fontWeight: 600, color: '#ef4444' }}>
-            {numAmount.toLocaleString()} {assetCode}
+            {formatAssetAmount(numAmount)} {assetCode}
           </p>
         </div>
         <div>
           <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>Current Balance:</p>
           <p style={{ margin: 0, fontWeight: 600 }}>
-            {numBalance.toLocaleString()} {assetCode}
+            {formatAssetAmount(numBalance)} {assetCode}
           </p>
         </div>
         <div>
@@ -173,7 +174,7 @@ export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', ba
             fontWeight: 600,
             color: remaining > 0 ? '#22c55e' : '#ef4444'
           }}>
-            {remaining.toLocaleString()} {assetCode}
+            {formatAssetAmount(remaining)} {assetCode}
           </p>
         </div>
       </div>

@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { formatAssetAmount, normalizeAmountInput } from '../utils/formatAmount';
 
 const CURRENCIES = { XLM: 'Stellar Lumens', USDC: 'USD Coin', BTC: 'Bitcoin' };
 
@@ -7,22 +9,25 @@ const CURRENCIES = { XLM: 'Stellar Lumens', USDC: 'USD Coin', BTC: 'Bitcoin' };
  * Props: value, onChange, currency, onCurrencyChange, availableBalance
  */
 export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChange, availableBalance }) {
+  const { i18n } = useTranslation();
   const [focused, setFocused] = useState(false);
 
   const handleChange = (e) => {
-    // Allow only valid decimal numbers
-    const raw = e.target.value.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
-    onChange?.(raw);
+    // Accept the locale's decimal separator (e.g. ',' in fr-FR) and
+    // normalise it to '.' so the stored/submitted value is unambiguous.
+    onChange?.(normalizeAmountInput(e.target.value, i18n.language));
   };
 
   const setMax = () => {
     if (availableBalance != null) onChange?.(String(availableBalance));
   };
 
-  // Always use '.' as decimal separator in the input display so the raw value
-  // fed into blockchain APIs is never locale-ambiguous.
+  // While not focused, display the amount using the active locale's
+  // grouping and decimal separators. The underlying `value` stored via
+  // onChange always uses '.' as the decimal separator, so it stays
+  // unambiguous for blockchain APIs regardless of display locale.
   const formatted = !focused && value
-    ? new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 7, useGrouping: false }).format(Number(value))
+    ? formatAssetAmount(value, { maximumFractionDigits: 7, locale: i18n.language })
     : value;
 
   return (
