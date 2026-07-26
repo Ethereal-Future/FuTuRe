@@ -12,6 +12,7 @@ import { cacheMiddleware } from '../middleware/cache.js';
 import { keys as cacheKeys, TTL, invalidateBalance } from '../cache/appCache.js';
 import prisma from '../db/client.js';
 import { getSubscriptionByPublicKey, sendWebPush } from '../notifications/webPush.js';
+import { handleTransactionFailure, handleBatchTransactionFailure } from '../services/transactionErrorHandler.js';
 import logger from '../config/logger.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
@@ -955,6 +956,13 @@ router.post(
       });
     } catch (error) {
       logError(req, error, { assetCode: req.body.assetCode });
+      // Dispatch failure notification for trustline operation
+      await handleTransactionFailure(sourcePublicKey, {
+        amount: '0.0000000',
+        asset: assetCode,
+        error,
+        transactionData: { assetCode },
+      });
       res.status(500).json({ error: error.message });
     }
   },
@@ -1110,6 +1118,9 @@ router.post(
       });
     } catch (error) {
       logError(req, error, { context: 'batch-payment' });
+      // Dispatch failure notification
+      const senderKey = StellarSDK.Keypair.fromSecret(sourceSecret).publicKey();
+      await handleBatchTransactionFailure(senderKey, payments, error);
       res.status(500).json({ error: error.message });
     }
   },
