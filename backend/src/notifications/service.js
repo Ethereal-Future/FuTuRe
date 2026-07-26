@@ -60,7 +60,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
             result = await sendSms(phone, content);
             break;
           case 'inApp':
-            result = sendInApp(userId, publicKey, { ...content, type });
+            result = await sendInApp(userId, publicKey, { ...content, type });
             break;
           default:
             results[channel] = { skipped: true, reason: 'unknown_channel' };

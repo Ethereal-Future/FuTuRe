@@ -15,6 +15,8 @@ import { requireAuth } from '../middleware/auth.js';
 import {
   getInAppNotifications,
   markAsRead,
+  deleteNotification,
+  clearReadNotifications,
   getPreferences,
   updatePreferences,
   getDeliveryHistory,
@@ -45,6 +47,10 @@ const validate = (req, res, next) => {
  *         name: unreadOnly
  *         schema: { type: boolean }
  *         description: Return only unread notifications
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 100 }
+ *         description: Max notifications to return
  *     responses:
  *       200:
  *         description: List of notifications
@@ -53,10 +59,15 @@ const validate = (req, res, next) => {
  */
 router.get('/', [
   query('unreadOnly').optional().isBoolean().toBoolean(),
-], validate, (req, res) => {
-  const { unreadOnly = false } = req.query;
-  const notifications = getInAppNotifications(req.user.sub, { unreadOnly });
-  res.json({ notifications });
+  query('limit').optional().isInt({ min: 1, max: 100 }).toInt(),
+], validate, async (req, res) => {
+  try {
+    const { unreadOnly = false, limit = 50 } = req.query;
+    const notifications = await getInAppNotifications(req.user.sub, { unreadOnly, limit });
+    res.json({ data: notifications });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
 });
 
 /**
@@ -73,9 +84,13 @@ router.get('/', [
  *       401:
  *         description: Unauthorized
  */
-router.post('/read-all', (req, res) => {
-  const result = markAsRead(req.user.sub, 'all');
-  res.json(result);
+router.post('/read-all', async (req, res) => {
+  try {
+    const result = await markAsRead(req.user.sub, 'all');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark notifications as read' });
+  }
 });
 
 /**
@@ -97,9 +112,92 @@ router.post('/read-all', (req, res) => {
  *       401:
  *         description: Unauthorized
  */
-router.post('/:id/read', (req, res) => {
-  const result = markAsRead(req.user.sub, req.params.id);
-  res.json(result);
+router.post('/:id/read', async (req, res) => {
+  try {
+    const result = await markAsRead(req.user.sub, req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/{id}/read:
+ *   patch:
+ *     summary: Mark a notification as read (PATCH)
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Notification marked as read
+ *       401:
+ *         description: Unauthorized
+ */
+router.patch('/:id/read', async (req, res) => {
+  try {
+    const result = await markAsRead(req.user.sub, req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/{id}:
+ *   delete:
+ *     summary: Delete a notification
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Notification deleted
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await deleteNotification(req.user.sub, req.params.id);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to delete notification' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/clear/read:
+ *   delete:
+ *     summary: Clear all read notifications
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Read notifications cleared
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/clear/read', async (req, res) => {
+  try {
+    const result = await clearReadNotifications(req.user.sub);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to clear notifications' });
+  }
 });
 
 /**
