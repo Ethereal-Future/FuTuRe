@@ -125,6 +125,7 @@ export function BackupSettings({ onClose }) {
       setDownloadSuccess(`Backup downloaded as ${filename}. Store the file and your password separately.`);
       setBackupPassword('');
       setBackupPasswordConfirm('');
+      await creditBackupEvent(account.publicKey);
     } catch {
       setDownloadError('Failed to create encrypted backup. Please try again.');
     } finally {
