@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FormField } from './FormField';
@@ -22,6 +23,7 @@ function StatusBadge({ status }) {
 }
 
 export function MultiSigTransactions({ publicKey }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('setup'); // 'setup', 'build', 'sign', 'pending'
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -169,7 +171,7 @@ export function MultiSigTransactions({ publicKey }) {
 
   return (
     <section className="section" aria-labelledby="multisig-heading">
-      <h2 id="multisig-heading" style={{ marginBottom: 16 }}>Multi-Signature Transactions</h2>
+      <h2 id="multisig-heading" style={{ marginBottom: 16 }}>{t('multiSig.title')}</h2>
 
       {error && <StatusMessage type="error" message={error} />}
       {success && <StatusMessage type="success" message={success} />}
@@ -299,13 +301,13 @@ export function MultiSigTransactions({ publicKey }) {
             </FormField>
             {builtTx && (
               <div style={{ padding: 12, background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 4 }}>
-                <p style={{ fontSize: '0.875rem', margin: '0 0 8px 0' }}><strong>Transaction ID:</strong> <code>{builtTx.txId}</code></p>
+                <p style={{ fontSize: '0.875rem', margin: '0 0 8px 0' }}><strong>{t('multiSig.transactionIdLabel')}</strong> <code>{builtTx.txId}</code></p>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(builtTx.txId)}
                   style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
                 >
-                  Copy txId
+                  {t('multiSig.copyTxId')}
                 </button>
               </div>
             )}
@@ -346,7 +348,7 @@ export function MultiSigTransactions({ publicKey }) {
             {pendingLoading ? (
               <Spinner />
             ) : pendingTxs.length === 0 ? (
-              <p style={{ color: '#999' }}>No pending transactions.</p>
+              <p style={{ color: '#999' }}>{t('multiSig.noPendingTransactions')}</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {pendingTxs.map((tx) => (
@@ -355,9 +357,9 @@ export function MultiSigTransactions({ publicKey }) {
                       <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>→ {tx.destination.slice(0, 12)}...</span>
                       <StatusBadge status={tx.status} />
                     </div>
-                    <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>Amount:</strong> {tx.amount} {tx.assetCode}</p>
-                    <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>Signatures:</strong> {tx.signatures.length}</p>
-                    <p style={{ margin: '4px 0', fontSize: '0.75rem', color: '#666' }}>txId: <code>{tx.txId}</code></p>
+                    <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>{t('multiSig.amountLabel')}</strong> {tx.amount} {tx.assetCode}</p>
+                    <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>{t('multiSig.signaturesLabel')}</strong> {tx.signatures.length}</p>
+                    <p style={{ margin: '4px 0', fontSize: '0.75rem', color: '#666' }}>{t('multiSig.txIdLabel')} <code>{tx.txId}</code></p>
                     {tx.status === 'pending' && (
                       <button
                         type="button"
@@ -365,7 +367,7 @@ export function MultiSigTransactions({ publicKey }) {
                         disabled={loading}
                         style={{ marginTop: 8, padding: '6px 12px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: '0.875rem' }}
                       >
-                        Submit Transaction
+                        {t('multiSig.submitTransaction')}
                       </button>
                     )}
                   </div>

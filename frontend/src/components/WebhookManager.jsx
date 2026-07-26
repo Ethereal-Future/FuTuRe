@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 
 const WEBHOOK_EVENTS = [
@@ -7,6 +8,7 @@ const WEBHOOK_EVENTS = [
 ];
 
 export function WebhookManager({ accountId }) {
+  const { t } = useTranslation();
   const [webhooks, setWebhooks] = useState([]);
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState('');
@@ -28,7 +30,7 @@ export function WebhookManager({ accountId }) {
       const { data } = await apiClient.get('/api/webhooks', { params: { accountId } });
       setWebhooks(Array.isArray(data) ? data : []);
     } catch (e) {
-      setError(e?.response?.data?.error ?? 'Failed to load webhooks');
+      setError(e?.response?.data?.error ?? t('webhookManager.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -65,10 +67,10 @@ export function WebhookManager({ accountId }) {
       setUrl('');
       setSecret('');
       setSelectedEvents(WEBHOOK_EVENTS.map((item) => item.value));
-      setNotice('Webhook registered successfully.');
+      setNotice(t('webhookManager.registeredSuccess'));
       await loadWebhooks();
     } catch (err) {
-      const message = err?.response?.data?.errors?.[0]?.msg ?? err?.response?.data?.error ?? 'Failed to register webhook';
+      const message = err?.response?.data?.errors?.[0]?.msg ?? err?.response?.data?.error ?? t('webhookManager.registerFailed');
       setError(message);
     } finally {
       setSubmitting(false);
@@ -80,23 +82,23 @@ export function WebhookManager({ accountId }) {
     setNotice('');
     try {
       await apiClient.delete(`/api/webhooks/${id}`);
-      setNotice('Webhook deleted.');
+      setNotice(t('webhookManager.deletedSuccess'));
       setWebhooks((prev) => prev.filter((w) => w.id !== id));
     } catch (err) {
-      setError(err?.response?.data?.error ?? 'Failed to delete webhook');
+      setError(err?.response?.data?.error ?? t('webhookManager.deleteFailed'));
     }
   };
 
   return (
     <section aria-labelledby="webhooks-title">
-      <p id="webhooks-title" style={{ fontWeight: 600, marginBottom: 4 }}>Webhooks</p>
+      <p id="webhooks-title" style={{ fontWeight: 600, marginBottom: 4 }}>{t('webhookManager.title')}</p>
       <p style={{ margin: '0 0 12px', color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
-        Register webhook URLs to receive account event notifications.
+        {t('webhookManager.subtitle')}
       </p>
 
       <form onSubmit={registerWebhook} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, marginBottom: 12 }}>
         <label htmlFor="webhook-url" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
-          Webhook URL
+          {t('webhookManager.urlLabel')}
         </label>
         <input
           id="webhook-url"
@@ -109,19 +111,19 @@ export function WebhookManager({ accountId }) {
         />
 
         <label htmlFor="webhook-secret" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
-          Signing Secret (optional)
+          {t('webhookManager.secretLabel')}
         </label>
         <input
           id="webhook-secret"
           type="text"
           value={secret}
           onChange={(evt) => setSecret(evt.target.value)}
-          placeholder="leave blank to auto-generate"
+          placeholder={t('webhookManager.secretPlaceholder')}
           style={{ marginBottom: 8 }}
         />
 
         <fieldset style={{ border: 'none', padding: 0, marginBottom: 10 }}>
-          <legend style={{ fontWeight: 600, marginBottom: 6 }}>Events</legend>
+          <legend style={{ fontWeight: 600, marginBottom: 6 }}>{t('webhookManager.eventsLegend')}</legend>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
             {WEBHOOK_EVENTS.map((eventItem) => (
               <label key={eventItem.value} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
@@ -138,7 +140,7 @@ export function WebhookManager({ accountId }) {
         </fieldset>
 
         <button type="submit" disabled={!canSubmit}>
-          {submitting ? 'Registering…' : 'Register webhook'}
+          {submitting ? t('webhookManager.registering') : t('webhookManager.register')}
         </button>
       </form>
 
@@ -146,10 +148,10 @@ export function WebhookManager({ accountId }) {
       {notice && <p role="status" style={{ color: '#16a34a', marginBottom: 8 }}>{notice}</p>}
 
       {loading ? (
-        <p>Loading registered webhooks…</p>
+        <p>{t('webhookManager.loadingWebhooks')}</p>
       ) : webhooks.length === 0 ? (
         <p style={{ color: 'var(--text-muted, #64748b)', fontSize: '0.9rem', marginBottom: 0 }}>
-          No webhooks registered for this account.
+          {t('webhookManager.empty')}
         </p>
       ) : (
         <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'grid', gap: 8 }}>
@@ -157,10 +159,10 @@ export function WebhookManager({ accountId }) {
             <li key={webhook.id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 10 }}>
               <div style={{ fontWeight: 600, overflowWrap: 'anywhere' }}>{webhook.url}</div>
               <div style={{ marginTop: 4, fontSize: '0.85rem', color: 'var(--text-muted, #64748b)' }}>
-                Events: {(webhook.events ?? []).join(', ')}
+                {t('webhookManager.eventsPrefix', { events: (webhook.events ?? []).join(', ') })}
               </div>
               <div style={{ marginTop: 4, fontSize: '0.8rem', color: 'var(--text-muted, #64748b)' }}>
-                Added: {webhook.createdAt ? new Date(webhook.createdAt).toLocaleString() : 'Unknown'}
+                {t('webhookManager.addedPrefix', { date: webhook.createdAt ? new Date(webhook.createdAt).toLocaleString() : t('webhookManager.unknown') })}
               </div>
               <div style={{ marginTop: 8 }}>
                 <button
@@ -169,7 +171,7 @@ export function WebhookManager({ accountId }) {
                   onClick={() => removeWebhook(webhook.id)}
                   style={{ width: 'auto' }}
                 >
-                  Delete
+                  {t('webhookManager.delete')}
                 </button>
               </div>
             </li>

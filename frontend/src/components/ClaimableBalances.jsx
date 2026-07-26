@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 import { useMessages } from '../hooks/useMessages';
 import { CopyButton } from './CopyButton';
@@ -7,6 +8,7 @@ import { FeeDisplay } from './FeeDisplay';
 const ITEMS_PER_PAGE = 10;
 
 export function ClaimableBalances({ publicKey }) {
+  const { t } = useTranslation();
   const [balances, setBalances] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -42,7 +44,7 @@ export function ClaimableBalances({ publicKey }) {
         sourceSecret: localStorage.getItem('secretKey'),
         balanceId,
       });
-      msg.success('Claimable balance claimed successfully!');
+      msg.success(t('claimableBalances.claimedSuccess'));
       await fetchClaimableBalances();
     } catch (e) {
       const errorMsg = e?.response?.data?.error ?? e.message;
@@ -69,7 +71,7 @@ export function ClaimableBalances({ publicKey }) {
   return (
     <div style={{ marginBottom: 20, padding: 16, background: '#f9fafb', borderRadius: 8 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h3 style={{ margin: 0 }}>📦 Claimable Balances</h3>
+        <h3 style={{ margin: 0 }}>{t('claimableBalances.title')}</h3>
         <button
           type="button"
           onClick={fetchClaimableBalances}
@@ -84,7 +86,7 @@ export function ClaimableBalances({ publicKey }) {
             fontSize: 12,
           }}
         >
-          {loading ? 'Loading…' : '🔄 Refresh'}
+          {loading ? t('claimableBalances.loading') : '🔄 Refresh'}
         </button>
       </div>
 
@@ -95,7 +97,7 @@ export function ClaimableBalances({ publicKey }) {
       )}
 
       {balances.length === 0 && !loading && !error && (
-        <p style={{ color: '#666', fontSize: 14, margin: 0 }}>No claimable balances available.</p>
+        <p style={{ color: '#666', fontSize: 14, margin: 0 }}>{t('claimableBalances.empty')}</p>
       )}
 
       {paginatedBalances.length > 0 && (
@@ -120,17 +122,17 @@ export function ClaimableBalances({ publicKey }) {
                       {balance.amount} {balance.asset_code || 'native'}
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666', marginBottom: 4 }}>
-                      From: <code style={{ background: '#f0f0f0', padding: '2px 4px', borderRadius: 2 }}>{balance.sponsor?.slice(0, 20)}…</code>
+                      {t('claimableBalances.from')} <code style={{ background: '#f0f0f0', padding: '2px 4px', borderRadius: 2 }}>{balance.sponsor?.slice(0, 20)}…</code>
                     </div>
                     <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                      ID: <code style={{ background: '#f0f0f0', padding: '2px 4px', borderRadius: 2 }}>{balance.id?.slice(0, 20)}…</code>
+                      {t('claimableBalances.id')} <code style={{ background: '#f0f0f0', padding: '2px 4px', borderRadius: 2 }}>{balance.id?.slice(0, 20)}…</code>
                       <CopyButton text={balance.id} />
                     </div>
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     {expired && (
                       <span style={{ background: '#fca5a5', color: '#991b1b', padding: '4px 8px', borderRadius: 4, fontSize: '0.8rem', fontWeight: 600 }}>
-                        Expired
+                        {t('claimableBalances.expired')}
                       </span>
                     )}
                     {!expired && (
@@ -148,7 +150,7 @@ export function ClaimableBalances({ publicKey }) {
                           fontSize: '0.9rem',
                         }}
                       >
-                        {claimingId === balance.id ? 'Claiming…' : 'Claim'}
+                        {claimingId === balance.id ? t('claimableBalances.claiming') : t('claimableBalances.claim')}
                       </button>
                     )}
                   </div>
@@ -165,10 +167,10 @@ export function ClaimableBalances({ publicKey }) {
                 disabled={page === 1}
                 style={{ padding: '6px 12px', background: page === 1 ? '#d1d5db' : '#0066cc', color: '#fff', border: 'none', borderRadius: 4, cursor: page === 1 ? 'not-allowed' : 'pointer' }}
               >
-                ← Previous
+                ← {t('common.previous')}
               </button>
               <span style={{ alignSelf: 'center', fontSize: '0.9rem' }}>
-                Page {page} of {totalPages}
+                {t('common.pageOf', { page, total: totalPages })}
               </span>
               <button
                 type="button"
@@ -176,7 +178,7 @@ export function ClaimableBalances({ publicKey }) {
                 disabled={page === totalPages}
                 style={{ padding: '6px 12px', background: page === totalPages ? '#d1d5db' : '#0066cc', color: '#fff', border: 'none', borderRadius: 4, cursor: page === totalPages ? 'not-allowed' : 'pointer' }}
               >
-                Next →
+                {t('common.next')} →
               </button>
             </div>
           )}
