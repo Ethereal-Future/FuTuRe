@@ -41,7 +41,7 @@
     "test:contracts": "npm run test:contracts:consumer && npm run test:contracts:provider && npm run test:contracts:registry"
   },
   "lint-staged": {
-    "**/*.{js,jsx,ts,tsx}": [
+    "!(frontend|scripts)/**/*.{js,jsx,ts,tsx}": [
       "eslint --fix --max-warnings 0",
       "prettier --write"
     ],
