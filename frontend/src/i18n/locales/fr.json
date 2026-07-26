@@ -33,7 +33,8 @@
   },
   "balance": {
     "check": "Vérifier le solde",
-    "checking": "Vérification du solde..."
+    "checking": "Vérification du solde...",
+    "refreshing": "Actualisation…"
   },
   "payment": {
     "title": "Envoyer un paiement",

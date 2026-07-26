@@ -33,7 +33,8 @@
   },
   "balance": {
     "check": "Check Balance",
-    "checking": "Checking balance..."
+    "checking": "Checking balance...",
+    "refreshing": "Refreshing…"
   },
   "payment": {
     "title": "Send Payment",

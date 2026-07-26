@@ -33,7 +33,8 @@
   },
   "balance": {
     "check": "בדוק יתרה",
-    "checking": "בודק יתרה..."
+    "checking": "בודק יתרה...",
+    "refreshing": "מרענן…"
   },
   "payment": {
     "title": "שלח תשלום",

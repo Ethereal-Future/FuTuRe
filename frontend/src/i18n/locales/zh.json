@@ -33,7 +33,8 @@
   },
   "balance": {
     "check": "查询余额",
-    "checking": "正在查询余额..."
+    "checking": "正在查询余额...",
+    "refreshing": "正在刷新…"
   },
   "payment": {
     "title": "发送付款",
