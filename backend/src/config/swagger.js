@@ -11,8 +11,12 @@ const options = {
     },
     servers: [
       {
-        url: 'http://localhost:3001',
+        url: 'http://localhost:3001/api/v1',
         description: 'Development server',
+      },
+      {
+        url: '/api/v1',
+        description: 'Relative base path (useful when served behind a reverse proxy)',
       },
     ],
     components: {
@@ -684,7 +688,7 @@ const options = {
     },
     security: [{ bearerAuth: [] }],
   },
-  apis: ['./src/server.js', './src/routes/*.js'],
+  apis: ['./src/server.js', './src/routes/*.js', './src/routes/**/*.js'],
 };
 
 const swaggerSpec = swaggerJsdoc(options);

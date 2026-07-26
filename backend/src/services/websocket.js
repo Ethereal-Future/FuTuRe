@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { createHmac, randomBytes } from 'crypto';
 import jwt from 'jsonwebtoken';
 import logger from '../config/logger.js';
+import { registerMetricProvider } from '../monitoring/metrics.js';
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const MAX_CONNECTIONS_PER_KEY = 5;
@@ -254,3 +255,55 @@ export function getWsStats() {
     totalQueued: [...messageQueues.values()].reduce((s, q) => s + q.length, 0),
   };
 }
+
+// ── Prometheus metrics ────────────────────────────────────────────────────────
+// Register WebSocket metrics with the shared Prometheus provider so they appear
+// in the /metrics scrape endpoint alongside all other application metrics.
+registerMetricProvider((lines, { counter, gauge }) => {
+  const s = getWsStats();
+  counter(
+    'ws_connections_total',
+    'Total number of WebSocket connections accepted since startup',
+    s.totalConnections,
+  );
+  gauge(
+    'ws_connections_active',
+    'Number of currently open WebSocket connections',
+    s.activeConnections,
+  );
+  counter(
+    'ws_messages_delivered_total',
+    'Total number of WebSocket messages delivered to connected clients',
+    s.messagesDelivered,
+  );
+  counter(
+    'ws_messages_queued_total',
+    'Total number of WebSocket messages queued for offline clients',
+    s.messagesQueued,
+  );
+  counter(
+    'ws_auth_failures_total',
+    'Total number of WebSocket authentication failures',
+    s.authFailures,
+  );
+  counter(
+    'ws_errors_total',
+    'Total number of WebSocket connection errors',
+    s.errors,
+  );
+  gauge(
+    'ws_subscribed_accounts',
+    'Number of Stellar accounts with at least one active WebSocket subscriber',
+    s.subscribedAccounts,
+  );
+  gauge(
+    'ws_queued_accounts',
+    'Number of accounts with messages pending delivery (offline queue)',
+    s.queuedAccounts,
+  );
+  gauge(
+    'ws_queued_messages_total',
+    'Total number of messages waiting in offline delivery queues',
+    s.totalQueued,
+  );
+});

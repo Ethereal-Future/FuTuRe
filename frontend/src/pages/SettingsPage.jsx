@@ -8,6 +8,7 @@ import { KYCForm } from '../components/KYCForm';
 import { NotificationPreferences } from '../components/NotificationPreferences';
 import { BackupSettings } from '../components/BackupSettings';
 import { AccountSettings } from '../components/AccountSettings';
+import { BumpSequenceOperation } from '../components/BumpSequenceOperation';
 import { Breadcrumb } from '../components/Breadcrumb';
 
 const SETTINGS_BREADCRUMB = { label: 'Home', path: '/' };
@@ -36,6 +37,7 @@ export function SettingsPage() {
     { id: 'notifications', label: '🔔 Notifications' },
     { id: 'backup', label: '💾 Backup', action: () => setShowBackup(true) },
     { id: 'account', label: '⚙️ Account', action: () => setShowAccountSettings(true) },
+    { id: 'advanced', label: '⚡ Advanced' },
   ];
 
   const activeSectionLabel = sections.find((s) => s.id === activeSection)?.label;
@@ -92,6 +94,11 @@ export function SettingsPage() {
         {activeSection === 'notifications' && (
           <motion.div key="notifications" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
             <NotificationPreferences />
+          </motion.div>
+        )}
+        {activeSection === 'advanced' && (
+          <motion.div key="advanced" variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit">
+            <BumpSequenceOperation publicKey={account.publicKey} />
           </motion.div>
         )}
       </AnimatePresence>
