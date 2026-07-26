@@ -258,6 +258,27 @@ function App() {
     }
   }, []);
 
+  // PWA shortcut deep-links: /send, /balance, /history jump straight to the
+  // relevant section instead of requiring the user to scroll down manually.
+  // If no account exists yet, the create/import account screen renders as
+  // usual and the scroll is skipped since the target section isn't mounted.
+  useEffect(() => {
+    if (!account) return;
+    const SHORTCUT_TARGETS = {
+      '/send': 'send-heading',
+      '/balance': 'balance-section',
+      '/history': 'transaction-history-section',
+    };
+    const targetId = SHORTCUT_TARGETS[window.location.pathname];
+    if (!targetId) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.location.pathname === '/send') {
+      document.getElementById('recipient-input')?.focus();
+    }
+  }, [account]);
+
   const resetForm = () => dispatch({ type: A.RESET_FORM });
   const clearForm = () => {
     if (recipient || amount) {
@@ -1282,6 +1303,7 @@ function App() {
                 <motion.div variants={v.stagger} initial="hidden" animate="visible" exit="exit">
                   {/* Balance */}
                   <motion.section
+                    id="balance-section"
                     className="section"
                     aria-labelledby="balance-heading"
                     variants={v.fadeSlide}
@@ -1734,7 +1756,7 @@ function App() {
                   </motion.section>
 
                   {/* Transaction History */}
-                  <motion.div variants={v.fadeSlide}>
+                  <motion.div id="transaction-history-section" variants={v.fadeSlide}>
                     <ErrorBoundary context="Transaction History">
                       <TransactionHistory publicKey={account.publicKey} />
                     </ErrorBoundary>
