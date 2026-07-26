@@ -8,6 +8,7 @@ import networkRouter from './network.js';
 import trustlinesRouter from './trustlines.js';
 import trustlineBalanceRouter from './trustline-balance.js';
 import ammRouter from './amm.js';
+import offersRouter from './offers.js';
 import federationRouter from './federation.js';
 import contractRouter from './contract.js';
 import poolOperationsRouter from './pool-operations.js';
@@ -29,6 +30,7 @@ router.use('/trustline', trustlineBalanceRouter);
 router.use('/assets', trustlinesRouter);
 router.use('/amm', ammRouter);
 router.use('/amm/pool', poolOperationsRouter);
+router.use('/offers', offersRouter);
 router.use('/federation', federationRouter);
 router.use('/contract', contractRouter);
 
