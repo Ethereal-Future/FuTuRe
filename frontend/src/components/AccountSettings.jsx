@@ -6,6 +6,7 @@ import { WebhookManager } from './WebhookManager';
 import { BackupSettings } from './BackupSettings';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { AccountMerge } from './AccountMerge';
+import { SponsorshipOperations } from './SponsorshipOperations';
 
 const ASSETS = ['XLM', 'USDC', 'EURC'];
 
@@ -278,6 +279,10 @@ export function AccountSettings({ publicKey, onClose }) {
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontWeight: 600, marginBottom: 4 }}>Address Book</p>
               <AddressBook />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <SponsorshipOperations publicKey={publicKey} />
             </div>
 
             <div style={{ marginBottom: 16 }}>
