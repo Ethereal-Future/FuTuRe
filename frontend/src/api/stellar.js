@@ -266,6 +266,46 @@ export async function batchPayment(payload, options = {}) {
   return response.data;
 }
 
+export async function buildMultiOpTransaction(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/transaction/multi-op/build', payload, options);
+  return response.data;
+}
+
+export async function submitMultiOpTransaction(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/transaction/multi-op/submit', payload, options);
+  return response.data;
+}
+
+export async function sep24Authenticate(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/authenticate', payload, options);
+  return response.data;
+}
+
+export async function sep24InitiateFlow(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/initiate', payload, options);
+  return response.data;
+}
+
+export async function sep24PollStatus(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/poll-status', payload, options);
+  return response.data;
+}
+
+export async function setThresholds(publicKey, payload, options = {}) {
+  const response = await apiClient.post(
+    `/api/stellar/account/${publicKey}/set-thresholds`,
+    payload,
+    options
+  );
+  return response.data;
+}
+
+export async function manageData(publicKey, payload, options = {}) {
+  const response = await apiClient.post(
+    `/api/stellar/account/${publicKey}/manage-data`,
+    payload,
+    options
+  );
 export async function getClaimableBalances(publicKey, options = {}) {
   const response = await apiClient.get(`/api/stellar/account/${publicKey}/claimable-balances`, options);
   return response.data;
