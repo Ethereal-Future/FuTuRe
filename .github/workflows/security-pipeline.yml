@@ -65,7 +65,9 @@ jobs:
           retention-days: 30
 
   dependency-scan:
-    name: Dependency Vulnerability Scan
+    name: Dependency Vulnerability Scan (OWASP / audit-ci)
+    # Issue #774 — upgraded from plain npm audit to audit-ci for structured
+    # reporting, configurable thresholds, and JSON artefacts.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -75,19 +77,40 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install root dependencies
         run: npm ci
 
-      - name: npm audit (root workspace)
-        run: npm audit --audit-level=high
-
-      - name: npm audit (backend)
-        run: npm audit --audit-level=high
+      - name: Install backend dependencies
+        run: npm ci
         working-directory: backend
 
-      - name: npm audit (frontend)
-        run: npm audit --audit-level=high
+      - name: Install frontend dependencies
+        run: npm ci
         working-directory: frontend
+
+      # audit-ci wraps npm audit with configurable CVSS thresholds and structured JSON output.
+      # --high fails on CVSS >= 7.0 (HIGH and CRITICAL).
+      - name: audit-ci — root workspace
+        run: npx audit-ci@^7 --high --output-format json 2>&1 | tee audit-root.json; exit ${PIPESTATUS[0]}
+
+      - name: audit-ci — backend
+        run: npx audit-ci@^7 --high --output-format json 2>&1 | tee audit-backend.json; exit ${PIPESTATUS[0]}
+        working-directory: backend
+
+      - name: audit-ci — frontend
+        run: npx audit-ci@^7 --high --output-format json 2>&1 | tee audit-frontend.json; exit ${PIPESTATUS[0]}
+        working-directory: frontend
+
+      - name: Upload dependency scan reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-scan-reports-${{ github.sha }}
+          path: |
+            audit-root.json
+            backend/audit-backend.json
+            frontend/audit-frontend.json
+          retention-days: 30
 
   security-gate:
     name: Security Gate

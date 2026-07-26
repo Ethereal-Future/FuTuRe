@@ -35,6 +35,10 @@ jobs:
         run: npm run typecheck
         working-directory: frontend
 
+      - name: Typecheck backend (TypeScript migration - issue #771)
+        run: npx tsc --noEmit
+        working-directory: backend
+
   # ---------------------------------------------------------------------------
   # Job 2 — Unit Tests
   # ---------------------------------------------------------------------------

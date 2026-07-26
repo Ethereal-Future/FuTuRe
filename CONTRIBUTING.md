@@ -337,3 +337,98 @@ Dependabot is configured (`.github/dependabot.yml`) to open weekly PRs for outda
 - Check the changelog / release notes for breaking changes before approving.
 - Run `npm run test:coverage` against the branch locally if the package is a critical runtime dependency.
 - If the update introduces a breaking change that cannot be resolved immediately, close the PR with a comment explaining the blocker and open a tracking issue.
+
+---
+
+## Renovate (Automated Dependency Updates — issue #773)
+
+Renovate Bot is configured via `renovate.json` in the repository root. It automatically opens
+PRs for outdated npm dependencies on a weekly schedule (every weekend) and immediately for
+security advisories.
+
+### What Renovate manages
+
+| Package set | Behaviour |
+|---|---|
+| Minor + patch npm updates | Grouped into a single PR per week |
+| Security-flagged updates | Separate PR opened immediately, labelled `security` |
+| Major npm updates | Separate PR per package, requires manual review |
+| GitHub Actions | Weekly SHA-pin update PR |
+| Prisma (client + CLI + adapter) | Grouped together to keep versions in sync |
+| `@stellar/stellar-sdk` | Pinned exact version — update manually with care |
+| Lock-file maintenance | Monthly PR to refresh `package-lock.json` |
+
+### Reviewing a Renovate PR
+
+1. Read the changelog / release notes linked in the PR body.
+2. Check the CI status — all jobs must pass before merging.
+3. For `@stellar/stellar-sdk` major bumps, test against the Stellar testnet before merging.
+4. Merge Renovate PRs promptly — letting them accumulate defeats the purpose of automation.
+
+### Renovate vs Dependabot
+
+Both tools are active. Renovate handles richer grouping and scheduling; Dependabot remains as
+a fallback for GitHub Actions SHA pinning if Renovate is unavailable. If both open a PR for the
+same package, close the Dependabot one in favour of the Renovate PR.
+
+---
+
+## Docker Image Scanning (Trivy — issue #772)
+
+Every pull request that touches `backend/` or `frontend/` source or Dockerfiles triggers a
+Trivy image vulnerability scan (`.github/workflows/docker-scan.yml`). The scan also runs
+nightly on `main` to catch newly published CVEs against already-merged images.
+
+### Failure thresholds
+
+The scan fails the pipeline on any **HIGH** (CVSS ≥ 7.0) or **CRITICAL** (CVSS ≥ 9.0) CVE
+that has a known fix available. Unfixed CVEs are reported but do not block the pipeline.
+
+### Suppressing a false positive
+
+If a CVE is not exploitable in this deployment context (e.g. a vulnerable code path in a
+library is never reached, or the CVE applies only to a configuration we don't use):
+
+1. Open an issue documenting why the CVE is not exploitable and get approval from a maintainer.
+2. Add the CVE ID to `.trivyignore` with a **dated comment** and a **review date ≤ 90 days**:
+
+   ```
+   CVE-YYYY-NNNNN
+   # Reason: <explanation>. Review by: YYYY-MM-DD.
+   ```
+
+3. Re-evaluate the suppression on the review date. If a fix is now available, remove the
+   suppression and update the base image.
+
+### Keeping base images current
+
+Base image tags (`node:20-alpine`, `nginx:alpine`) should be updated regularly. Renovate will
+open PRs for Dockerfile base image updates when the SHA-pinned digest becomes outdated.
+
+---
+
+## TypeScript Migration (issue #771)
+
+The backend is being incrementally migrated to TypeScript. The migration plan is documented
+in [`docs/typescript-migration.md`](docs/typescript-migration.md).
+
+### Working with the mixed JS/TS codebase
+
+- `backend/tsconfig.json` is configured with `allowJs: true` and `noEmit: true`.
+- `tsc --noEmit` runs in CI as part of the `lint` job — all `.ts` files must compile cleanly.
+- Migrated files live at their original path with a `.ts` extension (e.g. `stellar.ts`).
+- The original `.js` file is retained until all callers are updated, then removed.
+
+### Adding a new backend file
+
+- New files should be written in TypeScript (`.ts`), not JavaScript.
+- Run `npx tsc --noEmit` locally before pushing to confirm the file compiles.
+- Avoid `@ts-ignore` — fix the type. If a third-party type is wrong, use a narrow cast with a comment.
+
+### Migrating an existing JS file
+
+1. Copy the JS file to a `.ts` file of the same name.
+2. Add type annotations to all function parameters and return types.
+3. Fix any `strict` errors — no implicit `any`.
+4. Open a PR with the label `typescript-migration`.
+5. The PR must pass `tsc --noEmit` and all existing tests without modification.
