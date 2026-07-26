@@ -84,9 +84,9 @@ export function NotificationBell() {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const { data } = await apiClient.get('/api/notifications');
-      setNotifications(data || []);
-      const unread = (data || []).filter((n) => !n.read).length;
+      const { data: notifications } = await apiClient.get('/api/notifications');
+      setNotifications(notifications || []);
+      const unread = (notifications || []).filter((n) => !n.read).length;
       setUnreadCount(unread);
     } catch (e) {
       console.error('Failed to fetch notifications:', e);

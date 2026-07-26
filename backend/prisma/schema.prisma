@@ -137,34 +137,46 @@ model StreamFailure {
 }
 
 model Notification {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String
-  channel   String
-  status    String   @default("sent")
-  title     String?
-  body      String
-  read      Boolean  @default(false)
-  metadata  Json?
-  createdAt DateTime @default(now())
+  id                 String   @id @default(uuid())
+  userId             String
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               String
+  channel            String
+  status             String   @default("sent")
+  title              String?
+  body               String
+  read               Boolean  @default(false)
+  actionUrl          String?
+  actionRetryParams  Json?
+  metadata           Json?
+  createdAt          DateTime @default(now())
+  deletedAt          DateTime?
 
   @@index([userId, createdAt])
   @@index([userId, read])
+  @@index([userId, deletedAt])
 }
 
 model NotificationPreference {
-  id               String   @id @default(uuid())
-  userId           String   @unique
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  emailEnabled     Boolean  @default(true)
-  pushEnabled      Boolean  @default(true)
-  smsEnabled       Boolean  @default(false)
-  inAppEnabled     Boolean  @default(true)
-  quietHoursStart  Int      @default(22)
-  quietHoursEnd    Int      @default(7)
-  typeOverrides    Json?
-  updatedAt        DateTime @updatedAt
+  id                        String   @id @default(uuid())
+  userId                    String   @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  emailEnabled              Boolean  @default(true)
+  pushEnabled               Boolean  @default(true)
+  smsEnabled                Boolean  @default(false)
+  inAppEnabled              Boolean  @default(true)
+  quietHoursStart           Int      @default(22)
+  quietHoursEnd             Int      @default(7)
+  typeOverrides             Json?
+  weeklyDigestEnabled       Boolean  @default(false)
+  weeklyDigestDay           Int      @default(1)
+  weeklyDigestTime          Int      @default(9)
+  lowBalanceAlertEnabled    Boolean  @default(false)
+  lowBalanceThreshold       Decimal  @default(10.0)
+  lowBalanceAsset           String   @default("XLM")
+  lastLowBalanceAlertAt     DateTime?
+  lastLowBalanceAlertLevel  Decimal?
+  updatedAt                 DateTime @updatedAt
 }
 
 model KYCRecord {

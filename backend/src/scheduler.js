@@ -2,6 +2,8 @@ import logger from './config/logger.js';
 import { processActiveStreams } from './services/streaming.js';
 import { expireStaleTransactions } from './services/multiSig.js';
 import { startScheduler as startBackupScheduler } from './backup/manager.js';
+import { sendScheduledDigests } from './services/digestGenerator.js';
+import { checkAllUserBalances } from './services/lowBalanceMonitor.js';
 
 let intervals = [];
 
@@ -35,6 +37,38 @@ export async function startScheduler() {
   } catch (err) {
     logger.error('scheduler.backup.failed', { error: err.message });
   }
+
+  // Weekly digest sender - check every hour
+  const digestInterval = setInterval(async () => {
+    try {
+      const result = await sendScheduledDigests();
+      if (result.sent > 0) {
+        logger.info('scheduler.digest.sent', { count: result.sent });
+      }
+      if (result.failed > 0) {
+        logger.warn('scheduler.digest.failed', { count: result.failed });
+      }
+    } catch (err) {
+      logger.error('scheduler.digest.error', { error: err.message });
+    }
+  }, 60 * 60 * 1000); // Every hour
+  intervals.push(digestInterval);
+
+  // Low balance monitor - check every 30 minutes
+  const balanceCheckInterval = setInterval(async () => {
+    try {
+      const result = await checkAllUserBalances();
+      if (result.alertsSent > 0) {
+        logger.info('scheduler.balance.alerts', { count: result.alertsSent });
+      }
+      if (result.checksFailed > 0) {
+        logger.warn('scheduler.balance.checksFailed', { count: result.checksFailed });
+      }
+    } catch (err) {
+      logger.error('scheduler.balance.error', { error: err.message });
+    }
+  }, 30 * 60 * 1000); // Every 30 minutes
+  intervals.push(balanceCheckInterval);
 }
 
 export function stopScheduler() {

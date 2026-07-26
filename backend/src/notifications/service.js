@@ -23,10 +23,12 @@ const CHANNELS = ['email', 'push', 'sms', 'inApp'];
  * @param {string} [params.email] - User's email address (for email channel)
  * @param {string} [params.phone] - User's phone number in E.164 (for SMS channel)
  * @param {string} [params.publicKey] - Stellar public key (for in-app WebSocket broadcast)
+ * @param {string} [params.actionUrl] - Action URL for in-app notifications
+ * @param {object} [params.actionRetryParams] - Retry parameters for failed transactions
  * @param {string[]} [params.channels] - Override which channels to attempt
  * @returns {Promise<object>} Results per channel
  */
-export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, channels = CHANNELS }) {
+export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS }) {
   const results = {};
 
   await Promise.all(
@@ -60,7 +62,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
             result = await sendSms(phone, content);
             break;
           case 'inApp':
-            result = sendInApp(userId, publicKey, { ...content, type });
+            result = await sendInApp(userId, publicKey, { ...content, type, actionUrl, actionRetryParams });
             break;
           default:
             results[channel] = { skipped: true, reason: 'unknown_channel' };
@@ -111,5 +113,31 @@ export async function notifyTransactionFailed(userId, { amount, asset, reason, e
     userId, type: 'transaction_failed',
     data: { amount: String(amount), asset, reason },
     email, phone, publicKey,
+  });
+}
+
+/**
+ * Convenience: notify a user about a failed transaction with retry capability.
+ * Includes action URL and retry parameters for the in-app notification.
+ */
+export async function notifyTransactionFailedWithRetry(userId, {
+  amount,
+  asset,
+  reason,
+  retryable,
+  retryParams,
+  email,
+  phone,
+  publicKey,
+}) {
+  return sendNotification({
+    userId,
+    type: 'transaction_failed',
+    data: { amount: String(amount), asset, reason },
+    email,
+    phone,
+    publicKey,
+    actionUrl: retryable ? '/send' : null,
+    actionRetryParams: retryable ? retryParams : null,
   });
 }
