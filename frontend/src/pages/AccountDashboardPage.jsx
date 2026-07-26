@@ -12,6 +12,8 @@ import { CopyButton } from '../components/CopyButton';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { FeeDisplay } from '../components/FeeDisplay';
 import { NotificationPermissionManager } from '../components/NotificationPermissionManager';
+import { ClaimableBalances } from '../components/ClaimableBalances';
+import { CreateClaimableBalance } from '../components/CreateClaimableBalance';
 import { logError } from '../utils/errorLogger';
 
 function AnimatedBalance({ balance, asset }) {
@@ -184,6 +186,10 @@ export function AccountDashboardPage() {
       </div>
 
       <FeeDisplay />
+
+      <CreateClaimableBalance onSuccess={checkBalance} />
+
+      <ClaimableBalances publicKey={account.publicKey} />
 
       {showQR && account && (
         <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
