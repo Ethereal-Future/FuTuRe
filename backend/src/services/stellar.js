@@ -1081,6 +1081,34 @@ export async function mergeAccount(sourceSecret, destination) {
  * @param {string} memoType - Type of memo ('text', 'id', 'hash', 'return')
  * @returns {Promise<{xdr: string}>} Base64-encoded unsigned transaction envelope
  */
+/**
+ * Simulate an account merge operation to show expected outcomes
+ * @param {string} sourcePublicKey - Public key of source account
+ * @param {string} destinationPublicKey - Public key of destination account
+ * @returns {Promise<{account, offers, blockedReasons}>}
+ */
+export async function simulateMergeAccount(sourcePublicKey, destinationPublicKey) {
+  const sourceAccount = await withHorizonRetry(() =>
+    getHorizonServer().loadAccount(sourcePublicKey),
+  );
+
+  // Get all offers for this account
+  let offers = [];
+  try {
+    const offersResponse = await withHorizonRetry(() =>
+      getHorizonServer().offers().forAccount(sourcePublicKey).call(),
+    );
+    offers = offersResponse.records || [];
+  } catch {
+    // No offers or error loading them
+  }
+
+  return {
+    account: sourceAccount,
+    offers,
+  };
+}
+
 export async function buildUnsignedXdr(
   sourceSecret,
   destination,

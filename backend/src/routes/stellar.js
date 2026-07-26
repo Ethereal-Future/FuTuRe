@@ -949,6 +949,36 @@ router.put(
   },
 );
 
+/**
+ * GET /api/stellar/account/:publicKey/merge-simulation
+ * Simulate an account merge to show expected outcomes and blocking conditions
+ */
+router.get(
+  '/account/:publicKey/merge-simulation',
+  rules.publicKeyParam,
+  validate,
+  async (req, res) => {
+    try {
+      const { publicKey } = req.params;
+      const { destination } = req.query;
+
+      if (!destination) {
+        return res.status(400).json({ error: 'Missing destination parameter' });
+      }
+
+      if (!isValidStellarAddress(destination)) {
+        return res.status(400).json({ error: 'Invalid destination public key' });
+      }
+
+      const result = await StellarService.simulateMergeAccount(publicKey, destination);
+      res.json(result);
+    } catch (error) {
+      logError(req, error, { publicKey: req.params.publicKey });
+      res.status(500).json({ error: 'Failed to simulate account merge' });
+    }
+  },
+);
+
 // POST /api/stellar/account/merge - Merge account (irreversible)
 router.post('/account/merge', rules.mergeAccount, validate, async (req, res) => {
   try {

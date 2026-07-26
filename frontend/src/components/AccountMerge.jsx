@@ -1,32 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import { simulateAccountMerge, stroopsToXLM } from '../utils/accountMergeSimulation.js';
 
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
 
 const STEP_WARN = 'warn';
 const STEP_DEST = 'dest';
+const STEP_SIMULATE = 'simulate';
 const STEP_CONFIRM = 'confirm';
 const STEP_PASSWORD = 'password';
 
-export function AccountMerge({ sourceSecret, onClose, onSuccess, xlmAmount = null }) {
+export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess, xlmAmount = null }) {
   const [step, setStep] = useState(STEP_WARN);
   const [destination, setDestination] = useState('');
   const [confirmText, setConfirmText] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [simulationResult, setSimulationResult] = useState(null);
+  const [simLoading, setSimLoading] = useState(false);
+  const [understoodRisks, setUnderstoodRisks] = useState(false);
 
   const isValidDestination = STELLAR_PUBLIC_KEY.test(destination);
   const isConfirmed = confirmText.toUpperCase() === 'MERGE';
   const isPasswordValid = password.length >= 1;
 
-  const handleNext = () => {
+  const handleNext = async () => {
     switch (step) {
       case STEP_WARN:
         setStep(STEP_DEST);
         break;
       case STEP_DEST:
         if (isValidDestination) {
+          await runSimulation();
+        }
+        break;
+      case STEP_SIMULATE:
+        if (understoodRisks && simulationResult?.valid) {
           setStep(STEP_CONFIRM);
         }
         break;
@@ -40,9 +50,25 @@ export function AccountMerge({ sourceSecret, onClose, onSuccess, xlmAmount = nul
     }
   };
 
+  const runSimulation = async () => {
+    setSimLoading(true);
+    setError(null);
+    try {
+      const result = await simulateAccountMerge(sourcePublicKey, destination);
+      setSimulationResult(result);
+      setUnderstoodRisks(false);
+      setStep(STEP_SIMULATE);
+    } catch (err) {
+      setError(err?.message || 'Failed to simulate account merge');
+    } finally {
+      setSimLoading(false);
+    }
+  };
+
   const handlePrev = () => {
     if (step === STEP_DEST) setStep(STEP_WARN);
-    else if (step === STEP_CONFIRM) setStep(STEP_DEST);
+    else if (step === STEP_SIMULATE) setStep(STEP_DEST);
+    else if (step === STEP_CONFIRM) setStep(STEP_SIMULATE);
     else if (step === STEP_PASSWORD) setStep(STEP_CONFIRM);
   };
 
@@ -69,8 +95,9 @@ export function AccountMerge({ sourceSecret, onClose, onSuccess, xlmAmount = nul
   const stepNumber = {
     [STEP_WARN]: 1,
     [STEP_DEST]: 2,
-    [STEP_CONFIRM]: 3,
-    [STEP_PASSWORD]: 4,
+    [STEP_SIMULATE]: 3,
+    [STEP_CONFIRM]: 4,
+    [STEP_PASSWORD]: 5,
   }[step];
 
   return (
@@ -152,7 +179,107 @@ export function AccountMerge({ sourceSecret, onClose, onSuccess, xlmAmount = nul
           </div>
         )}
 
-        {/* Step 3: Type "MERGE" */}
+        {/* Step 3: Merge Simulation */}
+        {step === STEP_SIMULATE && simulationResult && (
+          <div style={{ marginBottom: 20 }}>
+            {simulationResult.blockedReasons.length > 0 && (
+              <div
+                style={{
+                  background: '#fee2e2',
+                  border: '2px solid #dc2626',
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <p style={{ margin: '0 0 8px 0', fontWeight: 600, color: '#991b1b' }}>
+                  ❌ Cannot merge this account
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 20, color: '#991b1b', fontSize: '0.9rem' }}>
+                  {simulationResult.blockedReasons.map((reason, i) => (
+                    <li key={i}>{reason}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {simulationResult.warning && (
+              <div
+                style={{
+                  background: '#fef3c7',
+                  border: '1px solid #fcd34d',
+                  borderRadius: 8,
+                  padding: 12,
+                  marginBottom: 16,
+                }}
+              >
+                <p style={{ margin: 0, fontSize: '0.9rem', color: '#78350f' }}>
+                  ⚠️ {simulationResult.warning}
+                </p>
+              </div>
+            )}
+
+            <div style={{ background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#1e40af', fontWeight: 600 }}>
+                📊 Simulation Results
+              </p>
+              <dl style={{ margin: 0, fontSize: '0.85rem', color: '#1e40af' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <dt>XLM to transfer</dt>
+                  <dd style={{ fontWeight: 600 }}>{simulationResult.xlmToTransfer?.toFixed(7)} XLM</dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <dt>Destination account</dt>
+                  <dd style={{ fontFamily: 'monospace', fontSize: '0.75rem', wordBreak: 'break-all' }}>
+                    {destination}
+                  </dd>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <dt>Subentries</dt>
+                  <dd>{simulationResult.subentryCount}</dd>
+                </div>
+              </dl>
+            </div>
+
+            {simulationResult.trustlines.length > 0 && (
+              <div style={{ marginBottom: 16 }}>
+                <p style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: 8 }}>
+                  Trustlines ({simulationResult.trustlines.length}):
+                </p>
+                <ul style={{ margin: 0, paddingLeft: 20, fontSize: '0.85rem' }}>
+                  {simulationResult.trustlines.map((tl, i) => (
+                    <li key={i}>{tl.asset_code} {tl.balance}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {simulationResult.valid && (
+              <div style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                borderRadius: 8,
+                padding: 12,
+                marginBottom: 16,
+              }}>
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: '0.9rem', color: '#166534', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={understoodRisks}
+                    onChange={e => setUnderstoodRisks(e.target.checked)}
+                    style={{ marginTop: 2, cursor: 'pointer' }}
+                  />
+                  <span>
+                    I understand this operation is <strong>irreversible</strong> and will permanently close this account.
+                    I have removed all trustlines and offers. I have backed up my secret key.
+                  </span>
+                </label>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Step 4: Type "MERGE" */}
         {step === STEP_CONFIRM && (
           <div style={{ marginBottom: 20 }}>
             <div
@@ -255,11 +382,12 @@ export function AccountMerge({ sourceSecret, onClose, onSuccess, xlmAmount = nul
               type="button"
               onClick={handleNext}
               disabled={
-                (step === STEP_DEST && !isValidDestination) ||
+                (step === STEP_DEST && (!isValidDestination || simLoading)) ||
+                (step === STEP_SIMULATE && (!understoodRisks || !simulationResult?.valid)) ||
                 (step === STEP_CONFIRM && !isConfirmed)
               }
             >
-              Continue →
+              {step === STEP_DEST && simLoading ? 'Simulating…' : 'Continue →'}
             </button>
           )}
 
