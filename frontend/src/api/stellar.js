@@ -275,3 +275,18 @@ export async function submitMultiOpTransaction(payload, options = {}) {
   const response = await apiClient.post('/api/stellar/transaction/multi-op/submit', payload, options);
   return response.data;
 }
+
+export async function sep24Authenticate(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/authenticate', payload, options);
+  return response.data;
+}
+
+export async function sep24InitiateFlow(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/initiate', payload, options);
+  return response.data;
+}
+
+export async function sep24PollStatus(payload, options = {}) {
+  const response = await apiClient.post('/api/sep24/poll-status', payload, options);
+  return response.data;
+}
