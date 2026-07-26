@@ -6,6 +6,7 @@ import { BackupSettings } from './BackupSettings';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { AccountMerge } from './AccountMerge';
 import { ThresholdSettings } from './ThresholdSettings';
+import { ManageDataSettings } from './ManageDataSettings';
 
 const ASSETS = ['XLM', 'USDC', 'EURC'];
 
@@ -333,6 +334,10 @@ export function AccountSettings({ publicKey, onClose }) {
 
             <div style={{ marginBottom: 16 }}>
               <ThresholdSettings publicKey={publicKey} onUpdate={() => {}} />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <ManageDataSettings publicKey={publicKey} onUpdate={() => {}} />
             </div>
 
             <div style={{ marginBottom: 16 }}>

@@ -299,3 +299,12 @@ export async function setThresholds(publicKey, payload, options = {}) {
   );
   return response.data;
 }
+
+export async function manageData(publicKey, payload, options = {}) {
+  const response = await apiClient.post(
+    `/api/stellar/account/${publicKey}/manage-data`,
+    payload,
+    options
+  );
+  return response.data;
+}
