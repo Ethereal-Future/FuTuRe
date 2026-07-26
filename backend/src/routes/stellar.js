@@ -13,6 +13,7 @@ import { keys as cacheKeys, TTL, invalidateBalance } from '../cache/appCache.js'
 import prisma from '../db/client.js';
 import { getSubscriptionByPublicKey, sendWebPush } from '../notifications/webPush.js';
 import { handleTransactionFailure, handleBatchTransactionFailure } from '../services/transactionErrorHandler.js';
+import { monitorBalanceAfterTransaction } from '../services/lowBalanceMonitor.js';
 import logger from '../config/logger.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
@@ -1115,6 +1116,11 @@ router.post(
         payments: payments.length,
         totalAmount,
         successful: true,
+      });
+
+      // Monitor balance after successful transaction
+      monitorBalanceAfterTransaction(senderKey).catch((err) => {
+        logger.error('balanceMonitor.postTransaction', { senderKey, error: err.message });
       });
     } catch (error) {
       logError(req, error, { context: 'batch-payment' });

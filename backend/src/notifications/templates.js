@@ -96,6 +96,34 @@ export const TEMPLATES = {
       body: 'Welcome to FutureRemit! Your account is ready.',
     },
   },
+
+  // Weekly digest
+  weekly_digest: {
+    email: {
+      subject: 'Your Weekly Transaction Summary ({{weekStartDay}} - {{weekEndDay}})',
+      body: 'Hi {{userName}},\n\nHere\'s your weekly transaction summary:\n\nPeriod: {{weekStartDay}} to {{weekEndDay}}\n\nTransactions: {{transactionCount}}\nTotal Sent: {{totalSent}} XLM\nTotal Received: {{totalReceived}} XLM\nCurrent Balance: {{balance}} XLM\n\nTop Transactions:\n{{transactionList}}\n\nView your complete transaction history in your FutureRemit dashboard.\n\nStay secure!',
+    },
+    inApp: {
+      title: 'Weekly Summary',
+      body: 'You had {{transactionCount}} transactions this week. Total sent: {{totalSent}} XLM, received: {{totalReceived}} XLM.',
+    },
+  },
+
+  // Low balance alert
+  low_balance_alert: {
+    email: {
+      subject: 'Balance Alert: {{currentBalance}} {{asset}} is below {{threshold}} {{asset}}',
+      body: 'Hi {{userName}},\n\nYour account balance has dropped to {{currentBalance}} {{asset}}, which is below your alert threshold of {{threshold}} {{asset}}.\n\nCurrent Balance: {{currentBalance}} {{asset}}\nThreshold: {{threshold}} {{asset}}\n\nConsider adding funds to your account if needed.\n\nView your account in FutureRemit.',
+    },
+    push: {
+      title: 'Low Balance Alert',
+      body: 'Your {{asset}} balance is now {{currentBalance}}',
+    },
+    inApp: {
+      title: 'Low Balance Alert',
+      body: 'Your {{asset}} balance ({{currentBalance}}) is below your alert threshold ({{threshold}} {{asset}})',
+    },
+  },
 };
 
 /**
