@@ -44,5 +44,11 @@
       "form_factor": "narrow",
       "label": "Send Payment form on mobile"
     }
+  ],
+  "protocol_handlers": [
+    {
+      "protocol": "web+stellar",
+      "url": "/?uri=%s"
+    }
   ]
 }

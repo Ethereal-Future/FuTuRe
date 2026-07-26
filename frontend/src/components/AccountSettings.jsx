@@ -433,6 +433,7 @@ export function AccountSettings({ publicKey, onClose }) {
         {showMerge && (
           <AccountMerge
             sourceSecret={localStorage.getItem('secretKey')}
+            sourcePublicKey={publicKey}
             onClose={() => setShowMerge(false)}
             onSuccess={() => {
               setShowMerge(false);

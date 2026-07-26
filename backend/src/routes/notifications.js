@@ -233,6 +233,8 @@ router.get('/stats', (req, res) => {
 });
 
 import { saveSubscription, getSubscription } from '../notifications/webPush.js';
+import { startPaymentMonitoring, stopPaymentMonitoring, isMonitoring } from '../services/paymentNotificationMonitor.js';
+import { requireKYC } from '../middleware/kyc.js';
 
 /**
  * @swagger
@@ -274,6 +276,100 @@ router.post('/push/subscribe', [
 /** GET /api/notifications/push/subscription — for testing */
 router.get('/push/subscription', (req, res) => {
   res.json({ subscription: getSubscription(req.user.sub) });
+});
+
+/**
+ * @swagger
+ * /api/notifications/push/monitor:
+ *   post:
+ *     summary: Start monitoring account for incoming payments
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [publicKey]
+ *             properties:
+ *               publicKey:
+ *                 type: string
+ *                 description: Stellar public key to monitor
+ *     responses:
+ *       200:
+ *         description: Monitoring started
+ *       400:
+ *         description: Invalid public key
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/push/monitor', [
+  body('publicKey').isString().matches(/^G[A-Z2-7]{55}$/),
+], validate, requireKYC, (req, res) => {
+  const { publicKey } = req.body;
+  try {
+    startPaymentMonitoring(publicKey);
+    res.json({ monitoring: true, publicKey });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/push/monitor/{publicKey}:
+ *   delete:
+ *     summary: Stop monitoring account for incoming payments
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: publicKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Monitoring stopped
+ *       401:
+ *         description: Unauthorized
+ */
+router.delete('/push/monitor/:publicKey', (req, res) => {
+  const { publicKey } = req.params;
+  try {
+    stopPaymentMonitoring(publicKey);
+    res.json({ monitoring: false, publicKey });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notifications/push/monitor/{publicKey}:
+ *   get:
+ *     summary: Check if account is being monitored
+ *     tags: [Notifications]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: publicKey
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Monitor status
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/push/monitor/:publicKey', (req, res) => {
+  const { publicKey } = req.params;
+  res.json({ monitoring: isMonitoring(publicKey), publicKey });
 });
 
 export default router;

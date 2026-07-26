@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import apiClient from '../api/client.js';
 import { isValidStellarAddress } from '../utils/validateStellarAddress';
@@ -12,6 +12,7 @@ import { QRScanner } from '../components/QRScanner';
 import { ConfirmSendDialog } from '../components/ConfirmSendDialog';
 import { PaymentConfirmationModal } from '../components/PaymentConfirmationModal';
 import { LargeTransactionWarning } from '../components/LargeTransactionWarning';
+import { Sep7UriHandler } from '../components/Sep7UriHandler';
 import { logError } from '../utils/errorLogger';
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
@@ -25,10 +26,46 @@ export function SendPaymentPage() {
   const [showScanner, setShowScanner] = useState(false);
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [kycStatus, setKycStatus] = useState(null);
+  const [sep7Uri, setSep7Uri] = useState(null);
+  const [showSep7Handler, setShowSep7Handler] = useState(false);
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
+
+  // Handle SEP-0007 URI from protocol handler or URL params
+  useEffect(() => {
+    const handleSep7Uri = async () => {
+      // Check for URI in URL query params (for direct navigation)
+      const params = new URLSearchParams(window.location.search);
+      const uriParam = params.get('uri');
+
+      if (uriParam) {
+        setSep7Uri(uriParam);
+        setShowSep7Handler(true);
+        return;
+      }
+
+      // Check for shared data from protocol handler
+      if (window.navigator.canShare && navigator.share) {
+        // Note: This is handled by checking launchQueue if available
+        // For PWA protocol handling, the URI comes through query params
+      }
+    };
+
+    handleSep7Uri();
+
+    // Listen for protocol handler events (in case app is already loaded)
+    const handleProtocolUri = (e) => {
+      if (e.data?.type === 'SEP7_URI') {
+        setSep7Uri(e.data.uri);
+        setShowSep7Handler(true);
+      }
+    };
+
+    window.addEventListener('message', handleProtocolUri);
+    return () => window.removeEventListener('message', handleProtocolUri);
+  }, []);
 
   const xlmBalance = balance?.balances?.find(b => b.asset === 'XLM')?.balance ?? null;
   const amountTouched = amount.length > 0;
@@ -76,6 +113,27 @@ export function SendPaymentPage() {
   const confirmPayment = () => {
     setShowPaymentConfirmation(false);
     sendPayment();
+  };
+
+  const handleSep7Load = (parsed) => {
+    setShowSep7Handler(false);
+    // Pre-populate the form with SEP-0007 data
+    dispatch({ type: A.SET_RECIPIENT, payload: parsed.destination });
+    if (parsed.amount) {
+      dispatch({ type: A.SET_AMOUNT, payload: parsed.amount });
+    }
+    if (parsed.memo) {
+      dispatch({ type: A.SET_MEMO, payload: parsed.memo });
+      if (parsed.memoType) {
+        dispatch({ type: A.SET_MEMO_TYPE, payload: parsed.memoType });
+      }
+    }
+    msg.info('Payment details pre-filled. Please review and confirm.');
+  };
+
+  const handleSep7Error = (error) => {
+    setShowSep7Handler(false);
+    msg.error(`Invalid payment link: ${error}`);
   };
 
   return (
@@ -172,9 +230,21 @@ export function SendPaymentPage() {
         recipient={recipient}
         amount={amount}
         asset="XLM"
+        sourceSecret={account?.secretKey}
+        memo={memo}
+        memoType={memoType}
         onConfirm={() => { setShowConfirm(false); sendPayment(); }}
         onCancel={() => setShowConfirm(false)}
       />
+
+      {showSep7Handler && (
+        <Sep7UriHandler
+          uri={sep7Uri}
+          onLoad={handleSep7Load}
+          onError={handleSep7Error}
+          onClose={() => setShowSep7Handler(false)}
+        />
+      )}
     </motion.section>
   );
 }
