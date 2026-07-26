@@ -41,6 +41,7 @@ import { PathPayment } from './components/PathPayment';
 import { FeeDisplay } from './components/FeeDisplay';
 import { InlineConfirmation } from './components/InlineConfirmation';
 import { logError } from './utils/errorLogger';
+import { saveBalance, getCachedBalance } from './cache/balanceCache.js';
 import { ImportAccountForm } from './components/ImportAccountForm';
 import { ConfirmSendDialog } from './components/ConfirmSendDialog';
 import { LanguageSelector } from './components/LanguageSelector';
@@ -127,6 +128,9 @@ function App() {
   const [showBackupSettings, setShowBackupSettings] = useState(false);
   const [userRole, setUserRole] = useState(null);
   const [federationStatus, setFederationStatus] = useState('');
+  // Timestamp (ms) of the cached balance currently on screen, or null when
+  // the displayed balance came from a live Horizon response.
+  const [balanceCachedAt, setBalanceCachedAt] = useState(null);
 
   const { t } = useTranslation();
   const msg = useMessages();
@@ -418,14 +422,32 @@ function App() {
     try {
       const data = await getAccount(account.publicKey);
       dispatch({ type: A.SET_BALANCE, payload: data });
+      setBalanceCachedAt(null);
+      saveBalance(account.publicKey, data).catch(() => {});
     } catch (error) {
       logError(error, { context: 'checkBalance' });
-      msg.error(getFriendlyError(error), { retry: checkBalance });
+      // A response object means the server was reachable and actually
+      // rejected the request — that's a real error, not an offline fallback.
+      const isNetworkFailure = !navigator.onLine || !error.response;
+      const cached = isNetworkFailure ? await getCachedBalance(account.publicKey).catch(() => null) : null;
+      if (cached) {
+        dispatch({ type: A.SET_BALANCE, payload: cached.balance });
+        setBalanceCachedAt(cached.cachedAt);
+      } else {
+        msg.error(getFriendlyError(error), { retry: checkBalance });
+      }
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, dispatch, msg]);
+
+  // Show the last-known balance immediately when the account loads, so users
+  // checking on a flaky connection aren't greeted by a blank balance field.
+  useEffect(() => {
+    if (account?.publicKey && balance === null) checkBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.publicKey]);
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
@@ -1351,6 +1373,22 @@ function App() {
                                 </span>
                               </motion.p>
                             ))}
+                            {balanceCachedAt && (
+                              <p
+                                className="balance-cached-indicator"
+                                title={`Last updated ${new Date(balanceCachedAt).toLocaleString()}`}
+                                style={{
+                                  fontSize: '0.8rem',
+                                  color: '#6b7280',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  marginTop: 4,
+                                }}
+                              >
+                                🕒 Cached — last updated {new Date(balanceCachedAt).toLocaleString()}
+                              </p>
+                            )}
                           </motion.div>
                         ) : null}
                       </AnimatePresence>
