@@ -263,13 +263,19 @@ router.put('/preferences', [
   body('inApp').optional().isBoolean(),
   body('quietHoursStart').optional().isInt({ min: 0, max: 23 }),
   body('quietHoursEnd').optional().isInt({ min: 0, max: 23 }),
+  body('weeklyDigestEnabled').optional().isBoolean(),
+  body('weeklyDigestDay').optional().isInt({ min: 0, max: 6 }),
+  body('weeklyDigestTime').optional().isInt({ min: 0, max: 23 }),
+  body('lowBalanceAlertEnabled').optional().isBoolean(),
+  body('lowBalanceThreshold').optional().isFloat({ min: 0 }),
+  body('lowBalanceAsset').optional().isString().trim(),
   body('types').optional().isObject(),
 ], validate, async (req, res) => {
   try {
     const prefs = await updatePreferences(req.user.sub, req.body);
     res.json({ preferences: prefs });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 

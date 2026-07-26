@@ -52,19 +52,31 @@ export function NotificationPreferences() {
     inApp: true,
     quietHoursStart: 22,
     quietHoursEnd: 7,
+    weeklyDigestEnabled: false,
+    weeklyDigestDay: 1,
+    weeklyDigestTime: 9,
+    lowBalanceAlertEnabled: false,
+    lowBalanceThreshold: 10.0,
+    lowBalanceAsset: 'XLM',
   });
 
   const fetchPreferences = useCallback(async () => {
     setLoading(true);
     try {
-      const { data } = await apiClient.get('/api/notifications/preferences');
+      const { preferences: prefs } = await apiClient.get('/api/notifications/preferences');
       setPreferences({
-        email: data.preferences.emailEnabled ?? true,
-        push: data.preferences.pushEnabled ?? true,
-        sms: data.preferences.smsEnabled ?? false,
-        inApp: data.preferences.inAppEnabled ?? true,
-        quietHoursStart: data.preferences.quietHoursStart ?? 22,
-        quietHoursEnd: data.preferences.quietHoursEnd ?? 7,
+        email: prefs.emailEnabled ?? true,
+        push: prefs.pushEnabled ?? true,
+        sms: prefs.smsEnabled ?? false,
+        inApp: prefs.inAppEnabled ?? true,
+        quietHoursStart: prefs.quietHoursStart ?? 22,
+        quietHoursEnd: prefs.quietHoursEnd ?? 7,
+        weeklyDigestEnabled: prefs.weeklyDigestEnabled ?? false,
+        weeklyDigestDay: prefs.weeklyDigestDay ?? 1,
+        weeklyDigestTime: prefs.weeklyDigestTime ?? 9,
+        lowBalanceAlertEnabled: prefs.lowBalanceAlertEnabled ?? false,
+        lowBalanceThreshold: prefs.lowBalanceThreshold ?? 10.0,
+        lowBalanceAsset: prefs.lowBalanceAsset ?? 'XLM',
       });
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load preferences');
@@ -98,6 +110,12 @@ export function NotificationPreferences() {
         inApp: preferences.inApp,
         quietHoursStart: preferences.quietHoursStart,
         quietHoursEnd: preferences.quietHoursEnd,
+        weeklyDigestEnabled: preferences.weeklyDigestEnabled,
+        weeklyDigestDay: preferences.weeklyDigestDay,
+        weeklyDigestTime: preferences.weeklyDigestTime,
+        lowBalanceAlertEnabled: preferences.lowBalanceAlertEnabled,
+        lowBalanceThreshold: parseFloat(preferences.lowBalanceThreshold),
+        lowBalanceAsset: preferences.lowBalanceAsset,
       });
 
       setSuccess('Notification preferences saved successfully!');
@@ -215,6 +233,97 @@ export function NotificationPreferences() {
             Quiet hours: {String(preferences.quietHoursStart).padStart(2, '0')}:00 to{' '}
             {String(preferences.quietHoursEnd).padStart(2, '0')}:00
           </p>
+        </div>
+
+        {/* Weekly Email Digest */}
+        <div style={{ paddingBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Weekly Transaction Digest</h3>
+            <Toggle
+              checked={preferences.weeklyDigestEnabled}
+              onChange={() => setPreferences((prev) => ({ ...prev, weeklyDigestEnabled: !prev.weeklyDigestEnabled }))}
+            />
+          </div>
+          <p style={{ fontSize: '0.875rem', color: '#666', marginBottom: 12 }}>
+            Receive a weekly summary of your transaction activity via email.
+          </p>
+
+          {preferences.weeklyDigestEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <FormField label="Delivery Day" required>
+                <select
+                  value={preferences.weeklyDigestDay}
+                  onChange={(e) => setPreferences((prev) => ({ ...prev, weeklyDigestDay: parseInt(e.target.value, 10) }))}
+                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                >
+                  <option value={0}>Sunday</option>
+                  <option value={1}>Monday</option>
+                  <option value={2}>Tuesday</option>
+                  <option value={3}>Wednesday</option>
+                  <option value={4}>Thursday</option>
+                  <option value={5}>Friday</option>
+                  <option value={6}>Saturday</option>
+                </select>
+              </FormField>
+
+              <FormField label="Delivery Time (UTC)" required>
+                <select
+                  value={preferences.weeklyDigestTime}
+                  onChange={(e) => setPreferences((prev) => ({ ...prev, weeklyDigestTime: parseInt(e.target.value, 10) }))}
+                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                >
+                  {Array.from({ length: 24 }).map((_, i) => (
+                    <option key={i} value={i}>
+                      {String(i).padStart(2, '0')}:00
+                    </option>
+                  ))}
+                </select>
+              </FormField>
+            </div>
+          )}
+        </div>
+
+        {/* Low Balance Alert */}
+        <div style={{ paddingBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, margin: 0 }}>Low Balance Alert</h3>
+            <Toggle
+              checked={preferences.lowBalanceAlertEnabled}
+              onChange={() => setPreferences((prev) => ({ ...prev, lowBalanceAlertEnabled: !prev.lowBalanceAlertEnabled }))}
+            />
+          </div>
+          <p style={{ fontSize: '0.875rem', color: '#666', marginBottom: 12 }}>
+            Get notified when your account balance drops below a threshold.
+          </p>
+
+          {preferences.lowBalanceAlertEnabled && (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <FormField label="Alert Threshold" required>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0"
+                  value={preferences.lowBalanceThreshold}
+                  onChange={(e) => setPreferences((prev) => ({ ...prev, lowBalanceThreshold: e.target.value }))}
+                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                  placeholder="e.g., 10.0"
+                />
+              </FormField>
+
+              <FormField label="Asset" required>
+                <select
+                  value={preferences.lowBalanceAsset}
+                  onChange={(e) => setPreferences((prev) => ({ ...prev, lowBalanceAsset: e.target.value }))}
+                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+                >
+                  <option value="XLM">XLM (Stellar Lumens)</option>
+                  <option value="USDC">USDC</option>
+                  <option value="BTC">BTC</option>
+                  <option value="ETH">ETH</option>
+                </select>
+              </FormField>
+            </div>
+          )}
         </div>
 
         {/* Info Box */}

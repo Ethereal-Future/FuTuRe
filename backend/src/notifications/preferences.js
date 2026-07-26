@@ -13,6 +13,12 @@ export const DEFAULT_PREFERENCES = {
   inApp: true,
   quietHoursStart: 22, // 10 PM
   quietHoursEnd: 7,    // 7 AM
+  weeklyDigestEnabled: false,
+  weeklyDigestDay: 1,  // Monday
+  weeklyDigestTime: 9, // 9 AM
+  lowBalanceAlertEnabled: false,
+  lowBalanceThreshold: 10.0,
+  lowBalanceAsset: 'XLM',
   types: {
     transaction_received: { email: true, push: true, sms: false, inApp: true },
     transaction_sent:     { email: true, push: true, sms: false, inApp: true },
@@ -31,20 +37,39 @@ const prefsStore = new Map();
  * @returns {object}
  */
 export async function getPreferences(userId) {
-  // Check DB for master notificationsOn flag
-  let notificationsOn = true;
   try {
-    const setting = await prisma.setting.findUnique({ where: { userId } });
-    if (setting) notificationsOn = setting.notificationsOn;
+    // Fetch from database first
+    const notificationPrefs = await prisma.notificationPreference.findUnique({
+      where: { userId },
+    });
+
+    if (notificationPrefs) {
+      return {
+        ...DEFAULT_PREFERENCES,
+        emailEnabled: notificationPrefs.emailEnabled,
+        pushEnabled: notificationPrefs.pushEnabled,
+        smsEnabled: notificationPrefs.smsEnabled,
+        inAppEnabled: notificationPrefs.inAppEnabled,
+        quietHoursStart: notificationPrefs.quietHoursStart,
+        quietHoursEnd: notificationPrefs.quietHoursEnd,
+        weeklyDigestEnabled: notificationPrefs.weeklyDigestEnabled,
+        weeklyDigestDay: notificationPrefs.weeklyDigestDay,
+        weeklyDigestTime: notificationPrefs.weeklyDigestTime,
+        lowBalanceAlertEnabled: notificationPrefs.lowBalanceAlertEnabled,
+        lowBalanceThreshold: notificationPrefs.lowBalanceThreshold,
+        lowBalanceAsset: notificationPrefs.lowBalanceAsset,
+        typeOverrides: notificationPrefs.typeOverrides || {},
+      };
+    }
   } catch (err) {
     logger.warn('notifications.preferences.dbRead.failed', { userId, error: err.message });
   }
 
+  // Check in-memory store for backward compatibility
   const stored = prefsStore.get(userId) ?? {};
   return {
     ...DEFAULT_PREFERENCES,
     ...stored,
-    notificationsOn,
     types: { ...DEFAULT_PREFERENCES.types, ...(stored.types ?? {}) },
   };
 }
@@ -54,7 +79,7 @@ export async function getPreferences(userId) {
  * @param {string} userId
  * @param {object} updates
  * @returns {object} merged preferences
- * @throws {Error} if quiet hours are invalid
+ * @throws {Error} if preferences are invalid
  */
 export async function updatePreferences(userId, updates) {
   // Validate quiet hours if provided
@@ -69,29 +94,62 @@ export async function updatePreferences(userId, updates) {
     }
   }
 
-  const current = await getPreferences(userId);
-
-  // Persist notificationsOn to DB Setting
-  if (typeof updates.notificationsOn === 'boolean') {
-    try {
-      await prisma.setting.upsert({
-        where: { userId },
-        update: { notificationsOn: updates.notificationsOn },
-        create: { userId, notificationsOn: updates.notificationsOn },
-      });
-    } catch (err) {
-      logger.warn('notifications.preferences.dbWrite.failed', { userId, error: err.message });
+  // Validate weekly digest day if provided
+  if (typeof updates.weeklyDigestDay !== 'undefined') {
+    if (!Number.isInteger(updates.weeklyDigestDay) || updates.weeklyDigestDay < 0 || updates.weeklyDigestDay > 6) {
+      throw new Error('weeklyDigestDay must be an integer between 0 and 6');
     }
   }
 
-  const merged = {
-    ...current,
-    ...updates,
-    types: { ...current.types, ...(updates.types ?? {}) },
-  };
-  prefsStore.set(userId, merged);
+  // Validate weekly digest time if provided
+  if (typeof updates.weeklyDigestTime !== 'undefined') {
+    if (!Number.isInteger(updates.weeklyDigestTime) || updates.weeklyDigestTime < 0 || updates.weeklyDigestTime > 23) {
+      throw new Error('weeklyDigestTime must be an integer between 0 and 23');
+    }
+  }
+
+  // Validate low balance threshold if provided
+  if (typeof updates.lowBalanceThreshold !== 'undefined') {
+    const threshold = parseFloat(updates.lowBalanceThreshold);
+    if (Number.isNaN(threshold) || threshold < 0) {
+      throw new Error('lowBalanceThreshold must be a positive number');
+    }
+  }
+
+  try {
+    // Upsert notification preferences to database
+    const updateData = {};
+
+    if (typeof updates.email !== 'undefined') updateData.emailEnabled = updates.email;
+    if (typeof updates.push !== 'undefined') updateData.pushEnabled = updates.push;
+    if (typeof updates.sms !== 'undefined') updateData.smsEnabled = updates.sms;
+    if (typeof updates.inApp !== 'undefined') updateData.inAppEnabled = updates.inApp;
+    if (typeof updates.quietHoursStart !== 'undefined') updateData.quietHoursStart = updates.quietHoursStart;
+    if (typeof updates.quietHoursEnd !== 'undefined') updateData.quietHoursEnd = updates.quietHoursEnd;
+    if (typeof updates.weeklyDigestEnabled !== 'undefined') updateData.weeklyDigestEnabled = updates.weeklyDigestEnabled;
+    if (typeof updates.weeklyDigestDay !== 'undefined') updateData.weeklyDigestDay = updates.weeklyDigestDay;
+    if (typeof updates.weeklyDigestTime !== 'undefined') updateData.weeklyDigestTime = updates.weeklyDigestTime;
+    if (typeof updates.lowBalanceAlertEnabled !== 'undefined') updateData.lowBalanceAlertEnabled = updates.lowBalanceAlertEnabled;
+    if (typeof updates.lowBalanceThreshold !== 'undefined') updateData.lowBalanceThreshold = parseFloat(updates.lowBalanceThreshold);
+    if (typeof updates.lowBalanceAsset !== 'undefined') updateData.lowBalanceAsset = updates.lowBalanceAsset;
+
+    await prisma.notificationPreference.upsert({
+      where: { userId },
+      update: updateData,
+      create: {
+        userId,
+        ...updateData,
+      },
+    });
+  } catch (err) {
+    logger.error('notifications.preferences.dbWrite.failed', { userId, error: err.message });
+    throw err;
+  }
+
+  const current = await getPreferences(userId);
+  prefsStore.set(userId, current);
   logger.info('notifications.preferences.updated', { userId });
-  return merged;
+  return current;
 }
 
 /**
