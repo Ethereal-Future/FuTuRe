@@ -506,5 +506,51 @@
     "addressPlaceholder": "Stellar address",
     "addContact": "+ Add Contact",
     "removeContact": "Remove {{name}}"
+  },
+  "largeTxWarning": {
+    "title": "Large Transaction",
+    "sendingIntro": "You are about to send",
+    "verifyDetails": ". Please verify the details carefully:",
+    "recipientAddress": "Recipient address",
+    "recipientVerified": "is correct and verified",
+    "amountLabel": "Amount",
+    "amountCorrect": ") is correct",
+    "networkLabel": "Network",
+    "networkCorrect": "(testnet/mainnet) is correct",
+    "verifiedButton": "✓ I've Verified Everything",
+    "clickToProceed": "Click to proceed with the transaction",
+    "readyToSend": "✓ Verified. Ready to send."
+  },
+  "transactionReviewCard": {
+    "title": "Transaction Details",
+    "to": "To:",
+    "amount": "Amount:",
+    "currentBalance": "Current Balance:",
+    "afterTransaction": "After Transaction:"
+  },
+  "securityKeyWarning": {
+    "title": "Secret Key Security Alert",
+    "subtitle": "Your secret key is displayed. Keep it secure and private.",
+    "neverShareStrong": "Never share",
+    "neverShareRest": "your secret key with anyone, including support staff",
+    "neverPasteStrong": "Never paste",
+    "neverPasteRest": "your secret key into websites or applications you don't trust",
+    "storeOfflineStrong": "Store offline",
+    "storeOfflineRest": "in a secure location (hardware wallet, encrypted file, etc.)",
+    "screenshotStrong": "Screenshot carefully",
+    "screenshotRest": "and store in encrypted cloud storage only",
+    "anyoneStrong": "Anyone with this key",
+    "anyoneRest": "can access and transfer all your funds",
+    "acknowledge": "I Understand the Risks"
+  },
+  "secretKeyDisplay": {
+    "publicKeyLabel": "Public Key (safe to share)",
+    "secretKeyLabel": "Secret Key (Keep Private & Secure)",
+    "copied": "✓ Copied",
+    "copy": "Copy",
+    "hide": "👁 Hide",
+    "show": "👁 Show",
+    "tipStrong": "Tip:",
+    "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
   }
 }

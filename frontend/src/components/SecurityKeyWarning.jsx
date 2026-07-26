@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { makeVariants, tapScale } from '../utils/animations';
 
 /**
@@ -8,6 +9,7 @@ import { makeVariants, tapScale } from '../utils/animations';
  * Props: onAcknowledge
  */
 export function SecurityKeyWarning({ onAcknowledge }) {
+  const { t } = useTranslation();
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
@@ -19,31 +21,31 @@ export function SecurityKeyWarning({ onAcknowledge }) {
       <div className="security-warning__header">
         <span className="security-warning__icon">🔐</span>
         <div>
-          <h3 className="security-warning__title">Secret Key Security Alert</h3>
-          <p className="security-warning__subtitle">Your secret key is displayed. Keep it secure and private.</p>
+          <h3 className="security-warning__title">{t('securityKeyWarning.title')}</h3>
+          <p className="security-warning__subtitle">{t('securityKeyWarning.subtitle')}</p>
         </div>
       </div>
 
       <ul className="security-warning__list">
         <li className="security-warning__list-item">
           <span className="security-warning__list-icon">⚠️</span>
-          <span><strong>Never share</strong> your secret key with anyone, including support staff</span>
+          <span><strong>{t('securityKeyWarning.neverShareStrong')}</strong> {t('securityKeyWarning.neverShareRest')}</span>
         </li>
         <li className="security-warning__list-item">
           <span className="security-warning__list-icon">⚠️</span>
-          <span><strong>Never paste</strong> your secret key into websites or applications you don't trust</span>
+          <span><strong>{t('securityKeyWarning.neverPasteStrong')}</strong> {t('securityKeyWarning.neverPasteRest')}</span>
         </li>
         <li className="security-warning__list-item">
           <span className="security-warning__list-icon">⚠️</span>
-          <span><strong>Store offline</strong> in a secure location (hardware wallet, encrypted file, etc.)</span>
+          <span><strong>{t('securityKeyWarning.storeOfflineStrong')}</strong> {t('securityKeyWarning.storeOfflineRest')}</span>
         </li>
         <li className="security-warning__list-item">
           <span className="security-warning__list-icon">⚠️</span>
-          <span><strong>Screenshot carefully</strong> and store in encrypted cloud storage only</span>
+          <span><strong>{t('securityKeyWarning.screenshotStrong')}</strong> {t('securityKeyWarning.screenshotRest')}</span>
         </li>
         <li className="security-warning__list-item">
           <span className="security-warning__list-icon">⚠️</span>
-          <span><strong>Anyone with this key</strong> can access and transfer all your funds</span>
+          <span><strong>{t('securityKeyWarning.anyoneStrong')}</strong> {t('securityKeyWarning.anyoneRest')}</span>
         </li>
       </ul>
 
@@ -53,7 +55,7 @@ export function SecurityKeyWarning({ onAcknowledge }) {
           {...tap}
           className="security-warning__button"
         >
-          I Understand the Risks
+          {t('securityKeyWarning.acknowledge')}
         </motion.button>
       </div>
     </motion.div>
@@ -65,6 +67,7 @@ export function SecurityKeyWarning({ onAcknowledge }) {
  * Props: secretKey, publicKey
  */
 export function SecretKeyDisplay({ secretKey, publicKey }) {
+  const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
   const [acknowledged, setAcknowledged] = useState(false);
   const [copied, setCopied] = useState(null);
@@ -97,7 +100,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
             style={{ marginBottom: 16 }}
           >
             <div className="secret-key-display__field">
-              <label className="secret-key-display__label">Public Key (safe to share)</label>
+              <label className="secret-key-display__label">{t('secretKeyDisplay.publicKeyLabel')}</label>
               <div className="secret-key-display__input-group secret-key-display__input-group--public">
                 <code className="secret-key-display__code">{publicKey}</code>
                 <motion.button
@@ -105,13 +108,13 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
                   {...tap}
                   className="secret-key-display__button"
                 >
-                  {copied === 'public' ? '✓ Copied' : 'Copy'}
+                  {copied === 'public' ? t('secretKeyDisplay.copied') : t('secretKeyDisplay.copy')}
                 </motion.button>
               </div>
             </div>
 
             <div className="secret-key-display__field">
-              <label className="secret-key-display__label">Secret Key (Keep Private & Secure)</label>
+              <label className="secret-key-display__label">{t('secretKeyDisplay.secretKeyLabel')}</label>
               <div className="secret-key-display__input-group secret-key-display__input-group--secret">
                 <code className={`secret-key-display__code ${revealed ? 'secret-key-display__code--secret' : 'secret-key-display__code--masked'}`}>
                   {revealed ? secretKey : masked}
@@ -121,7 +124,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
                   {...tap}
                   className="secret-key-display__button secret-key-display__button--reveal"
                 >
-                  {revealed ? '👁 Hide' : '👁 Show'}
+                  {revealed ? t('secretKeyDisplay.hide') : t('secretKeyDisplay.show')}
                 </motion.button>
                 <motion.button
                   onClick={() => handleCopy(secretKey, 'secret')}
@@ -129,7 +132,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
                   disabled={!revealed}
                   className="secret-key-display__button secret-key-display__button--copy"
                 >
-                  {copied === 'secret' ? '✓ Copied' : 'Copy'}
+                  {copied === 'secret' ? t('secretKeyDisplay.copied') : t('secretKeyDisplay.copy')}
                 </motion.button>
               </div>
             </div>
@@ -138,8 +141,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
               className="secret-key-display__tip"
               variants={v.fadeSlide} initial="hidden" animate="visible"
             >
-              💡 <strong>Tip:</strong> Save both keys somewhere secure before leaving this page.
-              They will not be displayed again.
+              💡 <strong>{t('secretKeyDisplay.tipStrong')}</strong> {t('secretKeyDisplay.tipRest')}
             </motion.div>
           </motion.div>
         )}
