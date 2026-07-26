@@ -11,6 +11,7 @@ import { useCountUp } from '../hooks/useCountUp';
 import { CopyButton } from '../components/CopyButton';
 import { QRCodeModal } from '../components/QRCodeModal';
 import { FeeDisplay } from '../components/FeeDisplay';
+import { NotificationPermissionManager } from '../components/NotificationPermissionManager';
 import { logError } from '../utils/errorLogger';
 
 function AnimatedBalance({ balance, asset }) {
@@ -137,6 +138,13 @@ export function AccountDashboardPage() {
           )}
         </div>
       </div>
+
+      <NotificationPermissionManager
+        publicKey={account.publicKey}
+        onStatusChange={(status) => {
+          // Handle status change if needed
+        }}
+      />
 
       <div style={{ marginBottom: 20, padding: 16, background: '#f9fafb', borderRadius: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
