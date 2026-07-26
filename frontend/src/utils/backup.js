@@ -132,6 +132,22 @@ export async function decryptBackup(envelope, password) {
   return JSON.parse(new TextDecoder().decode(plaintext));
 }
 
+/**
+ * Verify a parsed backup envelope against the currently loaded account,
+ * without ever exposing the decrypted secret key to the caller.
+ * @returns {Promise<{outcome: 'success'|'mismatch', createdAt: string, backupPublicKey: string}>}
+ * @throws {Error} with .code === BACKUP_ERROR_CODES.WRONG_PASSWORD on decryption failure
+ */
+export async function verifyBackupAgainstAccount(envelope, password, currentPublicKey) {
+  const decrypted = await decryptBackup(envelope, password);
+
+  if (!currentPublicKey || decrypted.publicKey !== currentPublicKey) {
+    return { outcome: 'mismatch', createdAt: envelope.createdAt, backupPublicKey: decrypted.publicKey };
+  }
+
+  return { outcome: 'success', createdAt: envelope.createdAt, backupPublicKey: decrypted.publicKey };
+}
+
 /** Build the download filename, e.g. future-backup-2026-07-26.enc */
 export function buildBackupFilename(date = new Date()) {
   const iso = date.toISOString().slice(0, 10);
