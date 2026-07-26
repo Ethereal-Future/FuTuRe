@@ -224,6 +224,21 @@ Key conventions:
 - No unused variables; `_` prefix for intentionally unused parameters.
 - Keep functions small and single-purpose; avoid deeply nested callbacks.
 
+### Image Assets
+
+New raster assets (PNG/JPG/WebP) must be provided at 1x, 2x, and 3x
+resolution, named `name.png`, `name@2x.png`, `name@3x.png`, so they render
+sharp on high-DPI (Retina and equivalent) displays instead of the browser
+having to upscale the 1x file.
+
+- In JSX, use `<ResponsiveImg src="/logo.png" alt="..." />`
+  (`frontend/src/components/ResponsiveImg.jsx`) instead of a plain `<img>` —
+  it derives the `srcset` density descriptors from the 1x path automatically.
+- In CSS `background-image` declarations, build the value with
+  `buildImageSet()` from `frontend/src/utils/responsiveImage.js`.
+- Prefer SVG for logos/icons where possible — it's resolution-independent
+  and sidesteps this requirement entirely.
+
 ---
 
 ## Commit Message Format
