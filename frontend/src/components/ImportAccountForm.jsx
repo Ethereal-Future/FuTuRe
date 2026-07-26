@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const STELLAR_SECRET_KEY = /^S[A-Z2-7]{55}$/;
 
 export function ImportAccountForm({ onImport, loading }) {
+  const { t } = useTranslation();
   const [secretKey, setSecretKey] = useState('');
   const [touched, setTouched] = useState(false);
 
@@ -31,31 +33,31 @@ export function ImportAccountForm({ onImport, loading }) {
           color: '#92400e',
         }}
       >
-        ⚠️ Never share your secret key. It will not be stored and will be cleared after import.
+        {t('importAccount.warning')}
       </div>
       <div className="input-wrap">
         <input
           type="password"
-          placeholder="Secret Key (starts with S…)"
+          placeholder={t('importAccount.secretKeyPlaceholder')}
           value={secretKey}
           onChange={(e) => { setSecretKey(e.target.value); setTouched(true); }}
           style={{
             border: `2px solid ${touched ? (isValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
           }}
-          aria-label="Stellar secret key"
+          aria-label={t('importAccount.secretKeyAriaLabel')}
           autoComplete="off"
         />
         {touched && <span className="input-icon">{isValid ? '✅' : '❌'}</span>}
       </div>
       {touched && !isValid && (
-        <p className="field-error">Invalid secret key (must start with S and be 56 characters)</p>
+        <p className="field-error">{t('importAccount.invalidSecretKey')}</p>
       )}
       <motion.button
         type="submit"
         disabled={!isValid || loading === 'import'}
         whileTap={{ scale: 0.97 }}
       >
-        Import Account {loading === 'import' && '⟳'}
+        {t('account.import')} {loading === 'import' && '⟳'}
       </motion.button>
     </form>
   );

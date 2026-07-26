@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { CopyButton } from './CopyButton';
 
 const VARIANTS = {
@@ -9,6 +10,7 @@ const VARIANTS = {
 };
 
 function Message({ msg, onRemove, onRetry }) {
+  const { t } = useTranslation();
   const isUrgent = msg.type === 'error' || msg.type === 'warning';
   return (
     <motion.div
@@ -23,18 +25,19 @@ function Message({ msg, onRemove, onRetry }) {
       <span className="sm-text">{msg.message}</span>
       {msg.hash && <CopyButton text={msg.hash} label="Copy transaction hash" />}
       {msg.retry && (
-        <button className="sm-retry" onClick={() => { onRetry(msg.id); msg.retry(); }} aria-label="Retry action">Retry</button>
+        <button className="sm-retry" onClick={() => { onRetry(msg.id); msg.retry(); }} aria-label={t('statusMessage.retryAction')}>{t('statusMessage.retry')}</button>
       )}
-      <button className="sm-close" onClick={() => onRemove(msg.id)} aria-label={`Dismiss: ${msg.message}`}>✕</button>
+      <button className="sm-close" onClick={() => onRemove(msg.id)} aria-label={t('statusMessage.dismiss', { message: msg.message })}>✕</button>
     </motion.div>
   );
 }
 
 export function StatusMessage({ messages, onRemove, showHistory = false, history = [] }) {
+  const { t } = useTranslation();
   const [historyOpen, setHistoryOpen] = useState(false);
 
   return (
-    <div className="sm-wrap" aria-label="Notifications" aria-live="polite" aria-atomic="false">
+    <div className="sm-wrap" aria-label={t('statusMessage.notifications')} aria-live="polite" aria-atomic="false">
       <AnimatePresence initial={false}>
         {messages.map((msg) => (
           <Message key={msg.id} msg={msg} onRemove={onRemove} onRetry={onRemove} />
@@ -49,7 +52,7 @@ export function StatusMessage({ messages, onRemove, showHistory = false, history
             aria-expanded={historyOpen}
             aria-controls="sm-history-list"
           >
-            {historyOpen ? '▲' : '▼'} Message history ({history.length})
+            {historyOpen ? '▲' : '▼'} {t('statusMessage.historyToggle', { count: history.length })}
           </button>
           <AnimatePresence>
             {historyOpen && (
@@ -60,7 +63,7 @@ export function StatusMessage({ messages, onRemove, showHistory = false, history
                 exit={{ height: 0, opacity: 0 }}
                 className="sm-history-list"
                 role="log"
-                aria-label="Message history"
+                aria-label={t('statusMessage.history')}
               >
                 {history.map((msg) => (
                   <div key={msg.id} className={`sm-history-item sm-${msg.type}`}>

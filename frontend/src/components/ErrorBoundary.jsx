@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import * as Sentry from '@sentry/react';
 import { logError } from '../utils/errorLogger';
+import i18n from '../i18n';
 
 const SENSITIVE_RE = /S[0-9A-Z]{54}|(?:secret|privateKey|password|token)(?=\s*[:=])/gi;
 function scrub(text) {
@@ -77,10 +78,10 @@ export class ErrorBoundary extends Component {
       return (
         <div role="alert" style={styles.sectionContainer}>
           <span style={styles.icon}>⚠️</span>
-          <p style={styles.sectionTitle}>{this.props.context} Error</p>
+          <p style={styles.sectionTitle}>{i18n.t('errorBoundary.sectionError', { context: this.props.context })}</p>
           <p style={styles.message}>{this.state.error.message}</p>
           <button style={styles.button} onClick={this.handleReset}>
-            Try again
+            {i18n.t('errorBoundary.tryAgain')}
           </button>
         </div>
       );
@@ -90,10 +91,10 @@ export class ErrorBoundary extends Component {
     return (
       <div role="alert" style={styles.container}>
         <span style={styles.icon}>⚠️</span>
-        <p style={styles.title}>Something went wrong</p>
+        <p style={styles.title}>{i18n.t('errorBoundary.fullPageTitle')}</p>
         <p style={styles.message}>{this.state.error.message}</p>
         <button style={styles.button} onClick={this.handleReset}>
-          Try again
+          {i18n.t('errorBoundary.tryAgain')}
         </button>
       </div>
     );

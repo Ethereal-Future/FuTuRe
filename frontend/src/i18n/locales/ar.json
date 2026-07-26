@@ -217,5 +217,197 @@
     "es": "Español",
     "zh": "中文",
     "pt": "Português"
+  },
+  "common": {
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Breadcrumb"
+  },
+  "chartsDashboard": {
+    "empty": "No data yet. Create an account and make transactions to see charts."
+  },
+  "inlineConfirmation": {
+    "ariaLabel": "Confirm clear form"
+  },
+  "offlineIndicator": {
+    "message": "You are offline — payments will be queued and sent when reconnected."
+  },
+  "copyButton": {
+    "title": "Copy (Ctrl+C when focused)",
+    "copied": "Copied!"
+  },
+  "accountCreated": {
+    "ariaLabel": "Account created successfully",
+    "title": "Account Created!",
+    "saveSecretKey": "Save your secret key — it won't be shown again."
+  },
+  "formValidation": {
+    "looksGood": "Looks good!",
+    "progress": "Form Progress",
+    "warnings": "Warnings:"
+  },
+  "oauth": {
+    "signInWithGoogle": "Sign in with Google",
+    "processing": "Processing login..."
+  },
+  "skeleton": {
+    "loadingContent": "Loading content",
+    "loadingTransaction": "Loading transaction",
+    "loadingBalances": "Loading account balances"
+  },
+  "xlmInfo": {
+    "title": "What is XLM?",
+    "summary": "XLM is the native currency of the Stellar network.",
+    "description": "It is used to pay small transaction fees (typically less than $0.001) and to maintain a minimum account reserve of 1 XLM."
+  },
+  "validationSummary": {
+    "defaultTitle": "Please fix the following errors:"
+  },
+  "errorBoundary": {
+    "sectionError": "{{context}} Error",
+    "tryAgain": "Try again",
+    "fullPageTitle": "Something went wrong"
+  },
+  "qrScanner": {
+    "title": "Scan QR Code",
+    "close": "Close QR scanner",
+    "viewfinderLabel": "Camera viewfinder for QR scanning",
+    "hint": "Point camera at a Stellar address QR code"
+  },
+  "searchableSelect": {
+    "ariaLabel": "Search options",
+    "placeholder": "Search…",
+    "noResults": "No results"
+  },
+  "settingsPage": {
+    "title": "Settings",
+    "close": "Close settings",
+    "darkMode": "Dark mode",
+    "toggleDarkMode": "Toggle dark mode"
+  },
+  "bumpSequence": {
+    "title": "⚠️ Bump Sequence Number",
+    "description": "Use this to resolve stuck transactions due to sequence number mismatches. Only experienced users should use this feature.",
+    "invalidTarget": "Please enter a valid sequence number",
+    "mustBeGreater": "Target sequence must be greater than current sequence ({{current}})",
+    "success": "✓ Sequence number bumped successfully",
+    "currentSequence": "Current Sequence",
+    "targetSequence": "Target Sequence",
+    "targetPlaceholder": "Enter target sequence number",
+    "mustBeGreaterThan": "Must be greater than {{current}}",
+    "loading": "Loading…",
+    "processing": "Processing…",
+    "submit": "Bump Sequence",
+    "bumpedTo": "Sequence bumped to {{sequence}}"
+  },
+  "datePicker": {
+    "from": "From",
+    "fromDate": "From date",
+    "to": "To",
+    "toDate": "To date",
+    "clearDates": "Clear dates",
+    "clear": "Clear"
+  },
+  "fileUpload": {
+    "dropZone": "Drop files here or click to browse",
+    "dragDrop": "Drag & drop files here, or",
+    "browse": "browse",
+    "hint": "Images, PDF, CSV, TXT · max 10MB · up to 10 files",
+    "remove": "Remove {{name}}",
+    "clearAll": "Clear All"
+  },
+  "importAccount": {
+    "warning": "⚠️ Never share your secret key. It will not be stored and will be cleared after import.",
+    "secretKeyPlaceholder": "Secret Key (starts with S…)",
+    "secretKeyAriaLabel": "Stellar secret key",
+    "invalidSecretKey": "Invalid secret key (must start with S and be 56 characters)"
+  },
+  "installBanner": {
+    "ariaLabel": "Install app",
+    "text": "Install the Stellar Remittance app for faster access and offline support.",
+    "install": "Install",
+    "dismiss": "Dismiss install prompt"
+  },
+  "networkBadge": {
+    "ariaLabel": "Network status",
+    "testnet": "Testnet",
+    "mainnet": "Mainnet",
+    "networkLabel": "Network:",
+    "horizonLabel": "Horizon:",
+    "statusLabel": "Status:",
+    "online": "✅ Online",
+    "offline": "❌ Offline",
+    "horizonVersionLabel": "Horizon v:",
+    "protocolLabel": "Protocol:",
+    "testnetWarning": "⚠ You are on Testnet — funds have no real value"
+  },
+  "statusMessage": {
+    "retryAction": "Retry action",
+    "retry": "Retry",
+    "dismiss": "Dismiss: {{message}}",
+    "notifications": "Notifications",
+    "historyToggle": "Message history ({{count}})",
+    "history": "Message history"
+  },
+  "xdrExport": {
+    "title": "Export Transaction XDR",
+    "statusLabel": "Status:",
+    "signed": "✓ Signed Transaction",
+    "unsigned": "◯ Unsigned Transaction",
+    "signedHint": "This signed transaction can be submitted to the Stellar network.",
+    "unsignedHint": "This unsigned transaction needs signatures before submission.",
+    "envelopeLabel": "Transaction Envelope (XDR)",
+    "copied": "✓ Copied to clipboard",
+    "copy": "📋 Copy XDR",
+    "download": "⬇️ Download as .xdr file",
+    "openInLab": "🔬 Open in Stellar Lab"
+  },
+  "notificationBell": {
+    "ariaLabel": "Notifications",
+    "title": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "loading": "Loading...",
+    "empty": "No notifications yet. You're all caught up! 🎉",
+    "viewAll": "View All Notifications"
+  },
+  "qrCodeModal": {
+    "title": "QR Code",
+    "close": "Close QR code dialog",
+    "failedToGenerate": "Failed to generate QR: {{error}}",
+    "canvasAriaLabel": "QR code for Stellar address {{publicKey}}",
+    "includeAmountLabel": "Include payment amount (optional)",
+    "includeAmountPlaceholder": "Include amount (optional)",
+    "amountAriaLabel": "Payment amount to encode in QR",
+    "paymentRequestHint": "QR encodes a payment request for {{amount}} XLM",
+    "downloadAriaLabel": "Download QR code as PNG image",
+    "downloadPng": "⬇ Download PNG"
+  },
+  "changeTrustForm": {
+    "assetCodeRequired": "Asset code required (1-12 characters)",
+    "issuerRequired": "Issuer account required",
+    "invalidLimit": "Valid limit required (0 to remove trustline)",
+    "assetCodeLabel": "Asset Code",
+    "issuerLabel": "Issuer Account",
+    "limitLabel": "Limit (XLM)",
+    "limitHint": "Set to 0 to remove trustline",
+    "submit": "Add Trustline Operation"
+  },
+  "paymentOperationForm": {
+    "destinationRequired": "Destination account required",
+    "amountRequired": "Valid amount required",
+    "issuerRequired": "Issuer required for non-XLM assets",
+    "selfSendError": "Cannot send to your own account",
+    "destinationLabel": "Destination Account",
+    "amountLabel": "Amount",
+    "assetLabel": "Asset",
+    "other": "Other",
+    "issuerLabel": "Issuer",
+    "memoLabel": "Memo (optional)",
+    "memoPlaceholder": "Memo text",
+    "submit": "Add Payment Operation"
   }
 }

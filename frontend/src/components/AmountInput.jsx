@@ -9,7 +9,7 @@ const CURRENCIES = { XLM: 'Stellar Lumens', USDC: 'USD Coin', BTC: 'Bitcoin' };
  * Props: value, onChange, currency, onCurrencyChange, availableBalance
  */
 export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChange, availableBalance }) {
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [focused, setFocused] = useState(false);
 
   const handleChange = (e) => {
@@ -42,7 +42,7 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
           onBlur={() => setFocused(false)}
           placeholder="0.0000000"
           style={{ paddingRight: availableBalance != null ? 52 : 10 }}
-          aria-label="Amount"
+          aria-label={t('amountInput.label')}
         />
         {availableBalance != null && (
           <button
@@ -50,7 +50,7 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
             onClick={setMax}
             style={maxBtnStyle}
             title={`Max: ${availableBalance}`}
-            aria-label={`Send maximum available amount: ${availableBalance}`}
+            aria-label={t('amountInput.maxLabel', { amount: availableBalance })}
           >
             MAX
           </button>
@@ -60,7 +60,7 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
         value={currency}
         onChange={e => onCurrencyChange?.(e.target.value)}
         style={selectStyle}
-        aria-label="Currency"
+        aria-label={t('amountInput.currency')}
       >
         {Object.entries(CURRENCIES).map(([code, name]) => (
           <option key={code} value={code} title={name}>{code}</option>
