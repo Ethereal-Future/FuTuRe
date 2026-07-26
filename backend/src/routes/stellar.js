@@ -359,6 +359,66 @@ router.post(
 
 /**
  * @swagger
+ * /api/stellar/transaction/build-unsigned-xdr:
+ *   post:
+ *     summary: Build an unsigned transaction XDR
+ *     description: Builds an unsigned transaction envelope for signing with hardware wallets or multisig. Does NOT submit to the network.
+ *     tags: [Stellar]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [sourceSecret, destination, amount, assetCode]
+ *             properties:
+ *               sourceSecret:
+ *                 type: string
+ *               destination:
+ *                 type: string
+ *               amount:
+ *                 type: string
+ *               assetCode:
+ *                 type: string
+ *               memo:
+ *                 type: string
+ *               memoType:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Unsigned XDR generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 xdr:
+ *                   type: string
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/transaction/build-unsigned-xdr', rules.sendPayment, validate, async (req, res) => {
+  try {
+    const { sourceSecret, destination, amount, assetCode, memo, memoType } = req.body;
+    const result = await StellarService.buildUnsignedXdr(
+      sourceSecret,
+      destination,
+      amount,
+      assetCode,
+      memo,
+      memoType,
+    );
+    res.json(result);
+  } catch (error) {
+    logError(req, error, { destination: req.body.destination });
+    res.status(500).json({ error: 'Failed to build unsigned XDR' });
+  }
+});
+
+/**
+ * @swagger
  * /api/stellar/account/{publicKey}/transactions:
  *   get:
  *     summary: List transactions for an account

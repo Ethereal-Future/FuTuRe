@@ -1069,3 +1069,75 @@ export async function mergeAccount(sourceSecret, destination) {
     success: result.successful,
   };
 }
+
+/**
+ * Build an unsigned XDR transaction envelope for a payment without submitting it to the network.
+ * Useful for multisig workflows and hardware wallet signing.
+ * @param {string} sourceSecret - Secret key of the source account (for sequence number)
+ * @param {string} destination - Stellar public key of the recipient
+ * @param {string} amount - Amount in stroops
+ * @param {string} assetCode - Asset code (default: 'XLM')
+ * @param {string} memo - Optional memo
+ * @param {string} memoType - Type of memo ('text', 'id', 'hash', 'return')
+ * @returns {Promise<{xdr: string}>} Base64-encoded unsigned transaction envelope
+ */
+export async function buildUnsignedXdr(
+  sourceSecret,
+  destination,
+  amount,
+  assetCode = 'XLM',
+  memo = null,
+  memoType = 'text',
+) {
+  const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  const sourcePublicKey = sourceKeypair.publicKey();
+
+  const sourceAccount = await withHorizonRetry(() =>
+    getHorizonServer().loadAccount(sourcePublicKey),
+  );
+
+  if (assetCode !== 'XLM' && !getIssuer(assetCode)) {
+    throw new Error('ASSET_ISSUER is required for non-XLM payments');
+  }
+
+  const asset =
+    assetCode === 'XLM'
+      ? StellarSDK.Asset.native()
+      : new StellarSDK.Asset(assetCode, getIssuer(assetCode));
+
+  const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+  }).addOperation(
+    StellarSDK.Operation.payment({
+      destination,
+      asset,
+      amount: amount.toString(),
+    }),
+  );
+
+  if (memo) {
+    let stellarMemo;
+    switch (memoType) {
+      case 'id':
+        stellarMemo = StellarSDK.Memo.id(memo);
+        break;
+      case 'hash':
+        stellarMemo = StellarSDK.Memo.hash(memo);
+        break;
+      case 'return':
+        stellarMemo = StellarSDK.Memo.return(memo);
+        break;
+      case 'text':
+      default:
+        stellarMemo = StellarSDK.Memo.text(memo);
+        break;
+    }
+    txBuilder.addMemo(stellarMemo);
+  }
+
+  const transaction = txBuilder.setTimeout(30).build();
+  return {
+    xdr: transaction.toEnvelope().toXDR('base64'),
+  };
+}

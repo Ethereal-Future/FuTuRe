@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import apiClient from '../api/client.js';
 import { Modal } from '../design-system/Modal';
 import { XLMInfoIcon } from './XLMInfoIcon';
+import { XdrExportModal } from './XdrExportModal';
 
 function truncate(addr) {
   if (!addr || addr.length <= 12) return addr;
@@ -18,10 +19,16 @@ function truncate(addr) {
  * @param {string}     recipient
  * @param {string}     amount
  * @param {string}     asset
+ * @param {string}     sourceSecret
+ * @param {string}     memo
+ * @param {string}     memoType
  */
-export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount, asset = 'XLM' }) {
+export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount, asset = 'XLM', sourceSecret, memo, memoType }) {
   const [fee, setFee] = useState(null);
   const [usdRate, setUsdRate] = useState(null);
+  const [showXdrExport, setShowXdrExport] = useState(false);
+  const [unsignedXdr, setUnsignedXdr] = useState(null);
+  const [buildingXdr, setBuildingXdr] = useState(false);
   const cache = useRef({});
 
   useEffect(() => {
@@ -50,6 +57,31 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
   const surgeMultiplier = fee ? parseFloat(fee.surgeMultiplier) : null;
   const totalXLM = feeXLM !== null ? (amtNum + feeXLM).toFixed(7).replace(/\.?0+$/, '') : null;
   const amtUsd = usdRate ? (amtNum * usdRate).toFixed(2) : null;
+
+  const handleExportXdr = async () => {
+    if (unsignedXdr) {
+      setShowXdrExport(true);
+      return;
+    }
+
+    setBuildingXdr(true);
+    try {
+      const { data } = await apiClient.post('/api/stellar/transaction/build-unsigned-xdr', {
+        sourceSecret,
+        destination: recipient,
+        amount,
+        assetCode: asset,
+        memo: memo || undefined,
+        memoType: memoType || undefined,
+      });
+      setUnsignedXdr(data.xdr);
+      setShowXdrExport(true);
+    } catch (error) {
+      console.error('Failed to build unsigned XDR:', error);
+    } finally {
+      setBuildingXdr(false);
+    }
+  };
 
   return (
     <Modal open={open} onClose={onCancel} title="Confirm Payment" size="sm">
@@ -97,10 +129,26 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
         <button type="button" onClick={onConfirm} className="confirm-dialog__btn-confirm">
           Confirm &amp; Send
         </button>
+        <button
+          type="button"
+          onClick={handleExportXdr}
+          disabled={buildingXdr}
+          className="confirm-dialog__btn-export"
+          title="Export this transaction as XDR for signing with hardware wallets or multisig"
+        >
+          {buildingXdr ? 'Building XDR…' : '📦 Export as XDR'}
+        </button>
         <button type="button" onClick={onCancel} className="confirm-dialog__btn-cancel btn-clear">
           Cancel
         </button>
       </div>
+
+      <XdrExportModal
+        open={showXdrExport}
+        onClose={() => setShowXdrExport(false)}
+        xdr={unsignedXdr}
+        isSigned={false}
+      />
     </Modal>
   );
 }

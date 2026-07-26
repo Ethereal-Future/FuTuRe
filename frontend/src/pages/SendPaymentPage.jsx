@@ -172,6 +172,9 @@ export function SendPaymentPage() {
         recipient={recipient}
         amount={amount}
         asset="XLM"
+        sourceSecret={account?.secretKey}
+        memo={memo}
+        memoType={memoType}
         onConfirm={() => { setShowConfirm(false); sendPayment(); }}
         onCancel={() => setShowConfirm(false)}
       />

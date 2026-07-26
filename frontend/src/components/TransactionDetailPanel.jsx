@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CopyButton } from './CopyButton';
+import { XdrExportModal } from './XdrExportModal';
 
 const TYPE_LABELS = { payment: 'Payment', create_account: 'Account Created', unknown: 'Other' };
 
@@ -18,6 +19,7 @@ function fmtIso(dateStr) {
  */
 export function TransactionDetailPanel({ tx, network = 'public' }) {
   const [showXdr, setShowXdr] = useState(false);
+  const [showXdrExport, setShowXdrExport] = useState(false);
 
   if (!tx) return null;
 
@@ -100,13 +102,31 @@ export function TransactionDetailPanel({ tx, network = 'public' }) {
         <>
           <dt>Raw XDR</dt>
           <dd>
-            <button type="button" className="tx-xdr-toggle" onClick={() => setShowXdr(s => !s)}>
-              {showXdr ? 'Hide' : 'View'} raw XDR envelope
-            </button>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button type="button" className="tx-xdr-toggle" onClick={() => setShowXdr(s => !s)}>
+                {showXdr ? 'Hide' : 'View'} raw XDR envelope
+              </button>
+              <button
+                type="button"
+                className="tx-xdr-export-btn"
+                onClick={() => setShowXdrExport(true)}
+                title="Export and share this transaction XDR"
+              >
+                📦 Export
+              </button>
+            </div>
             {showXdr && <pre className="tx-xdr-envelope">{tx.envelopeXdr}</pre>}
           </dd>
         </>
       )}
+
+      <XdrExportModal
+        open={showXdrExport}
+        onClose={() => setShowXdrExport(false)}
+        xdr={tx.envelopeXdr}
+        isSigned={tx.successful !== false}
+        isTestnet={network === 'testnet'}
+      />
     </dl>
   );
 }
