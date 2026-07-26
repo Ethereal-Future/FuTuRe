@@ -5,6 +5,7 @@ import { WebhookManager } from './WebhookManager';
 import { BackupSettings } from './BackupSettings';
 import { ComplianceDashboard } from './ComplianceDashboard';
 import { AccountMerge } from './AccountMerge';
+import { ThresholdSettings } from './ThresholdSettings';
 
 const ASSETS = ['XLM', 'USDC', 'EURC'];
 
@@ -328,6 +329,10 @@ export function AccountSettings({ publicKey, onClose }) {
                   ))}
                 </ul>
               )}
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <ThresholdSettings publicKey={publicKey} onUpdate={() => {}} />
             </div>
 
             <div style={{ marginBottom: 16 }}>

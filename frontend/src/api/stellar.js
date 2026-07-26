@@ -290,3 +290,12 @@ export async function sep24PollStatus(payload, options = {}) {
   const response = await apiClient.post('/api/sep24/poll-status', payload, options);
   return response.data;
 }
+
+export async function setThresholds(publicKey, payload, options = {}) {
+  const response = await apiClient.post(
+    `/api/stellar/account/${publicKey}/set-thresholds`,
+    payload,
+    options
+  );
+  return response.data;
+}
