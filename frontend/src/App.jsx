@@ -44,6 +44,7 @@ import { logError } from './utils/errorLogger';
 import { saveBalance, getCachedBalance } from './cache/balanceCache.js';
 import { ImportAccountForm } from './components/ImportAccountForm';
 import { ConfirmSendDialog } from './components/ConfirmSendDialog';
+import { BiometricConfirmation } from './components/BiometricConfirmation';
 import { LanguageSelector } from './components/LanguageSelector';
 import { FileUpload } from './components/FileUpload';
 import { AccountCreatedCelebration } from './components/AccountCreatedCelebration';
@@ -90,6 +91,10 @@ const AccountSettings = lazy(() =>
 );
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
+// Default XLM amount above which a biometric re-auth is required before
+// ConfirmSendDialog opens. Overridden per-account via account settings
+// (see SettingsPage.jsx's Security section) and by the server default.
+const DEFAULT_BIOMETRIC_REAUTH_THRESHOLD = 100;
 
 function App() {
   if (window.location.pathname === '/admin') {
@@ -114,6 +119,7 @@ function App() {
 
   // Local state not in store
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showBiometricConfirm, setShowBiometricConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [replaySecret, setReplaySecret] = useState('');
@@ -181,8 +187,10 @@ function App() {
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatusQuery();
 
-  // Load user's preferred fiat currency from account settings (defaultAsset)
+  // Load user's preferred fiat currency and biometric re-auth threshold from
+  // account settings (defaultAsset, biometricReauthThreshold)
   const [fiatCurrency, setFiatCurrency] = useState('USD');
+  const [biometricThreshold, setBiometricThreshold] = useState(DEFAULT_BIOMETRIC_REAUTH_THRESHOLD);
   useEffect(() => {
     if (!account?.publicKey) return;
     apiClient
@@ -193,9 +201,12 @@ function App() {
         const STELLAR_ASSETS = new Set(['XLM', 'USDC', 'EURC']);
         if (asset && !STELLAR_ASSETS.has(asset)) setFiatCurrency(asset);
         else if (asset === 'EURC') setFiatCurrency('EUR');
+        if (typeof data?.biometricReauthThreshold === 'number') {
+          setBiometricThreshold(data.biometricReauthThreshold);
+        }
       })
       .catch(() => {
-        /* use USD default */
+        /* use defaults */
       });
   }, [account?.publicKey]);
 
@@ -465,6 +476,22 @@ function App() {
     kycStatus !== 'APPROVED' &&
     assetCode === 'XLM' &&
     parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+
+  // Gate the final ConfirmSendDialog behind a biometric re-auth step once the
+  // amount crosses the user's configured threshold — protects against session
+  // hijacking and accidental large transfers per issue #808.
+  const requiresBiometricConfirm =
+    assetCode === 'XLM' &&
+    Number.isFinite(parseFloat(amount)) &&
+    parseFloat(amount) > biometricThreshold;
+
+  const initiateSend = useCallback(() => {
+    if (requiresBiometricConfirm) {
+      setShowBiometricConfirm(true);
+    } else {
+      setShowConfirm(true);
+    }
+  }, [requiresBiometricConfirm]);
 
   useEffect(() => {
     if (!recipientLooksFederated) {
@@ -1090,7 +1117,7 @@ function App() {
                       placeholder="Recipient public key or alice*futureremit.app"
                       value={recipient}
                       onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
-                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      onKeyDown={(e) => e.key === 'Enter' && initiateSend()}
                       style={{
                         border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
@@ -1178,7 +1205,7 @@ function App() {
                       onChange={(e) =>
                         dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
                       }
-                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      onKeyDown={(e) => e.key === 'Enter' && initiateSend()}
                       style={{
                         border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
@@ -1742,7 +1769,7 @@ function App() {
                         ))}
                       <div className="payment-form-actions">
                         <motion.button
-                          onClick={() => setShowConfirm(true)}
+                          onClick={initiateSend}
                           {...tap}
                           disabled={
                             !recipientValid ||
@@ -2155,6 +2182,19 @@ function App() {
             }}
             onCancel={() => setShowConfirm(false)}
           />
+
+          {showBiometricConfirm && account && (
+            <BiometricConfirmation
+              publicKey={account.publicKey}
+              amount={amount}
+              assetCode={assetCode}
+              onSuccess={() => {
+                setShowBiometricConfirm(false);
+                setShowConfirm(true);
+              }}
+              onCancel={() => setShowBiometricConfirm(false)}
+            />
+          )}
 
           {/* Batch Payment Confirmation */}
           <AnimatePresence>
