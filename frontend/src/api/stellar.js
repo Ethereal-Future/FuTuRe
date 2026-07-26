@@ -265,3 +265,33 @@ export async function batchPayment(payload, options = {}) {
   const response = await apiClient.post('/api/stellar/batch-payment', payload, options);
   return response.data;
 }
+
+export async function getClaimableBalances(publicKey, options = {}) {
+  const response = await apiClient.get(`/api/stellar/account/${publicKey}/claimable-balances`, options);
+  return response.data;
+}
+
+export async function createClaimableBalance(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/claimable-balance/create', payload, options);
+  return response.data;
+}
+
+export async function claimClaimableBalance(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/claimable-balance/claim', payload, options);
+  return response.data;
+}
+
+export async function createSponsoredAccount(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/account/sponsored-create', payload, options);
+  return response.data;
+}
+
+export async function createSponsoredTrustline(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/trustline/sponsored-create', payload, options);
+  return response.data;
+}
+
+export async function bumpSequence(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/account/bump-sequence', payload, options);
+  return response.data;
+}

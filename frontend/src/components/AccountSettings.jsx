@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import { CopyButton } from './CopyButton';
 import { AddressBook } from './AddressBook';
 import { WebhookManager } from './WebhookManager';
 import { BackupSettings } from './BackupSettings';
@@ -21,6 +22,7 @@ export function AccountSettings({ publicKey, onClose }) {
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [sessionAction, setSessionAction] = useState('');
+  const [accountData, setAccountData] = useState(null);
 
   useEffect(() => {
     apiClient
@@ -38,6 +40,17 @@ export function AccountSettings({ publicKey, onClose }) {
         }
       })
       .catch((e) => setError(e?.response?.data?.error ?? e.message));
+  }, [publicKey]);
+
+  useEffect(() => {
+    apiClient
+      .get(`/api/stellar/account/${publicKey}`)
+      .then(({ data }) => {
+        setAccountData(data);
+      })
+      .catch((e) => {
+        console.error('Failed to fetch account data:', e);
+      });
   }, [publicKey]);
 
   const loadSessions = async () => {
@@ -197,6 +210,30 @@ export function AccountSettings({ publicKey, onClose }) {
                   : 'Claim a human-readable address like alice*futureremit.app.'}
               </p>
             </div>
+
+            <details style={{ marginBottom: 16, padding: 12, background: '#f0f9ff', borderRadius: 6, border: '1px solid #bfdbfe' }}>
+              <summary style={{ fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>
+                ⚙️ Advanced Settings
+              </summary>
+              <div style={{ paddingTop: 8 }}>
+                {accountData && (
+                  <div style={{ marginBottom: 12 }}>
+                    <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem', color: '#475569' }}>
+                      Sequence Number
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <code style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 14, fontWeight: 500 }}>
+                        {accountData.sequence}
+                      </code>
+                      <CopyButton text={String(accountData.sequence)} />
+                    </div>
+                    <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8rem' }}>
+                      Used by Stellar to track transactions from this account. Advanced users may need this for debugging.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </details>
 
             <div style={{ marginBottom: 16 }}>
               <p style={{ fontWeight: 600, marginBottom: 4 }}>KYC Status</p>
