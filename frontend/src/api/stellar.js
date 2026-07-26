@@ -265,3 +265,13 @@ export async function batchPayment(payload, options = {}) {
   const response = await apiClient.post('/api/stellar/batch-payment', payload, options);
   return response.data;
 }
+
+export async function buildMultiOpTransaction(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/transaction/multi-op/build', payload, options);
+  return response.data;
+}
+
+export async function submitMultiOpTransaction(payload, options = {}) {
+  const response = await apiClient.post('/api/stellar/transaction/multi-op/submit', payload, options);
+  return response.data;
+}
