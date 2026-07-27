@@ -1,0 +1,77 @@
+version: "3.8"
+
+# Dev Container Compose file.
+# This extends the project's main docker-compose.yml by adding a dedicated
+# `devcontainer` service that VS Code / GitHub Codespaces attaches to.
+# The existing postgres and redis services provide the supporting databases.
+
+services:
+  devcontainer:
+    image: mcr.microsoft.com/devcontainers/javascript-node:1-20-bookworm
+    volumes:
+      # Mount the entire workspace into the container
+      - ..:/workspace:cached
+      # Persist node_modules across rebuilds to speed up re-opens
+      - node_modules_root:/workspace/node_modules
+      - node_modules_backend:/workspace/backend/node_modules
+      - node_modules_frontend:/workspace/frontend/node_modules
+    working_dir: /workspace
+    # Keep the container alive
+    command: sleep infinity
+    environment:
+      # Backend environment (mirrors docker-compose.yml)
+      APP_ENV: development
+      PORT: 3001
+      DATABASE_URL: postgresql://future_admin:dev_password@postgres:5432/future_remittance
+      REDIS_URL: redis://redis:6379
+      STELLAR_NETWORK: testnet
+      HORIZON_URL: https://horizon-testnet.stellar.org
+      SOROBAN_RPC_URL: https://soroban-testnet.stellar.org
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:5173
+      JWT_SECRET: dev-jwt-secret-change-me
+      STREAM_SECRET_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+      LOG_LEVEL: info
+      CACHE_TTL_BALANCE_S: "30"
+      RATE_CACHE_TTL_S: "60"
+      CACHE_TTL_FEE_S: "120"
+      RATE_LIMIT_WINDOW_MS: "60000"
+      RATE_LIMIT_MAX: "100"
+      DB_POOL_MAX: "10"
+      DB_SHARD_COUNT: "1"
+      CDN_ENABLED: "false"
+      # Frontend environment
+      VITE_API_URL: http://localhost:3001
+
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: future_remittance
+      POSTGRES_USER: future_admin
+      POSTGRES_PASSWORD: dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U future_admin -d future_remittance"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+  node_modules_root:
+  node_modules_backend:
+  node_modules_frontend:

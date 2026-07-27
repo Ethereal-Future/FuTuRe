@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json.schemastore.org/commitlintrc.json",
+  "extends": ["@commitlint/config-conventional"],
+  "rules": {
+    "type-enum": [
+      2,
+      "always",
+      [
+        "feat",
+        "fix",
+        "docs",
+        "style",
+        "refactor",
+        "test",
+        "chore",
+        "perf",
+        "ci",
+        "build",
+        "revert"
+      ]
+    ],
+    "type-case": [2, "always", "lower-case"],
+    "type-empty": [2, "never"],
+    "scope-case": [2, "always", "lower-case"],
+    "subject-case": [2, "never", ["sentence-case", "start-case", "pascal-case", "upper-case"]],
+    "subject-empty": [2, "never"],
+    "subject-full-stop": [2, "never", "."],
+    "header-max-length": [2, "always", 100],
+    "body-leading-blank": [1, "always"],
+    "footer-leading-blank": [1, "always"]
+  },
+  "ignores": [
+    "commit => commit.startsWith('Merge')",
+    "commit => commit.startsWith('Revert')",
+    "commit => /^chore\\(release\\):/.test(commit)"
+  ],
+  "defaultIgnores": true,
+  "helpUrl": "https://github.com/Ethereal-Future/FuTuRe/blob/main/CONTRIBUTING.md#commit-message-format"
+}
