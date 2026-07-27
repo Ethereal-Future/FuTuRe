@@ -33,6 +33,7 @@ Everything else has a safe default for local development.
 | `CONFIG_VERSION` | integer | — | `1` | Config schema version. Must match the expected value or startup fails. | `1` |
 | `CONFIG_WATCH` | boolean | — | `false` | Reload config when `.env*` files change (ignored in `test`). | `true` |
 | `PORT` | integer | — | `3001` | TCP port the Express server listens on. | `3001` |
+| `TRUST_PROXY_HOPS` | integer | — | `0` | Number of trusted reverse-proxy hops in front of this server. Passed to Express's `app.set('trust proxy', n)`, which controls how many `X-Forwarded-For` entries (from the right) are trusted when deriving `req.ip`. Set this to match your actual topology — an incorrect value either lets clients spoof their IP (too high) or rate-limits everyone as the proxy's IP (too low). `0` = no proxy, connect directly (default). `1` = single load balancer/reverse proxy in front. `2` = CDN + load balancer. | `1` |
 
 ### CORS
 

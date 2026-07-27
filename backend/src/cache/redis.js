@@ -56,6 +56,23 @@ export class RedisBackend {
     } catch { /* fall through */ }
   }
 
+  /**
+   * Atomically claim `key` iff it doesn't already exist (SET ... NX EX).
+   * Returns true if this call claimed the key, false if it was already held.
+   * No Redis configured means no coordination is possible, so callers are
+   * always allowed to proceed (matches the fail-open behavior of get/set).
+   * Errors are intentionally NOT swallowed here — callers use them to decide
+   * whether to log/alert on the bypass.
+   */
+  async setNX(key, value, ttlSeconds) {
+    if (!this.client) return true;
+    const raw = JSON.stringify(value);
+    const result = ttlSeconds
+      ? await this.client.set(key, raw, 'EX', ttlSeconds, 'NX')
+      : await this.client.set(key, raw, 'NX');
+    return result === 'OK';
+  }
+
   async delete(key) {
     if (!this.client) return;
     try { await this.client.del(key); } catch { /* fall through */ }

@@ -3,11 +3,10 @@ import { isWhitelisted } from '../security/ipWhitelist.js';
 import logger from '../config/logger.js';
 
 function getClientIP(req) {
-  const forwarded = req.headers['x-forwarded-for'];
-  if (forwarded) {
-    return forwarded.split(',')[0].trim();
-  }
-  return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
+  // req.ip is derived by Express from X-Forwarded-For only up to the
+  // trusted hop count configured via `app.set('trust proxy', ...)`
+  // (TRUST_PROXY_HOPS), so it can't be spoofed by a direct caller.
+  return req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress;
 }
 
 function getUserRateLimitKey(req) {
