@@ -2,8 +2,21 @@ import express from 'express';
 import prisma from '../db/client.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { logAdminAction } from '../db/adminAuditLog.js';
+import { createPerUserRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
+
+/**
+ * Dedicated per-admin rate limiter for KYC state-mutation routes.
+ * 30 requests per 10 minutes, keyed on the authenticated admin's user id.
+ * Stricter than the global limiter: a compromised admin token cannot hammer
+ * approve/reject at the same rate as a public read endpoint.
+ */
+const kycActionLimiter = createPerUserRateLimiter({
+  windowMs: 10 * 60 * 1000, // 10 minutes
+  max: 30,
+  message: 'Too many KYC actions. Please slow down.',
+});
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
@@ -71,7 +84,28 @@ router.get('/users', requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/kyc/:userId/approve', requireAdmin, async (req, res) => {
+/**
+ * @swagger
+ * /api/v1/admin/kyc/{userId}/approve:
+ *   put:
+ *     summary: Approve a KYC record (admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: KYC approved
+ *       429:
+ *         description: Per-admin rate limit exceeded (30 req/10 min)
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/kyc/:userId/approve', requireAdmin, kycActionLimiter, async (req, res) => {
   try {
     const { userId } = req.params;
     const kyc = await prisma.kYCRecord.update({
@@ -85,7 +119,28 @@ router.put('/kyc/:userId/approve', requireAdmin, async (req, res) => {
   }
 });
 
-router.put('/kyc/:userId/reject', requireAdmin, async (req, res) => {
+/**
+ * @swagger
+ * /api/v1/admin/kyc/{userId}/reject:
+ *   put:
+ *     summary: Reject a KYC record (admin only)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: KYC rejected
+ *       429:
+ *         description: Per-admin rate limit exceeded (30 req/10 min)
+ *       500:
+ *         description: Internal server error
+ */
+router.put('/kyc/:userId/reject', requireAdmin, kycActionLimiter, async (req, res) => {
   try {
     const { userId } = req.params;
     const kyc = await prisma.kYCRecord.update({
