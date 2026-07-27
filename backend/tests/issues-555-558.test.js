@@ -73,6 +73,7 @@ describe('#556 GET /api/accounts/contacts', () => {
           findMany: vi.fn().mockResolvedValue([
             { id: 'c1', name: 'Alice', address: 'GABC', createdAt: new Date() },
           ]),
+          count: vi.fn().mockResolvedValue(1),
           create: vi.fn().mockImplementation(({ data }) => Promise.resolve({
             id: 'c2', name: data.name, address: data.address, createdAt: new Date()
           })),
@@ -92,11 +93,16 @@ describe('#556 GET /api/accounts/contacts', () => {
     app = makeApp(router, '/api/accounts/contacts');
   });
 
-  it('GET / returns contacts list', async () => {
+  it('GET / returns contacts list with pagination metadata', async () => {
     const res = await request(app).get('/api/accounts/contacts');
     expect(res.status).toBe(200);
     expect(res.body.contacts).toHaveLength(1);
     expect(res.body.contacts[0].name).toBe('Alice');
+    // New: response must include a pagination object
+    expect(res.body.pagination).toBeDefined();
+    expect(res.body.pagination.page).toBe(1);
+    expect(res.body.pagination.total).toBe(1);
+    expect(res.body.pagination.pages).toBe(1);
   });
 
   it('POST / creates a contact and returns 201', async () => {

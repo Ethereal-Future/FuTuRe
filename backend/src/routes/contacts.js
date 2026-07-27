@@ -1,5 +1,5 @@
 import express from 'express';
-import { body, param } from 'express-validator';
+import { body, param, query } from 'express-validator';
 import { validate } from '../middleware/validate.js';
 import { requireAuth } from '../middleware/auth.js';
 import { createPerUserRateLimiter } from '../middleware/rateLimiter.js';
@@ -26,26 +26,124 @@ const contactCreateLimiter = createPerUserRateLimiter({
   message: 'Too many contact creation requests, please slow down.',
 });
 
+/**
+ * Maximum page size for the contacts list endpoint.
+ * Mirrors the cap used by admin.js /audit-log (200).
+ */
+export const CONTACTS_MAX_PAGE_SIZE = 200;
+
+/**
+ * Default page size for the contacts list endpoint.
+ */
+export const CONTACTS_DEFAULT_PAGE_SIZE = 50;
+
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
 
 router.use(requireAuth);
 
 // GET /api/accounts/contacts
-router.get('/', async (req, res) => {
-  try {
-    const user = await prisma.user.findUnique({ where: { publicKey: req.user.publicKey } });
-    if (!user) return res.status(404).json({ error: 'User not found' });
-    const contacts = await prisma.contact.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'asc' },
-      select: { id: true, name: true, address: true, createdAt: true },
-    });
-    res.json({ contacts });
-  } catch (err) {
-    logger.error('contacts.list.failed', { error: err.message });
-    res.status(500).json({ error: 'Failed to fetch contacts' });
+/**
+ * @swagger
+ * /api/v1/accounts/contacts:
+ *   get:
+ *     summary: List contacts for the authenticated user (paginated)
+ *     tags: [Contacts]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, minimum: 1, default: 1 }
+ *         description: Page number (1-based)
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+ *         description: Number of contacts per page (max 200)
+ *     responses:
+ *       200:
+ *         description: Paginated contacts list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 contacts:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id: { type: string }
+ *                       name: { type: string }
+ *                       address: { type: string }
+ *                       createdAt: { type: string, format: date-time }
+ *                 pagination:
+ *                   type: object
+ *                   properties:
+ *                     page: { type: integer }
+ *                     limit: { type: integer }
+ *                     total: { type: integer }
+ *                     pages: { type: integer }
+ *       400:
+ *         description: Invalid page or limit parameter
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         description: User not found
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  '/',
+  [
+    query('page')
+      .optional()
+      .isInt({ min: 1 })
+      .withMessage('page must be a positive integer')
+      .toInt(),
+    query('limit')
+      .optional()
+      .isInt({ min: 1, max: CONTACTS_MAX_PAGE_SIZE })
+      .withMessage(`limit must be an integer between 1 and ${CONTACTS_MAX_PAGE_SIZE}`)
+      .toInt(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const user = await prisma.user.findUnique({ where: { publicKey: req.user.publicKey } });
+      if (!user) return res.status(404).json({ error: 'User not found' });
+
+      const page = req.query.page ?? 1;
+      const limit = Math.min(req.query.limit ?? CONTACTS_DEFAULT_PAGE_SIZE, CONTACTS_MAX_PAGE_SIZE);
+      const skip = (page - 1) * limit;
+
+      const where = { userId: user.id };
+
+      const [contacts, total] = await Promise.all([
+        prisma.contact.findMany({
+          where,
+          orderBy: { createdAt: 'asc' },
+          select: { id: true, name: true, address: true, createdAt: true },
+          skip,
+          take: limit,
+        }),
+        prisma.contact.count({ where }),
+      ]);
+
+      res.json({
+        contacts,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
+      });
+    } catch (err) {
+      logger.error('contacts.list.failed', { error: err.message });
+      res.status(500).json({ error: 'Failed to fetch contacts' });
+    }
   }
-});
+);
 
 // POST /api/accounts/contacts
 /**
