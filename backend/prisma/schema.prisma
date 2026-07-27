@@ -83,6 +83,9 @@ model Setting {
   notificationsOn Boolean  @default(true)
   accountLabel    String?
   federationAddress String? @unique
+  // XLM amount above which a WebAuthn biometric re-auth is required before a
+  // payment is confirmed. Null falls back to the server default (issue #808).
+  biometricReauthThreshold Float?
   updatedAt       DateTime @updatedAt
 }
 

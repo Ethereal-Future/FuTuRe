@@ -15,6 +15,9 @@ import { PullToRefresh } from '../components/PullToRefresh';
 import { NotificationPermissionManager } from '../components/NotificationPermissionManager';
 import { ClaimableBalances } from '../components/ClaimableBalances';
 import { CreateClaimableBalance } from '../components/CreateClaimableBalance';
+import { BackupReminderBanner } from '../components/BackupReminderBanner';
+import { BackupSettings } from '../components/BackupSettings';
+import { useBackupReminder } from '../hooks/useBackupReminder';
 import { logError } from '../utils/errorLogger';
 
 function AnimatedBalance({ balance, asset }) {
@@ -30,13 +33,39 @@ export function AccountDashboardPage() {
   const [showQR, setShowQR] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(accountLabel || '');
+  const [transactionCount, setTransactionCount] = useState(null);
+  const [showBackupSettings, setShowBackupSettings] = useState(false);
+  // Bumping this forces a re-render so useBackupReminder re-reads localStorage
+  // after a dismiss/backup/verification, none of which otherwise touch React state.
+  const [, setReminderTick] = useState(0);
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
 
+  const { showReminder, threshold, transactionsSinceBackup, dismiss } = useBackupReminder(transactionCount);
+
   useEffect(() => {
     setLabelDraft(accountLabel || '');
   }, [accountLabel]);
+
+  useEffect(() => {
+    if (!account?.publicKey) {
+      setTransactionCount(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get(`/api/stellar/account/${account.publicKey}/transactions`, { params: { limit: 100 } })
+      .then(({ data }) => {
+        if (!cancelled) setTransactionCount(data?.records?.length ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setTransactionCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.publicKey]);
 
   const checkBalance = useCallback(async () => {
     if (!account) return;
@@ -90,6 +119,40 @@ export function AccountDashboardPage() {
             >
               📱 Show QR
             </button>
+    <motion.section className="section" variants={v.fadeSlide}>
+      <h2>Account Dashboard</h2>
+
+      {showReminder && (
+        <BackupReminderBanner
+          transactionsSinceBackup={transactionsSinceBackup}
+          threshold={threshold}
+          onBackupNow={() => setShowBackupSettings(true)}
+          onDismiss={() => {
+            dismiss();
+            setReminderTick((t) => t + 1);
+          }}
+        />
+      )}
+
+      <div style={{ marginBottom: 20, padding: 16, background: '#f9fafb', borderRadius: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>Account</h3>
+          <button
+            type="button"
+            onClick={() => setShowQR(true)}
+            style={{ padding: '6px 12px', background: '#0066cc', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer', fontSize: 12 }}
+          >
+            📱 Show QR
+          </button>
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={{ display: 'block', fontSize: 12, color: '#666', marginBottom: 4 }}>Public Key</label>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <code style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid #d1d5db', borderRadius: 4, fontSize: 12, wordBreak: 'break-all' }}>
+              {account.publicKey}
+            </code>
+            <CopyButton text={account.publicKey} />
           </div>
 
           <div style={{ marginBottom: 12 }}>
@@ -202,5 +265,18 @@ export function AccountDashboardPage() {
         )}
       </motion.section>
     </PullToRefresh>
+      {showQR && account && (
+        <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
+      )}
+
+      {showBackupSettings && (
+        <BackupSettings
+          onClose={() => {
+            setShowBackupSettings(false);
+            setReminderTick((t) => t + 1);
+          }}
+        />
+      )}
+    </motion.section>
   );
 }

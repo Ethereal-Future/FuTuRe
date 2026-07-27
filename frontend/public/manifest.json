@@ -17,15 +17,22 @@
     {
       "name": "Send Payment",
       "short_name": "Send",
-      "description": "Open the Send Payment form",
-      "url": "/?action=send",
+      "description": "Jump straight to the Send Payment form",
+      "url": "/send",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     },
     {
       "name": "Check Balance",
       "short_name": "Balance",
       "description": "Check your account balance",
-      "url": "/?action=balance",
+      "url": "/balance",
+      "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Transaction History",
+      "short_name": "History",
+      "description": "View your recent transaction history",
+      "url": "/history",
       "icons": [{ "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" }]
     }
   ],
