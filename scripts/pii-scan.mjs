@@ -33,6 +33,7 @@ const SKIP_EXACT = new Set([
   // Test files that use deliberately fake/generated Stellar keys and JWTs
   'backend/tests/keypairRotation.test.js',
   'backend/tests/stellar.unit.test.js',
+  'backend/tests/assets.routes.test.js',
   'security/tests/secret-scanner-detection.test.js',
   'security/tests/security-vulnerabilities.test.js',
 ]);

@@ -14,6 +14,9 @@ import { FeeDisplay } from '../components/FeeDisplay';
 import { NotificationPermissionManager } from '../components/NotificationPermissionManager';
 import { ClaimableBalances } from '../components/ClaimableBalances';
 import { CreateClaimableBalance } from '../components/CreateClaimableBalance';
+import { BackupReminderBanner } from '../components/BackupReminderBanner';
+import { BackupSettings } from '../components/BackupSettings';
+import { useBackupReminder } from '../hooks/useBackupReminder';
 import { logError } from '../utils/errorLogger';
 
 function AnimatedBalance({ balance, asset }) {
@@ -29,13 +32,39 @@ export function AccountDashboardPage() {
   const [showQR, setShowQR] = useState(false);
   const [editingLabel, setEditingLabel] = useState(false);
   const [labelDraft, setLabelDraft] = useState(accountLabel || '');
+  const [transactionCount, setTransactionCount] = useState(null);
+  const [showBackupSettings, setShowBackupSettings] = useState(false);
+  // Bumping this forces a re-render so useBackupReminder re-reads localStorage
+  // after a dismiss/backup/verification, none of which otherwise touch React state.
+  const [, setReminderTick] = useState(0);
 
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
 
+  const { showReminder, threshold, transactionsSinceBackup, dismiss } = useBackupReminder(transactionCount);
+
   useEffect(() => {
     setLabelDraft(accountLabel || '');
   }, [accountLabel]);
+
+  useEffect(() => {
+    if (!account?.publicKey) {
+      setTransactionCount(null);
+      return;
+    }
+    let cancelled = false;
+    apiClient
+      .get(`/api/stellar/account/${account.publicKey}/transactions`, { params: { limit: 100 } })
+      .then(({ data }) => {
+        if (!cancelled) setTransactionCount(data?.records?.length ?? 0);
+      })
+      .catch(() => {
+        if (!cancelled) setTransactionCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [account?.publicKey]);
 
   const checkBalance = useCallback(async () => {
     if (!account) return;
@@ -73,6 +102,18 @@ export function AccountDashboardPage() {
   return (
     <motion.section className="section" variants={v.fadeSlide}>
       <h2>Account Dashboard</h2>
+
+      {showReminder && (
+        <BackupReminderBanner
+          transactionsSinceBackup={transactionsSinceBackup}
+          threshold={threshold}
+          onBackupNow={() => setShowBackupSettings(true)}
+          onDismiss={() => {
+            dismiss();
+            setReminderTick((t) => t + 1);
+          }}
+        />
+      )}
 
       <div style={{ marginBottom: 20, padding: 16, background: '#f9fafb', borderRadius: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
@@ -193,6 +234,15 @@ export function AccountDashboardPage() {
 
       {showQR && account && (
         <QRCodeModal publicKey={account.publicKey} onClose={() => setShowQR(false)} />
+      )}
+
+      {showBackupSettings && (
+        <BackupSettings
+          onClose={() => {
+            setShowBackupSettings(false);
+            setReminderTick((t) => t + 1);
+          }}
+        />
       )}
     </motion.section>
   );

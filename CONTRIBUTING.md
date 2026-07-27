@@ -223,6 +223,7 @@ Key conventions:
 - Async/await preferred over `.then()` chains.
 - No unused variables; `_` prefix for intentionally unused parameters.
 - Keep functions small and single-purpose; avoid deeply nested callbacks.
+- All new CSS must use logical properties instead of physical directional ones, so layouts mirror correctly for RTL locales (Arabic, Hebrew). Use `margin-inline-start`/`margin-inline-end` instead of `margin-left`/`margin-right`, `padding-inline-start`/`padding-inline-end` instead of `padding-left`/`padding-right`, `text-align: start`/`end` instead of `left`/`right`, `border-inline-start`/`border-inline-end` instead of `border-left`/`border-right`, and `inset-inline-start`/`inset-inline-end` instead of positioning with `left`/`right`.
 
 ### Image Assets
 

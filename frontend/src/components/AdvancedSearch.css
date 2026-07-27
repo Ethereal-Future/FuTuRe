@@ -32,8 +32,8 @@
 .suggestions-dropdown {
   position: absolute;
   top: 100%;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   background: white;
   border: 1px solid #ddd;
   border-top: none;

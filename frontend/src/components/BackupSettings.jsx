@@ -1,15 +1,49 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAppState } from '../store/index.js';
+import {
+  encryptBackup,
+  serializeBackupFile,
+  buildBackupFilename,
+  downloadBackupFile,
+  scorePasswordStrength,
+  parseBackupFile,
+  verifyBackupAgainstAccount,
+  BACKUP_ERROR_CODES,
+} from '../utils/backup.js';
+import { recordBackupEvent } from '../utils/backupReminder.js';
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const MIN_BACKUP_PASSWORD_LENGTH = 8;
+
+async function creditBackupEvent(publicKey) {
+  try {
+    const { data } = await apiClient.get(`/api/stellar/account/${publicKey}/transactions`, { params: { limit: 100 } });
+    recordBackupEvent(data?.records?.length || 0);
+  } catch {
+    recordBackupEvent(0);
+  }
+}
 
 export function BackupSettings({ onClose }) {
+  const { account, accountLabel } = useAppState();
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [creating, setCreating] = useState(false);
   const [backups, setBackups] = useState([]);
+
+  const [backupPassword, setBackupPassword] = useState('');
+  const [backupPasswordConfirm, setBackupPasswordConfirm] = useState('');
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState(null);
+  const [downloadSuccess, setDownloadSuccess] = useState(null);
+
+  const [verifyFile, setVerifyFile] = useState(null);
+  const [verifyPassword, setVerifyPassword] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [verifyResult, setVerifyResult] = useState(null);
 
   useEffect(() => {
     loadStatus();
@@ -57,6 +91,103 @@ export function BackupSettings({ onClose }) {
     // For now, we'll just show an alert
     alert(`Download functionality would retrieve: ${filename}`);
   };
+
+  const downloadEncryptedBackup = async (e) => {
+    e.preventDefault();
+    setDownloadError(null);
+    setDownloadSuccess(null);
+
+    if (!account?.publicKey || !account?.secretKey) {
+      setDownloadError('No account is loaded to back up.');
+      return;
+    }
+    if (backupPassword.length < MIN_BACKUP_PASSWORD_LENGTH) {
+      setDownloadError(`Backup password must be at least ${MIN_BACKUP_PASSWORD_LENGTH} characters.`);
+      return;
+    }
+    if (backupPassword !== backupPasswordConfirm) {
+      setDownloadError('Backup passwords do not match.');
+      return;
+    }
+
+    setDownloading(true);
+    try {
+      const payload = {
+        publicKey: account.publicKey,
+        secretKey: account.secretKey,
+        accountLabel: accountLabel || '',
+        createdAt: new Date().toISOString(),
+      };
+      const envelope = await encryptBackup(payload, backupPassword);
+      const filename = buildBackupFilename();
+      downloadBackupFile(filename, serializeBackupFile(envelope));
+
+      setDownloadSuccess(`Backup downloaded as ${filename}. Store the file and your password separately.`);
+      setBackupPassword('');
+      setBackupPasswordConfirm('');
+      await creditBackupEvent(account.publicKey);
+    } catch {
+      setDownloadError('Failed to create encrypted backup. Please try again.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  const verifyBackupFile = async (e) => {
+    e.preventDefault();
+    setVerifyResult(null);
+
+    if (!verifyFile) {
+      setVerifyResult({ type: 'error', message: 'Select a backup file to verify.' });
+      return;
+    }
+
+    setVerifying(true);
+    try {
+      const fileText = await verifyFile.text();
+
+      let envelope;
+      try {
+        envelope = parseBackupFile(fileText);
+      } catch {
+        setVerifyResult({ type: 'error', message: 'This backup file is corrupted or not a valid backup — it could not be read.' });
+        return;
+      }
+
+      let result;
+      try {
+        result = await verifyBackupAgainstAccount(envelope, verifyPassword, account?.publicKey);
+      } catch (err) {
+        if (err.code === BACKUP_ERROR_CODES.WRONG_PASSWORD) {
+          setVerifyResult({ type: 'error', message: 'Incorrect backup password. Please try again.' });
+        } else {
+          setVerifyResult({ type: 'error', message: 'This backup file is corrupted and could not be decrypted.' });
+        }
+        return;
+      }
+
+      if (result.outcome === 'mismatch') {
+        setVerifyResult({
+          type: 'error',
+          message: `This backup does not match the currently loaded account (backup public key: ${result.backupPublicKey}).`,
+          createdAt: result.createdAt,
+        });
+        return;
+      }
+
+      setVerifyResult({
+        type: 'success',
+        message: 'Backup verified — it decrypts successfully and matches this account.',
+        createdAt: result.createdAt,
+      });
+      await creditBackupEvent(account.publicKey);
+    } finally {
+      setVerifying(false);
+      setVerifyPassword('');
+    }
+  };
+
+  const passwordStrength = scorePasswordStrength(backupPassword);
 
   const isStale = status?.lastBackup
     ? Date.now() - new Date(status.lastBackup.timestamp).getTime() > SEVEN_DAYS_MS
@@ -138,6 +269,132 @@ export function BackupSettings({ onClose }) {
               >
                 {creating ? 'Creating Backup...' : '💾 Create Manual Backup'}
               </button>
+            </div>
+
+            {/* Encrypted Backup Download */}
+            <div style={{ marginBottom: 24, padding: 16, background: 'var(--bg-secondary, #f9fafb)', borderRadius: 8 }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Download Encrypted Backup</h3>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-muted, #64748b)' }}>
+                Export your keypair and settings as an encrypted file you can store offline (USB drive, password
+                manager, etc). Choose a backup password below — you will need it to restore or verify this backup.
+              </p>
+
+              <div
+                role="alert"
+                style={{ marginBottom: 12, padding: 12, background: '#fef3c7', color: '#92400e', borderRadius: 4, fontSize: '0.85rem' }}
+              >
+                ⚠️ Store the backup password separately from the downloaded file. Anyone with both can access your
+                account. We cannot recover this password if you lose it.
+              </div>
+
+              {downloadError && (
+                <div role="alert" style={{ padding: 12, background: '#fee', color: '#c00', borderRadius: 4, marginBottom: 12 }}>
+                  {downloadError}
+                </div>
+              )}
+              {downloadSuccess && (
+                <div role="status" style={{ padding: 12, background: '#ecfdf5', color: '#166534', borderRadius: 4, marginBottom: 12 }}>
+                  ✅ {downloadSuccess}
+                </div>
+              )}
+
+              <form onSubmit={downloadEncryptedBackup}>
+                <div style={{ marginBottom: 12 }}>
+                  <label htmlFor="backup-password" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 4 }}>
+                    Backup Password
+                  </label>
+                  <input
+                    id="backup-password"
+                    type="password"
+                    value={backupPassword}
+                    onChange={(e) => setBackupPassword(e.target.value)}
+                    placeholder={`At least ${MIN_BACKUP_PASSWORD_LENGTH} characters`}
+                    autoComplete="new-password"
+                  />
+                  {backupPassword && (
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted, #64748b)' }}>
+                      Strength: {passwordStrength.label}
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label htmlFor="backup-password-confirm" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 4 }}>
+                    Confirm Backup Password
+                  </label>
+                  <input
+                    id="backup-password-confirm"
+                    type="password"
+                    value={backupPasswordConfirm}
+                    onChange={(e) => setBackupPasswordConfirm(e.target.value)}
+                    autoComplete="new-password"
+                  />
+                </div>
+
+                <button type="submit" disabled={downloading} style={{ width: '100%', padding: '12px 16px', fontSize: '1rem' }}>
+                  {downloading ? 'Encrypting…' : '🔒 Download Encrypted Backup'}
+                </button>
+              </form>
+            </div>
+
+            {/* Verify Backup */}
+            <div style={{ marginBottom: 24, padding: 16, background: 'var(--bg-secondary, #f9fafb)', borderRadius: 8 }}>
+              <h3 style={{ margin: '0 0 12px 0', fontSize: '1rem' }}>Verify Backup</h3>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: 'var(--text-muted, #64748b)' }}>
+                Upload a downloaded backup file and its password to confirm it decrypts correctly and matches this
+                account — without exposing your secret key.
+              </p>
+
+              {verifyResult && (
+                <div
+                  role={verifyResult.type === 'success' ? 'status' : 'alert'}
+                  style={{
+                    padding: 12,
+                    borderRadius: 4,
+                    marginBottom: 12,
+                    background: verifyResult.type === 'success' ? '#ecfdf5' : '#fee',
+                    color: verifyResult.type === 'success' ? '#166534' : '#c00',
+                  }}
+                >
+                  {verifyResult.type === 'success' ? '✅' : '⚠️'} {verifyResult.message}
+                  {verifyResult.createdAt && (
+                    <div style={{ marginTop: 4, fontSize: '0.8rem' }}>
+                      Backup created: {new Date(verifyResult.createdAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <form onSubmit={verifyBackupFile}>
+                <div style={{ marginBottom: 12 }}>
+                  <label htmlFor="verify-backup-file" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 4 }}>
+                    Backup File
+                  </label>
+                  <input
+                    id="verify-backup-file"
+                    type="file"
+                    accept=".enc,.json,application/json"
+                    onChange={(e) => setVerifyFile(e.target.files?.[0] || null)}
+                  />
+                </div>
+
+                <div style={{ marginBottom: 12 }}>
+                  <label htmlFor="verify-backup-password" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: 4 }}>
+                    Backup Password
+                  </label>
+                  <input
+                    id="verify-backup-password"
+                    type="password"
+                    value={verifyPassword}
+                    onChange={(e) => setVerifyPassword(e.target.value)}
+                    autoComplete="off"
+                  />
+                </div>
+
+                <button type="submit" disabled={verifying} style={{ width: '100%', padding: '12px 16px', fontSize: '1rem' }}>
+                  {verifying ? 'Verifying…' : '🔍 Verify Backup'}
+                </button>
+              </form>
             </div>
 
             {/* Backup Metrics */}

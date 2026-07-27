@@ -33,7 +33,7 @@
   .skip-link {
     position: absolute;
     top: -100%;
-    left: 0;
+    inset-inline-start: 0;
     background: var(--primary);
     color: var(--on-primary);
     padding: 8px 16px;
@@ -248,7 +248,7 @@ button:disabled {
 .settings-toggle__thumb {
   position: absolute;
   top: 2px;
-  left: 2px;
+  inset-inline-start: 2px;
   width: 18px;
   height: 18px;
   border-radius: 50%;
@@ -258,7 +258,7 @@ button:disabled {
 .settings-toggle.on .settings-toggle__thumb { transform: translateX(18px); }
 .btn-send-max {
   position: absolute;
-  right: 10px;
+  inset-inline-end: 10px;
   top: 50%;
   transform: translateY(-50%);
   width: auto;
@@ -348,9 +348,9 @@ select {
   flex-direction: column;
 }
 
-.input-wrap input { 
-  margin-bottom: 0; 
-  padding-right: 60px;
+.input-wrap input {
+  margin-bottom: 0;
+  padding-inline-end: 60px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -386,11 +386,11 @@ select {
 }
 .input-wrap input {
   margin-bottom: 0;
-  padding-right: 60px;
+  padding-inline-end: 60px;
 }
 .input-icon {
   position: absolute;
-  right: 10px;
+  inset-inline-end: 10px;
   top: 50%;
   transform: translateY(-50%);
   pointer-events: none;
@@ -406,9 +406,9 @@ select {
   .input-wrap.memo-wrap select {
     width: 100%;
   }
-  
+
   .input-wrap.memo-wrap input {
-    padding-right: 40px;
+    padding-inline-end: 40px;
   }
 }
 
@@ -547,7 +547,7 @@ select {
 
 .qr-scan-btn {
   position: absolute;
-  right: 50px;
+  inset-inline-end: 50px;
   top: 50%;
   transform: translateY(-50%);
   background: none;
@@ -569,7 +569,7 @@ select {
 /* Responsive QR scan button */
 @media (max-width: 360px) {
   .qr-scan-btn {
-    right: 40px;
+    inset-inline-end: 40px;
     font-size: 1rem;
     padding: 2px 4px;
   }
@@ -671,7 +671,7 @@ select {
 .net-panel {
   position: absolute;
   top: calc(100% + 6px);
-  right: 0;
+  inset-inline-end: 0;
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -817,8 +817,8 @@ select {
 .payment-confirmation-overlay {
   position: fixed;
   top: 0;
-  left: 0;
-  right: 0;
+  inset-inline-start: 0;
+  inset-inline-end: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.6);
   display: flex;
@@ -1058,10 +1058,10 @@ select {
     flex-direction: column;
   }
 }
-.sm-time { margin-left: auto; color: #999; white-space: nowrap; font-size: 11px; }
+.sm-time { margin-inline-start: auto; color: #999; white-space: nowrap; font-size: 11px; }
 
 .sm-time {
-  margin-left: auto;
+  margin-inline-start: auto;
   color: #999;
   white-space: nowrap;
   font-size: 11px;
@@ -1425,7 +1425,7 @@ kbd {
 .slideover-panel {
   position: fixed;
   top: 0;
-  right: 0;
+  inset-inline-end: 0;
   bottom: 0;
   width: 100%;
   max-width: 420px;
@@ -1582,7 +1582,7 @@ kbd {
 .fee-usd {
   color: #64748b;
   font-weight: 400;
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 .fee-total {
   border-top: 1px solid #bae6fd;
@@ -1941,7 +1941,7 @@ kbd {
 .confirm-dialog__row dd {
   margin: 0;
   font-weight: 500;
-  text-align: right;
+  text-align: end;
   word-break: break-all;
 }
 .confirm-dialog__row--total dt,
@@ -1951,7 +1951,7 @@ kbd {
 .confirm-dialog__usd {
   font-size: 0.8rem;
   color: var(--text-secondary, #6b7280);
-  margin-left: 4px;
+  margin-inline-start: 4px;
 }
 
 .confirm-dialog__actions {
@@ -1966,7 +1966,7 @@ kbd {
   position: relative;
   display: inline-flex;
   align-items: center;
-  margin-left: 4px;
+  margin-inline-start: 4px;
   vertical-align: middle;
 }
 
@@ -2017,7 +2017,7 @@ kbd {
   box-shadow: var(--shadow);
   z-index: 1000;
   pointer-events: auto;
-  text-align: left;
+  text-align: start;
 }
 
 .xlm-tooltip::after {
@@ -2055,15 +2055,15 @@ kbd {
 /* Ensure tooltip doesn't overflow viewport */
 @media (max-width: 320px) {
   .xlm-tooltip {
-    left: auto;
-    right: 0;
+    inset-inline-start: auto;
+    inset-inline-end: 0;
     transform: none;
     max-width: 180px;
   }
-  
+
   .xlm-tooltip::after {
-    left: auto;
-    right: 12px;
+    inset-inline-start: auto;
+    inset-inline-end: 12px;
     transform: none;
   }
 .confirm-dialog__btn-confirm {
@@ -2169,7 +2169,7 @@ kbd {
   padding: 12px;
   margin-bottom: 12px;
   list-style: none;
-  padding-left: 0;
+  padding-inline-start: 0;
   margin-top: 0;
   font-size: 13px;
   color: #7f1d1d;
