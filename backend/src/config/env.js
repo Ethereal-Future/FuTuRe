@@ -79,6 +79,15 @@ function parseInteger(value, { envVarName, defaultValue } = {}) {
   return num;
 }
 
+function parseFloatEnv(value, { envVarName, defaultValue } = {}) {
+  if (value === undefined || value === null || value === '') return defaultValue;
+  const num = Number.parseFloat(String(value));
+  if (!Number.isFinite(num)) {
+    throw new Error(`${envVarName} must be a number`);
+  }
+  return num;
+}
+
 function parseCsv(value) {
   if (typeof value !== 'string' || value.trim().length === 0) return [];
   return value
@@ -308,6 +317,18 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
   const alertEmail = env.ALERT_EMAIL ? (typeof env.ALERT_EMAIL === 'string' ? env.ALERT_EMAIL.trim() : '') : undefined;
   const slackWebhookUrl = env.SLACK_WEBHOOK_URL ? (typeof env.SLACK_WEBHOOK_URL === 'string' ? env.SLACK_WEBHOOK_URL.trim() : '') : undefined;
 
+  // Default XLM amount above which the frontend requires a WebAuthn
+  // biometric re-auth before a payment is confirmed (see issue #808).
+  // Operators can raise/lower the sane default; users may further
+  // customize their own threshold via account settings.
+  const biometricReauthThresholdXLM = parseFloatEnv(env.BIOMETRIC_REAUTH_THRESHOLD_XLM, {
+    envVarName: 'BIOMETRIC_REAUTH_THRESHOLD_XLM',
+    defaultValue: 100,
+  });
+  if (biometricReauthThresholdXLM <= 0) {
+    throw new Error('BIOMETRIC_REAUTH_THRESHOLD_XLM must be a positive number');
+  }
+
   return {
     meta: {
       schemaVersion: CONFIG_SCHEMA_VERSION,
@@ -333,6 +354,7 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
     },
     security: {
       jwtSecret,
+      biometricReauthThresholdXLM,
     },
     database: {
       poolMax: dbPoolMax,

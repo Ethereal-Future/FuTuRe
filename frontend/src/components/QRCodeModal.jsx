@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { makeVariants } from '../utils/animations';
 
@@ -12,6 +13,7 @@ function buildQRData(publicKey, amount) {
 }
 
 export function QRCodeModal({ publicKey, onClose }) {
+  const { t } = useTranslation();
   const canvasRef = useRef(null);
   const modalRef = useRef(null);
   const [amount, setAmount] = useState('');
@@ -63,39 +65,39 @@ export function QRCodeModal({ publicKey, onClose }) {
         aria-describedby="qr-modal-desc"
       >
         <div className="qr-header">
-          <h3 id="qr-modal-title">QR Code</h3>
-          <button className="qr-close" onClick={onClose} aria-label="Close QR code dialog">✕</button>
+          <h3 id="qr-modal-title">{t('qrCodeModal.title')}</h3>
+          <button className="qr-close" onClick={onClose} aria-label={t('qrCodeModal.close')}>✕</button>
         </div>
 
         <div className="qr-canvas-wrap" aria-hidden="true">
           {error
-            ? <p style={{ color: '#ef4444' }} role="alert">Failed to generate QR: {error}</p>
-            : <canvas ref={canvasRef} aria-label={`QR code for Stellar address ${publicKey}`} />
+            ? <p style={{ color: '#ef4444' }} role="alert">{t('qrCodeModal.failedToGenerate', { error })}</p>
+            : <canvas ref={canvasRef} aria-label={t('qrCodeModal.canvasAriaLabel', { publicKey })} />
           }
         </div>
 
         <p id="qr-modal-desc" className="qr-pubkey">{publicKey}</p>
 
         <div className="qr-amount-row">
-          <label htmlFor="qr-amount" className="sr-only">Include payment amount (optional)</label>
+          <label htmlFor="qr-amount" className="sr-only">{t('qrCodeModal.includeAmountLabel')}</label>
           <input
             id="qr-amount"
             type="number"
             min="0"
             step="any"
-            placeholder="Include amount (optional)"
+            placeholder={t('qrCodeModal.includeAmountPlaceholder')}
             value={amount}
             onChange={(e) => setAmount(e.target.value)}
             className="qr-amount-input"
-            aria-label="Payment amount to encode in QR"
+            aria-label={t('qrCodeModal.amountAriaLabel')}
           />
         </div>
         {amount && parseFloat(amount) > 0 && (
-          <p className="qr-hint" aria-live="polite">QR encodes a payment request for {amount} XLM</p>
+          <p className="qr-hint" aria-live="polite">{t('qrCodeModal.paymentRequestHint', { amount })}</p>
         )}
 
-        <button className="qr-download" onClick={handleDownload} aria-label="Download QR code as PNG image">
-          ⬇ Download PNG
+        <button className="qr-download" onClick={handleDownload} aria-label={t('qrCodeModal.downloadAriaLabel')}>
+          {t('qrCodeModal.downloadPng')}
         </button>
       </motion.div>
     </motion.div>

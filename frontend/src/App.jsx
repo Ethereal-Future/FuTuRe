@@ -18,6 +18,7 @@ import { isValidStellarAddress } from './utils/validateStellarAddress';
 import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
 import { formatBalanceWithAsset } from './utils/formatBalance';
+import { formatAmount as formatCurrencyAmount } from './utils/formatAmount';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
@@ -41,8 +42,10 @@ import { PathPayment } from './components/PathPayment';
 import { FeeDisplay } from './components/FeeDisplay';
 import { InlineConfirmation } from './components/InlineConfirmation';
 import { logError } from './utils/errorLogger';
+import { saveBalance, getCachedBalance } from './cache/balanceCache.js';
 import { ImportAccountForm } from './components/ImportAccountForm';
 import { ConfirmSendDialog } from './components/ConfirmSendDialog';
+import { BiometricConfirmation } from './components/BiometricConfirmation';
 import { LanguageSelector } from './components/LanguageSelector';
 import { FileUpload } from './components/FileUpload';
 import { AccountCreatedCelebration } from './components/AccountCreatedCelebration';
@@ -89,6 +92,10 @@ const AccountSettings = lazy(() =>
 );
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
+// Default XLM amount above which a biometric re-auth is required before
+// ConfirmSendDialog opens. Overridden per-account via account settings
+// (see SettingsPage.jsx's Security section) and by the server default.
+const DEFAULT_BIOMETRIC_REAUTH_THRESHOLD = 100;
 
 function App() {
   if (window.location.pathname === '/admin') {
@@ -113,6 +120,7 @@ function App() {
 
   // Local state not in store
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showBiometricConfirm, setShowBiometricConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [confirmClear, setConfirmClear] = useState(false);
   const [replaySecret, setReplaySecret] = useState('');
@@ -127,6 +135,9 @@ function App() {
   const [showBackupSettings, setShowBackupSettings] = useState(false);
   const [userRole, setUserRole] = useState(null);
   const [federationStatus, setFederationStatus] = useState('');
+  // Timestamp (ms) of the cached balance currently on screen, or null when
+  // the displayed balance came from a live Horizon response.
+  const [balanceCachedAt, setBalanceCachedAt] = useState(null);
 
   const { t } = useTranslation();
   const msg = useMessages();
@@ -177,8 +188,10 @@ function App() {
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatusQuery();
 
-  // Load user's preferred fiat currency from account settings (defaultAsset)
+  // Load user's preferred fiat currency and biometric re-auth threshold from
+  // account settings (defaultAsset, biometricReauthThreshold)
   const [fiatCurrency, setFiatCurrency] = useState('USD');
+  const [biometricThreshold, setBiometricThreshold] = useState(DEFAULT_BIOMETRIC_REAUTH_THRESHOLD);
   useEffect(() => {
     if (!account?.publicKey) return;
     apiClient
@@ -189,9 +202,12 @@ function App() {
         const STELLAR_ASSETS = new Set(['XLM', 'USDC', 'EURC']);
         if (asset && !STELLAR_ASSETS.has(asset)) setFiatCurrency(asset);
         else if (asset === 'EURC') setFiatCurrency('EUR');
+        if (typeof data?.biometricReauthThreshold === 'number') {
+          setBiometricThreshold(data.biometricReauthThreshold);
+        }
       })
       .catch(() => {
-        /* use USD default */
+        /* use defaults */
       });
   }, [account?.publicKey]);
 
@@ -257,6 +273,27 @@ function App() {
       setShowTxLookup(true);
     }
   }, []);
+
+  // PWA shortcut deep-links: /send, /balance, /history jump straight to the
+  // relevant section instead of requiring the user to scroll down manually.
+  // If no account exists yet, the create/import account screen renders as
+  // usual and the scroll is skipped since the target section isn't mounted.
+  useEffect(() => {
+    if (!account) return;
+    const SHORTCUT_TARGETS = {
+      '/send': 'send-heading',
+      '/balance': 'balance-section',
+      '/history': 'transaction-history-section',
+    };
+    const targetId = SHORTCUT_TARGETS[window.location.pathname];
+    if (!targetId) return;
+    const target = document.getElementById(targetId);
+    if (!target) return;
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (window.location.pathname === '/send') {
+      document.getElementById('recipient-input')?.focus();
+    }
+  }, [account]);
 
   const resetForm = () => dispatch({ type: A.RESET_FORM });
   const clearForm = () => {
@@ -397,14 +434,32 @@ function App() {
     try {
       const data = await getAccount(account.publicKey);
       dispatch({ type: A.SET_BALANCE, payload: data });
+      setBalanceCachedAt(null);
+      saveBalance(account.publicKey, data).catch(() => {});
     } catch (error) {
       logError(error, { context: 'checkBalance' });
-      msg.error(getFriendlyError(error), { retry: checkBalance });
+      // A response object means the server was reachable and actually
+      // rejected the request — that's a real error, not an offline fallback.
+      const isNetworkFailure = !navigator.onLine || !error.response;
+      const cached = isNetworkFailure ? await getCachedBalance(account.publicKey).catch(() => null) : null;
+      if (cached) {
+        dispatch({ type: A.SET_BALANCE, payload: cached.balance });
+        setBalanceCachedAt(cached.cachedAt);
+      } else {
+        msg.error(getFriendlyError(error), { retry: checkBalance });
+      }
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account, dispatch, msg]);
+
+  // Show the last-known balance immediately when the account loads, so users
+  // checking on a flaky connection aren't greeted by a blank balance field.
+  useEffect(() => {
+    if (account?.publicKey && balance === null) checkBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [account?.publicKey]);
 
   const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
@@ -422,6 +477,22 @@ function App() {
     kycStatus !== 'APPROVED' &&
     assetCode === 'XLM' &&
     parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
+
+  // Gate the final ConfirmSendDialog behind a biometric re-auth step once the
+  // amount crosses the user's configured threshold — protects against session
+  // hijacking and accidental large transfers per issue #808.
+  const requiresBiometricConfirm =
+    assetCode === 'XLM' &&
+    Number.isFinite(parseFloat(amount)) &&
+    parseFloat(amount) > biometricThreshold;
+
+  const initiateSend = useCallback(() => {
+    if (requiresBiometricConfirm) {
+      setShowBiometricConfirm(true);
+    } else {
+      setShowConfirm(true);
+    }
+  }, [requiresBiometricConfirm]);
 
   useEffect(() => {
     if (!recipientLooksFederated) {
@@ -1047,7 +1118,7 @@ function App() {
                       placeholder="Recipient public key or alice*futureremit.app"
                       value={recipient}
                       onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
-                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      onKeyDown={(e) => e.key === 'Enter' && initiateSend()}
                       style={{
                         border: `2px solid ${recipientTouched ? (recipientValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
@@ -1135,7 +1206,7 @@ function App() {
                       onChange={(e) =>
                         dispatch({ type: A.SET_AMOUNT, payload: formatAmount(e.target.value) })
                       }
-                      onKeyDown={(e) => e.key === 'Enter' && setShowConfirm(true)}
+                      onKeyDown={(e) => e.key === 'Enter' && initiateSend()}
                       style={{
                         border: `2px solid ${amountTouched ? (amountValid ? '#22c55e' : '#ef4444') : '#ccc'}`,
                       }}
@@ -1162,7 +1233,7 @@ function App() {
                   {amountValid &&
                     (xlmUsdRate ? (
                       <p className="rate-estimate" aria-live="polite">
-                        ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                        ≈ {formatCurrencyAmount(parseFloat(amount) * xlmUsdRate, 'USD')}
                         <span className="rate-source"> · live rate</span>
                       </p>
                     ) : (
@@ -1282,6 +1353,7 @@ function App() {
                 <motion.div variants={v.stagger} initial="hidden" animate="visible" exit="exit">
                   {/* Balance */}
                   <motion.section
+                    id="balance-section"
                     className="section"
                     aria-labelledby="balance-heading"
                     variants={v.fadeSlide}
@@ -1329,6 +1401,22 @@ function App() {
                                 </span>
                               </motion.p>
                             ))}
+                            {balanceCachedAt && (
+                              <p
+                                className="balance-cached-indicator"
+                                title={`Last updated ${new Date(balanceCachedAt).toLocaleString()}`}
+                                style={{
+                                  fontSize: '0.8rem',
+                                  color: '#6b7280',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 4,
+                                  marginTop: 4,
+                                }}
+                              >
+                                🕒 Cached — last updated {new Date(balanceCachedAt).toLocaleString()}
+                              </p>
+                            )}
                           </motion.div>
                         ) : null}
                       </AnimatePresence>
@@ -1670,7 +1758,7 @@ function App() {
                       {amountValid &&
                         (xlmFiatRate ? (
                           <p className="rate-estimate" aria-live="polite">
-                            ≈ {(parseFloat(amount) * xlmFiatRate).toFixed(2)} {fiatCurrency}
+                            ≈ {formatCurrencyAmount(parseFloat(amount) * xlmFiatRate, fiatCurrency)}
                             <span className="rate-source"> · live rate</span>
                           </p>
                         ) : (
@@ -1682,7 +1770,7 @@ function App() {
                         ))}
                       <div className="payment-form-actions">
                         <motion.button
-                          onClick={() => setShowConfirm(true)}
+                          onClick={initiateSend}
                           {...tap}
                           disabled={
                             !recipientValid ||
@@ -1734,7 +1822,7 @@ function App() {
                   </motion.section>
 
                   {/* Transaction History */}
-                  <motion.div variants={v.fadeSlide}>
+                  <motion.div id="transaction-history-section" variants={v.fadeSlide}>
                     <ErrorBoundary context="Transaction History">
                       <TransactionHistory publicKey={account.publicKey} />
                     </ErrorBoundary>
@@ -2095,6 +2183,19 @@ function App() {
             }}
             onCancel={() => setShowConfirm(false)}
           />
+
+          {showBiometricConfirm && account && (
+            <BiometricConfirmation
+              publicKey={account.publicKey}
+              amount={amount}
+              assetCode={assetCode}
+              onSuccess={() => {
+                setShowBiometricConfirm(false);
+                setShowConfirm(true);
+              }}
+              onCancel={() => setShowBiometricConfirm(false)}
+            />
+          )}
 
           {/* Batch Payment Confirmation */}
           <AnimatePresence>

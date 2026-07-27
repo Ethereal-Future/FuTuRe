@@ -37,6 +37,15 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Navigation requests (e.g. a PWA shortcut opening /send directly): fall
+  // back to the cached app shell so deep links work offline instead of 404ing.
+  if (request.mode === 'navigate') {
+    e.respondWith(
+      fetch(request).catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
   // Static assets: cache-first
   e.respondWith(
     caches.match(request).then((cached) => cached || fetch(request).then((res) => {

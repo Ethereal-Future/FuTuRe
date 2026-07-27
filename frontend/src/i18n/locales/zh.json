@@ -33,7 +33,8 @@
   },
   "balance": {
     "check": "查询余额",
-    "checking": "正在查询余额..."
+    "checking": "正在查询余额...",
+    "refreshing": "正在刷新…"
   },
   "payment": {
     "title": "发送付款",
@@ -117,5 +118,471 @@
     "es": "Español",
     "zh": "中文",
     "pt": "Português"
+  },
+  "common": {
+    "close": "Close",
+    "back": "Back",
+    "next": "Next",
+    "submit": "Submit",
+    "previous": "Previous",
+    "pageOf": "Page {{page}} of {{total}}",
+    "cancel": "Cancel",
+    "continue": "Continue"
+  },
+  "breadcrumb": {
+    "ariaLabel": "Breadcrumb"
+  },
+  "chartsDashboard": {
+    "empty": "No data yet. Create an account and make transactions to see charts."
+  },
+  "inlineConfirmation": {
+    "ariaLabel": "Confirm clear form"
+  },
+  "offlineIndicator": {
+    "message": "You are offline — payments will be queued and sent when reconnected."
+  },
+  "amountInput": {
+    "label": "Amount",
+    "currency": "Currency",
+    "maxLabel": "Send maximum available amount: {{amount}}"
+  },
+  "copyButton": {
+    "title": "Copy (Ctrl+C when focused)",
+    "copied": "Copied!"
+  },
+  "accountCreated": {
+    "ariaLabel": "Account created successfully",
+    "title": "Account Created!",
+    "saveSecretKey": "Save your secret key — it won't be shown again."
+  },
+  "formValidation": {
+    "looksGood": "Looks good!",
+    "progress": "Form Progress",
+    "warnings": "Warnings:"
+  },
+  "oauth": {
+    "signInWithGoogle": "Sign in with Google",
+    "processing": "Processing login..."
+  },
+  "skeleton": {
+    "loadingContent": "Loading content",
+    "loadingTransaction": "Loading transaction",
+    "loadingBalances": "Loading account balances"
+  },
+  "xlmInfo": {
+    "title": "What is XLM?",
+    "summary": "XLM is the native currency of the Stellar network.",
+    "description": "It is used to pay small transaction fees (typically less than $0.001) and to maintain a minimum account reserve of 1 XLM."
+  },
+  "validationSummary": {
+    "defaultTitle": "Please fix the following errors:"
+  },
+  "errorBoundary": {
+    "sectionError": "{{context}} Error",
+    "tryAgain": "Try again",
+    "fullPageTitle": "Something went wrong"
+  },
+  "qrScanner": {
+    "title": "Scan QR Code",
+    "close": "Close QR scanner",
+    "viewfinderLabel": "Camera viewfinder for QR scanning",
+    "hint": "Point camera at a Stellar address QR code"
+  },
+  "searchableSelect": {
+    "ariaLabel": "Search options",
+    "placeholder": "Search…",
+    "noResults": "No results"
+  },
+  "settingsPage": {
+    "title": "Settings",
+    "close": "Close settings",
+    "darkMode": "Dark mode",
+    "toggleDarkMode": "Toggle dark mode"
+  },
+  "bumpSequence": {
+    "title": "⚠️ Bump Sequence Number",
+    "description": "Use this to resolve stuck transactions due to sequence number mismatches. Only experienced users should use this feature.",
+    "invalidTarget": "Please enter a valid sequence number",
+    "mustBeGreater": "Target sequence must be greater than current sequence ({{current}})",
+    "success": "✓ Sequence number bumped successfully",
+    "currentSequence": "Current Sequence",
+    "targetSequence": "Target Sequence",
+    "targetPlaceholder": "Enter target sequence number",
+    "mustBeGreaterThan": "Must be greater than {{current}}",
+    "loading": "Loading…",
+    "processing": "Processing…",
+    "submit": "Bump Sequence",
+    "bumpedTo": "Sequence bumped to {{sequence}}"
+  },
+  "datePicker": {
+    "from": "From",
+    "fromDate": "From date",
+    "to": "To",
+    "toDate": "To date",
+    "clearDates": "Clear dates",
+    "clear": "Clear"
+  },
+  "fileUpload": {
+    "dropZone": "Drop files here or click to browse",
+    "dragDrop": "Drag & drop files here, or",
+    "browse": "browse",
+    "hint": "Images, PDF, CSV, TXT · max 10MB · up to 10 files",
+    "remove": "Remove {{name}}",
+    "clearAll": "Clear All"
+  },
+  "importAccount": {
+    "warning": "⚠️ Never share your secret key. It will not be stored and will be cleared after import.",
+    "secretKeyPlaceholder": "Secret Key (starts with S…)",
+    "secretKeyAriaLabel": "Stellar secret key",
+    "invalidSecretKey": "Invalid secret key (must start with S and be 56 characters)"
+  },
+  "installBanner": {
+    "ariaLabel": "Install app",
+    "text": "Install the Stellar Remittance app for faster access and offline support.",
+    "install": "Install",
+    "dismiss": "Dismiss install prompt"
+  },
+  "networkBadge": {
+    "ariaLabel": "Network status",
+    "testnet": "Testnet",
+    "mainnet": "Mainnet",
+    "networkLabel": "Network:",
+    "horizonLabel": "Horizon:",
+    "statusLabel": "Status:",
+    "online": "✅ Online",
+    "offline": "❌ Offline",
+    "horizonVersionLabel": "Horizon v:",
+    "protocolLabel": "Protocol:",
+    "testnetWarning": "⚠ You are on Testnet — funds have no real value"
+  },
+  "statusMessage": {
+    "retryAction": "Retry action",
+    "retry": "Retry",
+    "dismiss": "Dismiss: {{message}}",
+    "notifications": "Notifications",
+    "historyToggle": "Message history ({{count}})",
+    "history": "Message history"
+  },
+  "xdrExport": {
+    "title": "Export Transaction XDR",
+    "statusLabel": "Status:",
+    "signed": "✓ Signed Transaction",
+    "unsigned": "◯ Unsigned Transaction",
+    "signedHint": "This signed transaction can be submitted to the Stellar network.",
+    "unsignedHint": "This unsigned transaction needs signatures before submission.",
+    "envelopeLabel": "Transaction Envelope (XDR)",
+    "copied": "✓ Copied to clipboard",
+    "copy": "📋 Copy XDR",
+    "download": "⬇️ Download as .xdr file",
+    "openInLab": "🔬 Open in Stellar Lab"
+  },
+  "notificationBell": {
+    "ariaLabel": "Notifications",
+    "title": "Notifications",
+    "markAllAsRead": "Mark all as read",
+    "loading": "Loading...",
+    "empty": "No notifications yet. You're all caught up! 🎉",
+    "viewAll": "View All Notifications"
+  },
+  "qrCodeModal": {
+    "title": "QR Code",
+    "close": "Close QR code dialog",
+    "failedToGenerate": "Failed to generate QR: {{error}}",
+    "canvasAriaLabel": "QR code for Stellar address {{publicKey}}",
+    "includeAmountLabel": "Include payment amount (optional)",
+    "includeAmountPlaceholder": "Include amount (optional)",
+    "amountAriaLabel": "Payment amount to encode in QR",
+    "paymentRequestHint": "QR encodes a payment request for {{amount}} XLM",
+    "downloadAriaLabel": "Download QR code as PNG image",
+    "downloadPng": "⬇ Download PNG"
+  },
+  "changeTrustForm": {
+    "assetCodeRequired": "Asset code required (1-12 characters)",
+    "issuerRequired": "Issuer account required",
+    "invalidLimit": "Valid limit required (0 to remove trustline)",
+    "assetCodeLabel": "Asset Code",
+    "issuerLabel": "Issuer Account",
+    "limitLabel": "Limit (XLM)",
+    "limitHint": "Set to 0 to remove trustline",
+    "submit": "Add Trustline Operation"
+  },
+  "paymentOperationForm": {
+    "destinationRequired": "Destination account required",
+    "amountRequired": "Valid amount required",
+    "issuerRequired": "Issuer required for non-XLM assets",
+    "selfSendError": "Cannot send to your own account",
+    "destinationLabel": "Destination Account",
+    "amountLabel": "Amount",
+    "assetLabel": "Asset",
+    "other": "Other",
+    "issuerLabel": "Issuer",
+    "memoLabel": "Memo (optional)",
+    "memoPlaceholder": "Memo text",
+    "submit": "Add Payment Operation"
+  },
+  "adminDashboard": {
+    "title": "Admin Dashboard",
+    "subtitle": "Monitor platform activity, KYC reviews, AML alerts, and system load.",
+    "loadError": "Failed to load admin dashboard",
+    "kycActionError": "Failed to {{action}} KYC",
+    "searchPlaceholder": "Search username or public key",
+    "searchAriaLabel": "Search users",
+    "search": "Search",
+    "totalUsers": "Total Users",
+    "transactions": "Transactions",
+    "activeStreams": "Active Streams",
+    "pendingKyc": "Pending KYC",
+    "openAmlAlerts": "Open AML Alerts",
+    "columnUser": "User",
+    "columnRole": "Role",
+    "columnKyc": "KYC",
+    "columnCreated": "Created",
+    "columnActions": "Actions",
+    "unnamed": "Unnamed",
+    "approve": "Approve",
+    "reject": "Reject"
+  },
+  "claimableBalances": {
+    "claimedSuccess": "Claimable balance claimed successfully!",
+    "title": "📦 Claimable Balances",
+    "loading": "Loading…",
+    "empty": "No claimable balances available.",
+    "from": "From:",
+    "id": "ID:",
+    "expired": "Expired",
+    "claiming": "Claiming…",
+    "claim": "Claim"
+  },
+  "multiSig": {
+    "title": "Multi-Signature Transactions",
+    "transactionIdLabel": "Transaction ID:",
+    "copyTxId": "Copy txId",
+    "noPendingTransactions": "No pending transactions.",
+    "amountLabel": "Amount:",
+    "signaturesLabel": "Signatures:",
+    "txIdLabel": "txId:",
+    "submitTransaction": "Submit Transaction"
+  },
+  "notificationPermission": {
+    "enabled": "✅ Push notifications enabled for incoming payments",
+    "blocked": "Notifications are blocked. Enable them in your browser settings to receive payment alerts.",
+    "promptTitle": "🔔 Enable Payment Notifications?",
+    "promptBody": "Get notified instantly when you receive Stellar payments.",
+    "enabling": "Enabling...",
+    "enable": "Enable",
+    "later": "Later",
+    "errorPrefix": "Error: {{error}}",
+    "enableButton": "🔔 Enable Push Notifications",
+    "notMonitoring": "ℹ️ Notifications enabled but not monitoring",
+    "disable": "Disable"
+  },
+  "webhookManager": {
+    "title": "Webhooks",
+    "subtitle": "Register webhook URLs to receive account event notifications.",
+    "loadFailed": "Failed to load webhooks",
+    "registeredSuccess": "Webhook registered successfully.",
+    "registerFailed": "Failed to register webhook",
+    "deletedSuccess": "Webhook deleted.",
+    "deleteFailed": "Failed to delete webhook",
+    "urlLabel": "Webhook URL",
+    "secretLabel": "Signing Secret (optional)",
+    "secretPlaceholder": "leave blank to auto-generate",
+    "eventsLegend": "Events",
+    "registering": "Registering…",
+    "register": "Register webhook",
+    "loadingWebhooks": "Loading registered webhooks…",
+    "empty": "No webhooks registered for this account.",
+    "eventsPrefix": "Events: {{events}}",
+    "addedPrefix": "Added: {{date}}",
+    "unknown": "Unknown",
+    "delete": "Delete"
+  },
+  "manageDataForm": {
+    "keyRequired": "Key required (1-64 bytes)",
+    "valueRequired": "Value required and must be 1-64 bytes",
+    "keyLabel": "Key (max 64 bytes)",
+    "currentBytes": "Current: {{count}}/64 bytes",
+    "deleteEntry": "Delete this entry",
+    "valueLabel": "Value (max 64 bytes)",
+    "valuePlaceholder": "Enter data value (UTF-8 text)",
+    "submit": "Add Data Operation"
+  },
+  "manageOfferForm": {
+    "validOfferIdRequired": "Valid offer ID required",
+    "validAmountRequired": "Valid amount required",
+    "validPriceRequired": "Valid price required",
+    "sellingIssuerRequired": "Selling issuer required for non-XLM assets",
+    "buyingIssuerRequired": "Buying issuer required for non-XLM assets",
+    "sell": "Sell",
+    "buy": "Buy",
+    "deleteUpdateExisting": "Delete/update existing offer",
+    "offerIdLabel": "Offer ID",
+    "sellingAssetLabel": "Selling Asset",
+    "other": "Other",
+    "sellingIssuerLabel": "Selling Issuer",
+    "buyingAssetLabel": "Buying Asset",
+    "buyingIssuerLabel": "Buying Issuer",
+    "amountLabel": "Amount ({{operation}})",
+    "priceLabel": "Price",
+    "submit": "Add {{operation}} Offer Operation"
+  },
+  "setOptionsForm": {
+    "medExceedsHigh": "Medium threshold cannot be greater than high threshold",
+    "selfInflationError": "Cannot set inflation destination to own account (use omitSource)",
+    "invalidClearFlags": "Clear flags must be a valid number",
+    "invalidSetFlags": "Set flags must be a valid number",
+    "invalidMasterWeight": "Master weight must be 0-255",
+    "invalidLowThreshold": "Low threshold must be 0-255",
+    "invalidMedThreshold": "Medium threshold must be 0-255",
+    "invalidHighThreshold": "High threshold must be 0-255",
+    "noOptionSet": "At least one option must be set",
+    "inflationDestLabel": "Inflation Destination (optional)",
+    "clearFlagsLabel": "Clear Flags (optional)",
+    "setFlagsLabel": "Set Flags (optional)",
+    "masterWeightLabel": "Master Weight (0-255, optional)",
+    "lowThresholdLabel": "Low Threshold (0-255)",
+    "medThresholdLabel": "Medium Threshold (0-255)",
+    "highThresholdLabel": "High Threshold (0-255)",
+    "homeDomainLabel": "Home Domain (optional)",
+    "submit": "Add SetOptions Operation"
+  },
+  "ammPoolBrowser": {
+    "title": "AMM Pools",
+    "refresh": "Refresh AMM pools",
+    "empty": "No pools registered yet.",
+    "listAriaLabel": "AMM pools",
+    "reserveA": "Reserve A:",
+    "reserveB": "Reserve B:",
+    "liquidity": "Liquidity:",
+    "price": "Price:",
+    "fee": "Fee:",
+    "bps": "bps",
+    "arbitrageTitle": "⚡ Arbitrage Opportunities",
+    "buyOn": "Buy on",
+    "sellOn": "→ Sell on",
+    "spread": "— Spread:"
+  },
+  "sep7": {
+    "invalidTitle": "Invalid Payment Link",
+    "errorLabel": "Error:",
+    "title": "Payment Request",
+    "originLabel": "Origin:",
+    "messageLabel": "Message:",
+    "recipient": "Recipient",
+    "amount": "Amount",
+    "memo": "Memo",
+    "typeLabel": "Type:",
+    "assetIssuer": "Asset Issuer",
+    "prefillNotice": "ℹ️ The form will be pre-filled with this information. You can review and modify it before sending."
+  },
+  "thresholdSettings": {
+    "rangeError": "All thresholds must be between 0 and 255",
+    "medExceedsHigh": "Medium threshold cannot be greater than high threshold",
+    "exceedsMaxWeight": "High threshold ({{high}}) cannot exceed total signer weight ({{maxWeight}})",
+    "confirmChange": "⚠️ WARNING: Changing thresholds can lock your account if configured incorrectly. Are you sure?",
+    "lowDescription": "Low threshold: Required for operations like AllowTrust",
+    "medDescription": "Medium threshold: Required for most operations like Payment",
+    "highDescription": "High threshold: Required for critical operations like SetOptions (changing thresholds/signers)",
+    "loading": "Loading thresholds…",
+    "title": "Signing Thresholds",
+    "edit": "Edit",
+    "lowThreshold": "Low Threshold",
+    "medThreshold": "Medium Threshold",
+    "highThreshold": "High Threshold",
+    "totalWeightAvailable": "Total signer weight available: {{weight}}",
+    "low": "Low (0-255)",
+    "medium": "Medium (0-255)",
+    "high": "High (0-255)",
+    "saving": "Saving…",
+    "save": "Save Thresholds",
+    "currentSigners": "Current Signers",
+    "noAdditionalSigners": "No additional signers",
+    "weightLabel": "Weight: {{weight}}"
+  },
+  "txDetail": {
+    "typePayment": "Payment",
+    "typeCreateAccount": "Account Created",
+    "typeOther": "Other",
+    "type": "Type",
+    "direction": "Direction",
+    "amount": "Amount",
+    "recipient": "Recipient",
+    "sender": "Sender",
+    "copyAddress": "Copy address",
+    "memo": "Memo",
+    "fee": "Fee",
+    "stroops": "stroops",
+    "ledger": "Ledger",
+    "hash": "Hash",
+    "copyTransactionHash": "Copy transaction hash",
+    "timestamp": "Timestamp",
+    "status": "Status",
+    "confirmed": "✓ Confirmed",
+    "failed": "✗ Failed",
+    "rawXdr": "Raw XDR",
+    "hide": "Hide",
+    "view": "View",
+    "rawXdrEnvelope": "raw XDR envelope",
+    "exportTitle": "Export and share this transaction XDR",
+    "export": "📦 Export"
+  },
+  "addressBook": {
+    "title": "📒 Address Book",
+    "searchPlaceholder": "Search contacts…",
+    "searchAriaLabel": "Search contacts",
+    "empty": "No contacts found.",
+    "use": "Use",
+    "nameLabel": "Name",
+    "namePlaceholder": "Contact name",
+    "addressLabel": "Stellar Address",
+    "addressPlaceholder": "Stellar address",
+    "addContact": "+ Add Contact",
+    "removeContact": "Remove {{name}}"
+  },
+  "largeTxWarning": {
+    "title": "Large Transaction",
+    "sendingIntro": "You are about to send",
+    "verifyDetails": ". Please verify the details carefully:",
+    "recipientAddress": "Recipient address",
+    "recipientVerified": "is correct and verified",
+    "amountLabel": "Amount",
+    "amountCorrect": ") is correct",
+    "networkLabel": "Network",
+    "networkCorrect": "(testnet/mainnet) is correct",
+    "verifiedButton": "✓ I've Verified Everything",
+    "clickToProceed": "Click to proceed with the transaction",
+    "readyToSend": "✓ Verified. Ready to send."
+  },
+  "transactionReviewCard": {
+    "title": "Transaction Details",
+    "to": "To:",
+    "amount": "Amount:",
+    "currentBalance": "Current Balance:",
+    "afterTransaction": "After Transaction:"
+  },
+  "securityKeyWarning": {
+    "title": "Secret Key Security Alert",
+    "subtitle": "Your secret key is displayed. Keep it secure and private.",
+    "neverShareStrong": "Never share",
+    "neverShareRest": "your secret key with anyone, including support staff",
+    "neverPasteStrong": "Never paste",
+    "neverPasteRest": "your secret key into websites or applications you don't trust",
+    "storeOfflineStrong": "Store offline",
+    "storeOfflineRest": "in a secure location (hardware wallet, encrypted file, etc.)",
+    "screenshotStrong": "Screenshot carefully",
+    "screenshotRest": "and store in encrypted cloud storage only",
+    "anyoneStrong": "Anyone with this key",
+    "anyoneRest": "can access and transfer all your funds",
+    "acknowledge": "I Understand the Risks"
+  },
+  "secretKeyDisplay": {
+    "publicKeyLabel": "Public Key (safe to share)",
+    "secretKeyLabel": "Secret Key (Keep Private & Secure)",
+    "copied": "✓ Copied",
+    "copy": "Copy",
+    "hide": "👁 Hide",
+    "show": "👁 Show",
+    "tipStrong": "Tip:",
+    "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
   }
 }

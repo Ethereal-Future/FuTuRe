@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { AmountInput } from './AmountInput.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * Component for depositing into and withdrawing from Stellar liquidity pools
@@ -208,9 +209,9 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
             <p>
               <strong>Pool Details:</strong>
             </p>
-            <p>Reserve A: {selectedPool.reserveA.toFixed(4)}</p>
-            <p>Reserve B: {selectedPool.reserveB.toFixed(4)}</p>
-            <p>Price: {selectedPool.midPrice.toFixed(6)} {selectedPool.assetB}/{selectedPool.assetA}</p>
+            <p>Reserve A: {formatAssetAmount(selectedPool.reserveA, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p>
+            <p>Reserve B: {formatAssetAmount(selectedPool.reserveB, { minimumFractionDigits: 4, maximumFractionDigits: 4 })}</p>
+            <p>Price: {formatAssetAmount(selectedPool.midPrice, { minimumFractionDigits: 6, maximumFractionDigits: 6 })} {selectedPool.assetB}/{selectedPool.assetA}</p>
           </div>
 
           {mode === 'deposit' ? (

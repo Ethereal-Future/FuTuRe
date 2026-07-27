@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useFocusTrap } from '../hooks/useFocusTrap';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 export function PaymentConfirmationModal({
   isOpen,
@@ -33,7 +34,7 @@ export function PaymentConfirmationModal({
 
   if (!isOpen) return null;
 
-  const totalAmount = (parseFloat(amount) + parseFloat(estimatedFee)).toFixed(7);
+  const totalAmount = formatAssetAmount(parseFloat(amount) + parseFloat(estimatedFee));
 
   return (
     <motion.div

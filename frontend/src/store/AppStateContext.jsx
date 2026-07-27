@@ -3,6 +3,7 @@ import { appReducer } from './reducer.js';
 import { loadState, saveState } from './persistence.js';
 import { createTabSync } from './tabSync.js';
 import { A } from './reducer.js';
+import { clearAllCachedBalances } from '../cache/balanceCache.js';
 
 const AppStateContext = createContext(null);
 const AppDispatchContext = createContext(null);
@@ -23,7 +24,10 @@ export function AppStateProvider({ children }) {
       if (isSyncingRef.current) return;
       isSyncingRef.current = true;
       if (msg.type === A.SET_ACCOUNT) dispatch({ type: A.SET_ACCOUNT, payload: msg.payload });
-      if (msg.type === A.CLEAR_ACCOUNT) dispatch({ type: A.CLEAR_ACCOUNT });
+      if (msg.type === A.CLEAR_ACCOUNT) {
+        dispatch({ type: A.CLEAR_ACCOUNT });
+        clearAllCachedBalances().catch(() => {});
+      }
       if (msg.type === A.SET_BALANCE) dispatch({ type: A.SET_BALANCE, payload: msg.payload });
       isSyncingRef.current = false;
     });
@@ -33,6 +37,7 @@ export function AppStateProvider({ children }) {
   // Wrap dispatch to also broadcast syncable actions
   const syncedDispatch = useCallback((action) => {
     dispatch(action);
+    if (action.type === A.CLEAR_ACCOUNT) clearAllCachedBalances().catch(() => {});
     if ([A.SET_ACCOUNT, A.CLEAR_ACCOUNT, A.SET_BALANCE].includes(action.type)) {
       const safeAction = action.type === A.SET_ACCOUNT
         ? { ...action, payload: { ...action.payload, secretKey: undefined } }

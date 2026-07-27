@@ -45,6 +45,9 @@ export default [
         alert: 'readonly',
         prompt: 'readonly',
         axios: 'readonly',
+        crypto: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
       },
     },
     settings: {

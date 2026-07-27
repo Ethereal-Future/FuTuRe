@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 /**
  * FormWizard — multi-step form with progress indicator.
@@ -8,6 +9,7 @@ import { AnimatePresence, motion } from 'framer-motion';
  *   onComplete: (allData) => void
  */
 export function FormWizard({ steps = [], onComplete }) {
+  const { t } = useTranslation();
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState(1);
 
@@ -70,12 +72,12 @@ export function FormWizard({ steps = [], onComplete }) {
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
         {current > 0 && (
           <button type="button" onClick={() => go(-1)} style={backBtnStyle}>
-            ← Back
+            ← {t('common.back')}
           </button>
         )}
         <div style={{ flex: 1 }} />
         <button type="button" onClick={isLast ? finish : () => go(1)} style={{ width: 'auto' }}>
-          {isLast ? 'Submit' : 'Next →'}
+          {isLast ? t('common.submit') : `${t('common.next')} →`}
         </button>
       </div>
     </div>

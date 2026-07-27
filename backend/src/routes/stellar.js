@@ -18,6 +18,7 @@ import logger from '../config/logger.js';
 import { createRateLimiter } from '../middleware/rateLimiter.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { optionalMFA } from '../middleware/mfa.js';
+import { getConfig } from '../config/env.js';
 import { requireKYC } from '../middleware/kyc.js';
 import sanctionsChecker from '../compliance/sanctionsChecker.js';
 import amlMonitor from '../compliance/amlMonitor.js';
@@ -910,6 +911,8 @@ router.get('/account/:publicKey/settings', rules.publicKeyParam, validate, async
     res.json({
       defaultAsset: settings.defaultAsset ?? 'XLM',
       notificationsOn: settings.notificationsOn ?? true,
+      biometricReauthThreshold:
+        settings.biometricReauthThreshold ?? getConfig().security.biometricReauthThresholdXLM,
       kycStatus: user?.kycRecord?.status ?? null,
       kycSubmittedAt: user?.kycRecord?.submittedAt ?? null,
     });
@@ -926,10 +929,11 @@ router.put(
   validate,
   body('defaultAsset').optional().isString().trim().isLength({ min: 1, max: 12 }),
   body('notificationsOn').optional().isBoolean(),
+  body('biometricReauthThreshold').optional().isFloat({ min: 0.01 }),
   validate,
   async (req, res) => {
     try {
-      const { defaultAsset, notificationsOn } = req.body;
+      const { defaultAsset, notificationsOn, biometricReauthThreshold } = req.body;
       const user = await prisma.user.upsert({
         where: { publicKey: req.params.publicKey },
         update: {},
@@ -938,12 +942,18 @@ router.put(
       const update = {};
       if (defaultAsset !== undefined) update.defaultAsset = defaultAsset;
       if (notificationsOn !== undefined) update.notificationsOn = notificationsOn;
+      if (biometricReauthThreshold !== undefined) update.biometricReauthThreshold = biometricReauthThreshold;
       const settings = await prisma.setting.upsert({
         where: { userId: user.id },
         update,
         create: { userId: user.id, ...update },
       });
-      res.json({ defaultAsset: settings.defaultAsset, notificationsOn: settings.notificationsOn });
+      res.json({
+        defaultAsset: settings.defaultAsset,
+        notificationsOn: settings.notificationsOn,
+        biometricReauthThreshold:
+          settings.biometricReauthThreshold ?? getConfig().security.biometricReauthThresholdXLM,
+      });
     } catch (error) {
       logError(req, error, { publicKey: req.params.publicKey });
       res.status(500).json({ error: 'Failed to update account settings' });

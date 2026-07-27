@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { makeVariants, tapScale } from '../utils/animations';
 
 /**
@@ -20,6 +21,7 @@ export function InlineConfirmation({
   confirmText = 'Clear',
   cancelText = 'Cancel',
 }) {
+  const { t } = useTranslation();
   const prefersReduced = useReducedMotion();
   const v = makeVariants(prefersReduced);
   const tap = tapScale(prefersReduced);
@@ -44,7 +46,7 @@ export function InlineConfirmation({
         <motion.span
           className="confirm-clear"
           role="group"
-          aria-label="Confirm clear form"
+          aria-label={t('inlineConfirmation.ariaLabel')}
           variants={v.fadeSlide}
           initial="hidden"
           animate="visible"

@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   TransactionVolumeChart,
   BalanceHistoryChart,
@@ -16,6 +17,7 @@ import {
  *   publicKey:    string
  */
 export function ChartsDashboard({ transactions = [], balances = [], publicKey }) {
+  const { t } = useTranslation();
   const volumeData = useMemo(() => {
     const byDay = {};
     transactions.forEach(tx => {
@@ -59,11 +61,11 @@ export function ChartsDashboard({ transactions = [], balances = [], publicKey })
   }, [transactions]);
 
   const metrics = useMemo(() => {
-    const sent = transactions.filter(t => t.type === 'sent');
-    const received = transactions.filter(t => t.type === 'received');
-    const successful = transactions.filter(t => t.successful !== false);
-    const totalSent = sent.reduce((s, t) => s + parseFloat(t.amount ?? 0), 0);
-    const totalReceived = received.reduce((s, t) => s + parseFloat(t.amount ?? 0), 0);
+    const sent = transactions.filter(tx => tx.type === 'sent');
+    const received = transactions.filter(tx => tx.type === 'received');
+    const successful = transactions.filter(tx => tx.successful !== false);
+    const totalSent = sent.reduce((s, tx) => s + parseFloat(tx.amount ?? 0), 0);
+    const totalReceived = received.reduce((s, tx) => s + parseFloat(tx.amount ?? 0), 0);
     return {
       totalSent: parseFloat(totalSent.toFixed(7)),
       totalReceived: parseFloat(totalReceived.toFixed(7)),
@@ -76,7 +78,7 @@ export function ChartsDashboard({ transactions = [], balances = [], publicKey })
   if (!transactions.length && !balances.length) {
     return (
       <div style={{ padding: 24, textAlign: 'center', color: '#888', fontSize: 14 }}>
-        No data yet. Create an account and make transactions to see charts.
+        {t('chartsDashboard.empty')}
       </div>
     );
   }

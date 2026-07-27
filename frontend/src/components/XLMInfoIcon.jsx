@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const HOVER_DELAY_MS = 300;
 
@@ -9,6 +10,7 @@ const HOVER_DELAY_MS = 300;
  * mouse-out, blur, or Escape. Accessible, keyboard navigable, mobile friendly.
  */
 export function XLMInfoIcon({ className = '' }) {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const buttonRef = useRef(null);
   const tooltipRef = useRef(null);
@@ -101,7 +103,7 @@ export function XLMInfoIcon({ className = '' }) {
             handleClick();
           }
         }}
-        aria-label="What is XLM?"
+        aria-label={t('xlmInfo.title')}
         aria-expanded={isOpen}
         aria-describedby={isOpen ? 'xlm-tooltip' : undefined}
       >
@@ -119,9 +121,8 @@ export function XLMInfoIcon({ className = '' }) {
             exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, y: -5 }}
             transition={{ duration: prefersReducedMotion ? 0 : 0.15 }}
           >
-            <strong>XLM is the native currency of the Stellar network.</strong>{' '}
-            It is used to pay small transaction fees (typically less than $0.001) and
-            to maintain a minimum account reserve of 1 XLM.
+            <strong>{t('xlmInfo.summary')}</strong>{' '}
+            {t('xlmInfo.description')}
           </motion.div>
         )}
       </AnimatePresence>

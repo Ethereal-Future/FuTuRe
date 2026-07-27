@@ -4,6 +4,7 @@ import {
   Legend, ResponsiveContainer,
 } from 'recharts';
 import { useRef, useCallback } from 'react';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 
@@ -180,10 +181,10 @@ export function PerformanceDashboard({ metrics = {} }) {
   } = metrics;
 
   const stats = [
-    { label: 'Total Sent', value: `${totalSent.toLocaleString()} XLM`, color: COLORS[3] },
-    { label: 'Total Received', value: `${totalReceived.toLocaleString()} XLM`, color: COLORS[1] },
-    { label: 'Transactions', value: txCount.toLocaleString(), color: COLORS[0] },
-    { label: 'Avg Tx Size', value: `${avgTxSize.toFixed(2)} XLM`, color: COLORS[2] },
+    { label: 'Total Sent', value: `${formatAssetAmount(totalSent)} XLM`, color: COLORS[3] },
+    { label: 'Total Received', value: `${formatAssetAmount(totalReceived)} XLM`, color: COLORS[1] },
+    { label: 'Transactions', value: formatAssetAmount(txCount), color: COLORS[0] },
+    { label: 'Avg Tx Size', value: `${formatAssetAmount(avgTxSize, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`, color: COLORS[2] },
     { label: 'Success Rate', value: `${successRate.toFixed(1)}%`, color: successRate >= 99 ? COLORS[1] : COLORS[3] },
   ];
 

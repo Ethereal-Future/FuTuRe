@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import { FormField } from './FormField';
 import { Spinner } from './Spinner';
 import { StatusMessage } from './StatusMessage';
+import { getBackupReminderThreshold, setBackupReminderThreshold } from '../utils/backupReminder';
 
 function Toggle({ checked, onChange, disabled }) {
   return (
@@ -59,6 +60,15 @@ export function NotificationPreferences() {
     lowBalanceThreshold: 10.0,
     lowBalanceAsset: 'XLM',
   });
+
+  const [backupReminderThreshold, setBackupReminderThresholdValue] = useState(() => getBackupReminderThreshold());
+
+  const handleBackupReminderThresholdChange = (value) => {
+    const n = parseInt(value, 10);
+    const normalized = Number.isFinite(n) && n > 0 ? n : 1;
+    setBackupReminderThresholdValue(normalized);
+    setBackupReminderThreshold(normalized);
+  };
 
   const fetchPreferences = useCallback(async () => {
     setLoading(true);
@@ -324,6 +334,25 @@ export function NotificationPreferences() {
               </FormField>
             </div>
           )}
+        </div>
+
+        {/* Backup Reminder */}
+        <div style={{ paddingBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 12 }}>Backup Reminder</h3>
+          <p style={{ fontSize: '0.875rem', color: '#666', marginBottom: 12 }}>
+            Show a dismissible reminder to create a fresh backup after this many new transactions since your last
+            backup or verification.
+          </p>
+          <FormField label="Transactions Before Reminder" required>
+            <input
+              type="number"
+              min="1"
+              step="1"
+              value={backupReminderThreshold}
+              onChange={(e) => handleBackupReminderThresholdChange(e.target.value)}
+              style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
+            />
+          </FormField>
         </div>
 
         {/* Info Box */}

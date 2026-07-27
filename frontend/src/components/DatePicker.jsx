@@ -1,8 +1,11 @@
+import { useTranslation } from 'react-i18next';
+
 /**
  * DatePicker — date range picker for transaction filtering.
  * Props: from, to, onChange({ from, to })
  */
 export function DatePicker({ from, to, onChange }) {
+  const { t } = useTranslation();
   const today = new Date().toISOString().split('T')[0];
 
   const set = (key, val) => onChange?.({ from, to, [key]: val });
@@ -12,18 +15,18 @@ export function DatePicker({ from, to, onChange }) {
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <label style={labelStyle}>From</label>
+        <label style={labelStyle}>{t('datePicker.from')}</label>
         <input
           type="date"
           value={from || ''}
           max={to || today}
           onChange={e => set('from', e.target.value)}
           style={inputStyle}
-          aria-label="From date"
+          aria-label={t('datePicker.fromDate')}
         />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-        <label style={labelStyle}>To</label>
+        <label style={labelStyle}>{t('datePicker.to')}</label>
         <input
           type="date"
           value={to || ''}
@@ -31,7 +34,7 @@ export function DatePicker({ from, to, onChange }) {
           max={today}
           onChange={e => set('to', e.target.value)}
           style={inputStyle}
-          aria-label="To date"
+          aria-label={t('datePicker.toDate')}
         />
       </div>
       {(from || to) && (
@@ -39,9 +42,9 @@ export function DatePicker({ from, to, onChange }) {
           type="button"
           onClick={clear}
           style={{ alignSelf: 'flex-end', background: 'none', color: '#888', border: '1px solid #ddd', borderRadius: 4, padding: '8px 10px', fontSize: 12, cursor: 'pointer', width: 'auto', minHeight: 'unset', minWidth: 'unset' }}
-          aria-label="Clear dates"
+          aria-label={t('datePicker.clearDates')}
         >
-          Clear
+          {t('datePicker.clear')}
         </button>
       )}
     </div>

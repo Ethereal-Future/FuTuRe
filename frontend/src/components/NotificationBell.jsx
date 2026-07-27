@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 const NOTIFICATION_COLORS = {
   transaction: '#3b82f6',
@@ -75,6 +76,7 @@ function NotificationItem({ notification, onMarkAsRead }) {
 }
 
 export function NotificationBell() {
+  const { t } = useTranslation();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -169,7 +171,7 @@ export function NotificationBell() {
         }}
         onMouseEnter={(e) => { e.currentTarget.style.color = '#2563eb'; }}
         onMouseLeave={(e) => { e.currentTarget.style.color = '#666'; }}
-        aria-label="Notifications"
+        aria-label={t('notificationBell.ariaLabel')}
         aria-expanded={isOpen}
       >
         🔔
@@ -232,7 +234,7 @@ export function NotificationBell() {
               alignItems: 'center',
             }}>
               <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>
-                Notifications
+                {t('notificationBell.title')}
               </h3>
               {unreadCount > 0 && (
                 <button
@@ -247,7 +249,7 @@ export function NotificationBell() {
                     fontWeight: 500,
                   }}
                 >
-                  Mark all as read
+                  {t('notificationBell.markAllAsRead')}
                 </button>
               )}
             </div>
@@ -260,7 +262,7 @@ export function NotificationBell() {
             }}>
               {loading ? (
                 <div style={{ textAlign: 'center', padding: '24px', color: '#999' }}>
-                  Loading...
+                  {t('notificationBell.loading')}
                 </div>
               ) : recentNotifications.length === 0 ? (
                 <div style={{
@@ -269,7 +271,7 @@ export function NotificationBell() {
                   color: '#999',
                   fontSize: '0.9rem',
                 }}>
-                  No notifications yet. You're all caught up! 🎉
+                  {t('notificationBell.empty')}
                 </div>
               ) : (
                 <div>
@@ -303,7 +305,7 @@ export function NotificationBell() {
                   }}
                   onClick={() => setIsOpen(false)}
                 >
-                  View All Notifications
+                  {t('notificationBell.viewAll')}
                 </button>
               </div>
             )}

@@ -1,11 +1,14 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * LargeTransactionWarning — warns when transferring large amounts.
  * Props: amount, threshold (default 1000), assetCode (default XLM)
  */
 export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 'XLM', onConfirm }) {
+  const { t } = useTranslation();
   const [confirmed, setConfirmed] = useState(false);
   const numAmount = parseFloat(amount);
   const isLarge = !isNaN(numAmount) && numAmount > threshold;
@@ -35,11 +38,10 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
         <span style={{ fontSize: 22 }}>⚠️</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <h3 style={{ margin: '0 0 6px 0', color: '#92400e', fontSize: 14 }}>
-            Large Transaction
+            {t('largeTxWarning.title')}
           </h3>
           <p style={{ margin: '0 0 10px 0', fontSize: 13, color: '#b45309' }}>
-            You are about to send <strong>{numAmount.toLocaleString()} {assetCode}</strong>.
-            Please verify the details carefully:
+            {t('largeTxWarning.sendingIntro')} <strong>{formatAssetAmount(numAmount)} {assetCode}</strong>{t('largeTxWarning.verifyDetails')}
           </p>
 
           <ul style={{
@@ -51,15 +53,15 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
           }}>
             <li style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <span>✓</span>
-              <span><strong>Recipient address</strong> is correct and verified</span>
+              <span><strong>{t('largeTxWarning.recipientAddress')}</strong> {t('largeTxWarning.recipientVerified')}</span>
             </li>
             <li style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <span>✓</span>
-              <span><strong>Amount</strong> ({numAmount.toLocaleString()}) is correct</span>
+              <span><strong>{t('largeTxWarning.amountLabel')}</strong> ({formatAssetAmount(numAmount)}{t('largeTxWarning.amountCorrect')}</span>
             </li>
             <li style={{ display: 'flex', gap: 6 }}>
               <span>✓</span>
-              <span><strong>Network</strong> (testnet/mainnet) is correct</span>
+              <span><strong>{t('largeTxWarning.networkLabel')}</strong> {t('largeTxWarning.networkCorrect')}</span>
             </li>
           </ul>
 
@@ -80,7 +82,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
                   cursor: 'pointer',
                 }}
               >
-                ✓ I've Verified Everything
+                {t('largeTxWarning.verifiedButton')}
               </motion.button>
               <p style={{
                 margin: 0,
@@ -88,7 +90,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
                 color: '#78350f',
                 alignSelf: 'center',
               }}>
-                Click to proceed with the transaction
+                {t('largeTxWarning.clickToProceed')}
               </p>
             </div>
           ) : (
@@ -101,7 +103,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
               color: '#166534',
               fontWeight: 600,
             }}>
-              ✓ Verified. Ready to send.
+              {t('largeTxWarning.readyToSend')}
             </div>
           )}
         </div>
@@ -115,6 +117,7 @@ export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 
  * Props: recipient, amount, assetCode, balance
  */
 export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', balance }) {
+  const { t } = useTranslation();
   const numAmount = parseFloat(amount);
   const numBalance = parseFloat(balance);
   const remaining = numBalance - numAmount;
@@ -132,7 +135,7 @@ export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', ba
       }}
     >
       <h4 style={{ margin: '0 0 10px 0', fontSize: 13, fontWeight: 600 }}>
-        Transaction Details
+        {t('transactionReviewCard.title')}
       </h4>
       <div style={{
         display: 'grid',
@@ -141,7 +144,7 @@ export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', ba
         fontSize: 13,
       }}>
         <div>
-          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>To:</p>
+          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>{t('transactionReviewCard.to')}</p>
           <p style={{
             margin: 0,
             fontFamily: 'monospace',
@@ -155,25 +158,25 @@ export function TransactionReviewCard({ recipient, amount, assetCode = 'XLM', ba
           </p>
         </div>
         <div>
-          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>Amount:</p>
+          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>{t('transactionReviewCard.amount')}</p>
           <p style={{ margin: 0, fontWeight: 600, color: '#ef4444' }}>
-            {numAmount.toLocaleString()} {assetCode}
+            {formatAssetAmount(numAmount)} {assetCode}
           </p>
         </div>
         <div>
-          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>Current Balance:</p>
+          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>{t('transactionReviewCard.currentBalance')}</p>
           <p style={{ margin: 0, fontWeight: 600 }}>
-            {numBalance.toLocaleString()} {assetCode}
+            {formatAssetAmount(numBalance)} {assetCode}
           </p>
         </div>
         <div>
-          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>After Transaction:</p>
+          <p style={{ margin: '0 0 4px 0', fontSize: 11, color: '#666' }}>{t('transactionReviewCard.afterTransaction')}</p>
           <p style={{
             margin: 0,
             fontWeight: 600,
             color: remaining > 0 ? '#22c55e' : '#ef4444'
           }}>
-            {remaining.toLocaleString()} {assetCode}
+            {formatAssetAmount(remaining)} {assetCode}
           </p>
         </div>
       </div>

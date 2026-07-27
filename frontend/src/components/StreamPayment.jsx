@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import apiClient from '../api/client.js';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 const STATUS_BADGE = {
   ACTIVE: { label: 'Active', color: '#22c55e' },
@@ -44,7 +45,7 @@ function computeStreamSummary(rateAmount, intervalDays, endDate) {
   end.setHours(23, 59, 59, 999);
   const totalDays = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
   const paymentCount = Math.floor(totalDays / days) + 1;
-  const totalXLM = (rate * paymentCount).toFixed(7).replace(/\.?0+$/, '');
+  const totalXLM = formatAssetAmount(rate * paymentCount);
 
   return { totalXLM, totalDays, paymentCount };
 }
@@ -345,7 +346,7 @@ export function StreamPayment({ publicKey }) {
                 <div style={{ fontSize: '0.8rem', color: 'var(--muted)', marginBottom: 8 }}>
                   Sent so far:{' '}
                   <strong>
-                    {parseFloat(s.totalStreamed).toFixed(7)} {s.assetCode}
+                    {formatAssetAmount(s.totalStreamed)} {s.assetCode}
                   </strong>
                   {s.nextPaymentAt && s.status === 'ACTIVE' && (
                     <span> · Next: {new Date(s.nextPaymentAt).toLocaleDateString()}</span>

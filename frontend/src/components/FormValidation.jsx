@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion';
 import { useState, useCallback, useMemo, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * Validation status icons
@@ -53,6 +54,7 @@ export function FormField({
   helpText,
   className = ''
 }) {
+  const { t } = useTranslation();
   const getStatus = () => {
     if (!touched) return 'pending';
     if (error) return 'invalid';
@@ -160,7 +162,7 @@ export function FormField({
             }}
           >
             <ValidationIcon status="valid" size={12} />
-            Looks good!
+            {t('formValidation.looksGood')}
           </motion.p>
         )}
       </AnimatePresence>
@@ -179,6 +181,7 @@ export function FormProgress({
   height = 8,
   color = '#3b82f6'
 }) {
+  const { t } = useTranslation();
   const percentage = totalFields > 0 ? Math.round((completedFields / totalFields) * 100) : 0;
 
   return (
@@ -190,7 +193,7 @@ export function FormProgress({
         marginBottom: 6
       }}>
         <span style={{ fontSize: 12, fontWeight: 500, color: '#374151' }}>
-          Form Progress
+          {t('formValidation.progress')}
         </span>
         <span style={{ fontSize: 12, color: '#6b7280' }}>
           {showCount && `${completedFields}/${totalFields} fields`}
@@ -224,13 +227,16 @@ export function FormProgress({
  * ValidationSummary — form-level validation summary with aria-live announcement for screen readers.
  * Pass `summaryRef` to get a ref for programmatic focus on failed submission.
  */
-export function ValidationSummary({ 
-  errors, 
+export function ValidationSummary({
+  errors,
   warnings = [],
-  title = 'Please fix the following errors:',
+  title,
   showWarnings = true,
   summaryRef,
 }) {
+  const { t } = useTranslation();
+  const heading = title ?? t('validationSummary.defaultTitle');
+
   if (errors.length === 0 && (!showWarnings || warnings.length === 0)) {
     return null;
   }
@@ -264,12 +270,12 @@ export function ValidationSummary({
             marginBottom: 8
           }}>
             <ValidationIcon status="invalid" size={16} />
-            <span style={{ 
-              fontSize: 13, 
-              fontWeight: 600, 
-              color: '#991b1b' 
+            <span style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: '#991b1b'
             }}>
-              {title}
+              {heading}
             </span>
           </div>
           <ul style={{ 
@@ -298,9 +304,9 @@ export function ValidationSummary({
             <span style={{ 
               fontSize: 13, 
               fontWeight: 600, 
-              color: '#92400e' 
+              color: '#92400e'
             }}>
-              Warnings:
+              {t('formValidation.warnings')}
             </span>
           </div>
           <ul style={{ 

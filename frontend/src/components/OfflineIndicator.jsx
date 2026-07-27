@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function OfflineIndicator() {
+  const { t } = useTranslation();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
 
   useEffect(() => {
@@ -39,7 +41,7 @@ export function OfflineIndicator() {
       }}
     >
       <span aria-hidden="true">⚡</span>
-      You are offline — payments will be queued and sent when reconnected.
+      {t('offlineIndicator.message')}
     </div>
   );
 }

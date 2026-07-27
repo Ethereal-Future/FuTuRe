@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { SUPPORTED_LANGUAGES, RTL_LANGUAGES } from '../i18n';
+import { storeLanguage } from '../utils/detectLanguage';
 
 /**
  * LanguageSelector — dropdown to switch the active language.
@@ -11,6 +12,7 @@ export function LanguageSelector({ className = '' }) {
   const handleChange = (e) => {
     const lang = e.target.value;
     i18n.changeLanguage(lang).then(() => {
+      storeLanguage(lang);
       const htmlRoot = document.documentElement;
       htmlRoot.lang = lang;
       htmlRoot.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
