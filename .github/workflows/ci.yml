@@ -18,7 +18,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - run: npm ci
@@ -35,6 +35,9 @@ jobs:
         run: npm run typecheck
         working-directory: frontend
 
+      - name: Check for hardcoded i18n strings
+        run: npm run lint:i18n
+
   # ---------------------------------------------------------------------------
   # Job 2 — Unit Tests
   # ---------------------------------------------------------------------------
@@ -46,7 +49,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - run: npm ci
@@ -97,7 +100,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - run: npm ci
@@ -118,7 +121,7 @@ jobs:
           JWT_SECRET: test-secret
           STELLAR_NETWORK: testnet
           HORIZON_URL: https://horizon-testnet.stellar.org
-          STREAM_SECRET_ENCRYPTION_KEY: "0000000000000000000000000000000000000000000000000000000000000000"
+          STREAM_SECRET_ENCRYPTION_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
 
   # ---------------------------------------------------------------------------
   # Job 4 — Security Audit
@@ -131,7 +134,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - run: npm ci
@@ -169,7 +172,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
         with:
-          node-version: "20"
+          node-version: '20'
           cache: npm
 
       - run: npm ci

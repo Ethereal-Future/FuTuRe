@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { simulateAccountMerge, stroopsToXLM } from '../utils/accountMergeSimulation.js';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
 
@@ -226,7 +227,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
               <dl style={{ margin: 0, fontSize: '0.85rem', color: '#1e40af' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <dt>XLM to transfer</dt>
-                  <dd style={{ fontWeight: 600 }}>{simulationResult.xlmToTransfer?.toFixed(7)} XLM</dd>
+                  <dd style={{ fontWeight: 600 }}>{formatAssetAmount(simulationResult.xlmToTransfer)} XLM</dd>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                   <dt>Destination account</dt>

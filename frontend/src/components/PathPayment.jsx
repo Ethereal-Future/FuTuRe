@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import apiClient from '../api/client.js';
 import { motion, AnimatePresence } from 'framer-motion';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 const ASSETS = [
   { code: 'XLM', label: 'XLM (Stellar Lumens)' },
@@ -203,11 +204,11 @@ export function PathPayment({ account }) {
                 <strong>Conversion Rate:</strong>
               </p>
               <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#059669' }}>
-                {form.sendAmount} {form.sourceAsset} = <strong>{parseFloat(bestPath.destinationAmount).toFixed(7)} {form.destAsset}</strong>
+                {form.sendAmount} {form.sourceAsset} = <strong>{formatAssetAmount(bestPath.destinationAmount)} {form.destAsset}</strong>
               </p>
               {bestPath.destinationAmount && form.sendAmount && (
                 <p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-muted, #64748b)' }}>
-                  Rate: 1 {form.sourceAsset} = {(parseFloat(bestPath.destinationAmount) / parseFloat(form.sendAmount)).toFixed(7)} {form.destAsset}
+                  Rate: 1 {form.sourceAsset} = {formatAssetAmount(parseFloat(bestPath.destinationAmount) / parseFloat(form.sendAmount))} {form.destAsset}
                 </p>
               )}
             </div>

@@ -1,8 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CopyButton } from './CopyButton';
 import { XdrExportModal } from './XdrExportModal';
-
-const TYPE_LABELS = { payment: 'Payment', create_account: 'Account Created', unknown: 'Other' };
+import { formatAssetAmount } from '../utils/formatAmount';
 
 function fmtHuman(dateStr) {
   return new Date(dateStr).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
@@ -18,60 +18,67 @@ function fmtIso(dateStr) {
  * its scroll position and filter state.
  */
 export function TransactionDetailPanel({ tx, network = 'public' }) {
+  const { t } = useTranslation();
   const [showXdr, setShowXdr] = useState(false);
   const [showXdrExport, setShowXdrExport] = useState(false);
 
   if (!tx) return null;
+
+  const TYPE_LABELS = {
+    payment: t('txDetail.typePayment'),
+    create_account: t('txDetail.typeCreateAccount'),
+    unknown: t('txDetail.typeOther'),
+  };
 
   const explorerNetwork = network === 'testnet' ? 'testnet' : 'public';
   const txExplorerUrl = `https://stellar.expert/explorer/${explorerNetwork}/tx/${tx.hash}`;
   const ledgerExplorerUrl = tx.ledger != null
     ? `https://stellar.expert/explorer/${explorerNetwork}/ledger/${tx.ledger}`
     : null;
-  const feeXlm = tx.fee != null ? (Number(tx.fee) / 1e7).toFixed(7) : null;
+  const feeXlm = tx.fee != null ? formatAssetAmount(Number(tx.fee) / 1e7) : null;
 
   return (
     <dl className="tx-detail-list">
-      <dt>Type</dt>
+      <dt>{t('txDetail.type')}</dt>
       <dd>{TYPE_LABELS[tx.type] ?? tx.type}</dd>
 
       {tx.direction && (
         <>
-          <dt>Direction</dt>
+          <dt>{t('txDetail.direction')}</dt>
           <dd>{tx.direction}</dd>
         </>
       )}
 
       {tx.amount && (
         <>
-          <dt>Amount</dt>
+          <dt>{t('txDetail.amount')}</dt>
           <dd>{tx.amount} {tx.asset}</dd>
         </>
       )}
 
       {tx.counterparty && (
         <>
-          <dt>{tx.direction === 'sent' ? 'Recipient' : 'Sender'}</dt>
+          <dt>{tx.direction === 'sent' ? t('txDetail.recipient') : t('txDetail.sender')}</dt>
           <dd className="tx-hash">
             {tx.counterparty}
-            <CopyButton text={tx.counterparty} label="Copy address" />
+            <CopyButton text={tx.counterparty} label={t('txDetail.copyAddress')} />
           </dd>
         </>
       )}
 
       {tx.memo && (
         <>
-          <dt>Memo</dt>
+          <dt>{t('txDetail.memo')}</dt>
           <dd>{tx.memo}</dd>
         </>
       )}
 
-      <dt>Fee</dt>
-      <dd>{tx.fee} stroops{feeXlm ? ` (${feeXlm} XLM)` : ''}</dd>
+      <dt>{t('txDetail.fee')}</dt>
+      <dd>{tx.fee} {t('txDetail.stroops')}{feeXlm ? ` (${feeXlm} XLM)` : ''}</dd>
 
       {tx.ledger != null && (
         <>
-          <dt>Ledger</dt>
+          <dt>{t('txDetail.ledger')}</dt>
           <dd>
             {ledgerExplorerUrl
               ? <a href={ledgerExplorerUrl} target="_blank" rel="noopener noreferrer">{tx.ledger} ↗</a>
@@ -80,39 +87,39 @@ export function TransactionDetailPanel({ tx, network = 'public' }) {
         </>
       )}
 
-      <dt>Hash</dt>
+      <dt>{t('txDetail.hash')}</dt>
       <dd className="tx-hash">
         <a href={txExplorerUrl} target="_blank" rel="noopener noreferrer">{tx.hash}</a>
-        <CopyButton text={tx.hash} label="Copy transaction hash" />
+        <CopyButton text={tx.hash} label={t('txDetail.copyTransactionHash')} />
       </dd>
 
-      <dt>Timestamp</dt>
+      <dt>{t('txDetail.timestamp')}</dt>
       <dd>
         {fmtHuman(tx.date)}
         <br />
         <span className="tx-timestamp-iso">{fmtIso(tx.date)}</span>
       </dd>
 
-      <dt>Status</dt>
+      <dt>{t('txDetail.status')}</dt>
       <dd className={tx.successful ? 'tx-ok' : 'tx-fail'}>
-        {tx.successful ? '✓ Confirmed' : '✗ Failed'}
+        {tx.successful ? t('txDetail.confirmed') : t('txDetail.failed')}
       </dd>
 
       {tx.envelopeXdr && (
         <>
-          <dt>Raw XDR</dt>
+          <dt>{t('txDetail.rawXdr')}</dt>
           <dd>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <button type="button" className="tx-xdr-toggle" onClick={() => setShowXdr(s => !s)}>
-                {showXdr ? 'Hide' : 'View'} raw XDR envelope
+                {showXdr ? t('txDetail.hide') : t('txDetail.view')} {t('txDetail.rawXdrEnvelope')}
               </button>
               <button
                 type="button"
                 className="tx-xdr-export-btn"
                 onClick={() => setShowXdrExport(true)}
-                title="Export and share this transaction XDR"
+                title={t('txDetail.exportTitle')}
               >
-                📦 Export
+                {t('txDetail.export')}
               </button>
             </div>
             {showXdr && <pre className="tx-xdr-envelope">{tx.envelopeXdr}</pre>}

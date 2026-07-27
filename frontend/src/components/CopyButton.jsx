@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
 
 /**
@@ -6,6 +7,7 @@ import { useCopyToClipboard } from '../hooks/useCopyToClipboard';
  * or an error message on failure. Supports Ctrl+C when focused.
  */
 export function CopyButton({ text, label = 'Copy' }) {
+  const { t } = useTranslation();
   const [copy, copied, copyError] = useCopyToClipboard();
   const btnRef = useRef(null);
 
@@ -31,11 +33,11 @@ export function CopyButton({ text, label = 'Copy' }) {
         className="copy-btn"
         onClick={() => copy(text)}
         aria-label={`${label} — press Ctrl+C when focused`}
-        title="Copy (Ctrl+C when focused)"
+        title={t('copyButton.title')}
       >
         {copied ? '✓' : '⎘'}
       </button>
-      {copied && <span className="copy-toast">Copied!</span>}
+      {copied && <span className="copy-toast">{t('copyButton.copied')}</span>}
       {copyError && <span className="copy-toast copy-toast--error">{copyError}</span>}
     </span>
   );

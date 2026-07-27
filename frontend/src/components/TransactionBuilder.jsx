@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
+import { formatAssetAmount } from '../utils/formatAmount';
 import { PaymentOperationForm } from './operations/PaymentOperationForm';
 import { ChangeTrustOperationForm } from './operations/ChangeTrustOperationForm';
 import { ManageDataOperationForm } from './operations/ManageDataOperationForm';
@@ -57,7 +58,7 @@ export function TransactionBuilder({ publicKey, onClose, onSuccess }) {
     if (!feeStats) return '0';
     const baseFee = parseInt(feeStats.base_fee || '100');
     const totalFee = baseFee * (operations.length || 1);
-    return (totalFee / 1e7).toFixed(7);
+    return formatAssetAmount(totalFee / 1e7);
   };
 
   const submitTransaction = async () => {

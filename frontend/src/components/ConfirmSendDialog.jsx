@@ -3,6 +3,7 @@ import apiClient from '../api/client.js';
 import { Modal } from '../design-system/Modal';
 import { XLMInfoIcon } from './XLMInfoIcon';
 import { XdrExportModal } from './XdrExportModal';
+import { formatAmount, formatAssetAmount } from '../utils/formatAmount';
 
 function truncate(addr) {
   if (!addr || addr.length <= 12) return addr;
@@ -55,8 +56,8 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
   const feeXLM = fee ? parseFloat(fee.feeXLM) : null;
   const baseFeeXLM = fee ? parseFloat(fee.baseFeeXLM) : null;
   const surgeMultiplier = fee ? parseFloat(fee.surgeMultiplier) : null;
-  const totalXLM = feeXLM !== null ? (amtNum + feeXLM).toFixed(7).replace(/\.?0+$/, '') : null;
-  const amtUsd = usdRate ? (amtNum * usdRate).toFixed(2) : null;
+  const totalXLM = feeXLM !== null ? formatAssetAmount(amtNum + feeXLM) : null;
+  const amtUsd = usdRate ? formatAmount(amtNum * usdRate, 'USD') : null;
 
   const handleExportXdr = async () => {
     if (unsignedXdr) {
@@ -95,7 +96,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
           <dd>
             {amount} {asset}
             {asset === 'XLM' && <XLMInfoIcon />}
-            {amtUsd && <span className="confirm-dialog__usd"> ≈ ${amtUsd} USD</span>}
+            {amtUsd && <span className="confirm-dialog__usd"> ≈ {amtUsd}</span>}
           </dd>
         </div>
         {baseFeeXLM !== null && (

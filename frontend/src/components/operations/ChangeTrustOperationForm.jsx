@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function ChangeTrustOperationForm({ onAdd, publicKey }) {
+  const { t } = useTranslation();
   const [assetCode, setAssetCode] = useState('');
   const [issuer, setIssuer] = useState('');
   const [limit, setLimit] = useState('922337203685.4775807');
@@ -11,17 +13,17 @@ export function ChangeTrustOperationForm({ onAdd, publicKey }) {
     setError('');
 
     if (!assetCode || assetCode.length === 0 || assetCode.length > 12) {
-      setError('Asset code required (1-12 characters)');
+      setError(t('changeTrustForm.assetCodeRequired'));
       return;
     }
 
     if (!issuer) {
-      setError('Issuer account required');
+      setError(t('changeTrustForm.issuerRequired'));
       return;
     }
 
     if (limit && (isNaN(limit) || parseFloat(limit) < 0)) {
-      setError('Valid limit required (0 to remove trustline)');
+      setError(t('changeTrustForm.invalidLimit'));
       return;
     }
 
@@ -48,7 +50,7 @@ export function ChangeTrustOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="trust-asset-code" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Asset Code
+          {t('changeTrustForm.assetCodeLabel')}
         </label>
         <input
           id="trust-asset-code"
@@ -63,7 +65,7 @@ export function ChangeTrustOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="trust-issuer" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Issuer Account
+          {t('changeTrustForm.issuerLabel')}
         </label>
         <input
           id="trust-issuer"
@@ -77,7 +79,7 @@ export function ChangeTrustOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="trust-limit" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Limit (XLM)
+          {t('changeTrustForm.limitLabel')}
         </label>
         <input
           id="trust-limit"
@@ -90,12 +92,12 @@ export function ChangeTrustOperationForm({ onAdd, publicKey }) {
           style={{ width: '100%' }}
         />
         <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-          Set to 0 to remove trustline
+          {t('changeTrustForm.limitHint')}
         </p>
       </div>
 
       <button type="submit" style={{ width: '100%', marginTop: 8 }}>
-        Add Trustline Operation
+        {t('changeTrustForm.submit')}
       </button>
     </form>
   );

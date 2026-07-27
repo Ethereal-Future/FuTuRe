@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 // Deterministic confetti pieces — fixed seed so no hydration mismatch
 const CONFETTI = Array.from({ length: 22 }, (_, i) => {
@@ -26,6 +27,7 @@ const CONFETTI = Array.from({ length: 22 }, (_, i) => {
  *   reducedMotion  — boolean, skips animation and calls onDone immediately
  */
 export function AccountCreatedCelebration({ visible, onDone, reducedMotion }) {
+  const { t } = useTranslation();
   const timerRef = useRef(null);
 
   useEffect(() => {
@@ -58,7 +60,7 @@ export function AccountCreatedCelebration({ visible, onDone, reducedMotion }) {
           }}
           role="status"
           aria-live="polite"
-          aria-label="Account created successfully"
+          aria-label={t('accountCreated.ariaLabel')}
         >
           {/* Confetti burst */}
           <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', pointerEvents: 'none' }}>
@@ -168,7 +170,7 @@ export function AccountCreatedCelebration({ visible, onDone, reducedMotion }) {
               transition={{ delay: 0.5 }}
               style={{ margin: '0 0 6px', fontSize: 20, fontWeight: 700, color: '#0f172a' }}
             >
-              Account Created!
+              {t('accountCreated.title')}
             </motion.h2>
             <motion.p
               initial={{ opacity: 0 }}
@@ -176,7 +178,7 @@ export function AccountCreatedCelebration({ visible, onDone, reducedMotion }) {
               transition={{ delay: 0.65 }}
               style={{ margin: 0, fontSize: 13, color: '#64748b' }}
             >
-              Save your secret key — it won't be shown again.
+              {t('accountCreated.saveSecretKey')}
             </motion.p>
           </motion.div>
         </motion.div>

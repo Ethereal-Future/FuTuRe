@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function ManageOfferOperationForm({ onAdd, type }) {
+  const { t } = useTranslation();
   const [sellingCode, setSellingCode] = useState('XLM');
   const [sellingIssuer, setSellingIssuer] = useState('');
   const [buyingCode, setBuyingCode] = useState('USDC');
@@ -11,7 +13,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
   const [error, setError] = useState('');
 
   const isSellOffer = type === 'manageSellOffer';
-  const operationLabel = isSellOffer ? 'Sell' : 'Buy';
+  const operationLabel = isSellOffer ? t('manageOfferForm.sell') : t('manageOfferForm.buy');
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -20,7 +22,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
     if (offerId && offerId !== '0') {
       // Deleting or updating an offer
       if (!offerId || isNaN(offerId)) {
-        setError('Valid offer ID required');
+        setError(t('manageOfferForm.validOfferIdRequired'));
         return;
       }
 
@@ -34,22 +36,22 @@ export function ManageOfferOperationForm({ onAdd, type }) {
     } else {
       // Creating a new offer
       if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-        setError('Valid amount required');
+        setError(t('manageOfferForm.validAmountRequired'));
         return;
       }
 
       if (!price || isNaN(price) || parseFloat(price) <= 0) {
-        setError('Valid price required');
+        setError(t('manageOfferForm.validPriceRequired'));
         return;
       }
 
       if (sellingCode !== 'XLM' && !sellingIssuer) {
-        setError('Selling issuer required for non-XLM assets');
+        setError(t('manageOfferForm.sellingIssuerRequired'));
         return;
       }
 
       if (buyingCode !== 'XLM' && !buyingIssuer) {
-        setError('Buying issuer required for non-XLM assets');
+        setError(t('manageOfferForm.buyingIssuerRequired'));
         return;
       }
 
@@ -87,14 +89,14 @@ export function ManageOfferOperationForm({ onAdd, type }) {
           style={{ width: 'auto', minHeight: 'unset' }}
         />
         <label htmlFor="delete-offer" style={{ fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
-          Delete/update existing offer
+          {t('manageOfferForm.deleteUpdateExisting')}
         </label>
       </div>
 
       {offerId !== '' && (
         <div style={{ marginBottom: 8 }}>
           <label htmlFor="offer-id" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-            Offer ID
+            {t('manageOfferForm.offerIdLabel')}
           </label>
           <input
             id="offer-id"
@@ -113,7 +115,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
           <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label htmlFor="selling-code" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                Selling Asset
+                {t('manageOfferForm.sellingAssetLabel')}
               </label>
               <select
                 id="selling-code"
@@ -124,14 +126,14 @@ export function ManageOfferOperationForm({ onAdd, type }) {
                 <option value="XLM">XLM</option>
                 <option value="USDC">USDC</option>
                 <option value="EURC">EURC</option>
-                <option value="other">Other</option>
+                <option value="other">{t('manageOfferForm.other')}</option>
               </select>
             </div>
 
             {sellingCode !== 'XLM' && (
               <div>
                 <label htmlFor="selling-issuer" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                  Selling Issuer
+                  {t('manageOfferForm.sellingIssuerLabel')}
                 </label>
                 <input
                   id="selling-issuer"
@@ -148,7 +150,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
           <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label htmlFor="buying-code" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                Buying Asset
+                {t('manageOfferForm.buyingAssetLabel')}
               </label>
               <select
                 id="buying-code"
@@ -159,14 +161,14 @@ export function ManageOfferOperationForm({ onAdd, type }) {
                 <option value="XLM">XLM</option>
                 <option value="USDC">USDC</option>
                 <option value="EURC">EURC</option>
-                <option value="other">Other</option>
+                <option value="other">{t('manageOfferForm.other')}</option>
               </select>
             </div>
 
             {buyingCode !== 'XLM' && (
               <div>
                 <label htmlFor="buying-issuer" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                  Buying Issuer
+                  {t('manageOfferForm.buyingIssuerLabel')}
                 </label>
                 <input
                   id="buying-issuer"
@@ -183,7 +185,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
           <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>
               <label htmlFor="amount" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                Amount ({operationLabel})
+                {t('manageOfferForm.amountLabel', { operation: operationLabel })}
               </label>
               <input
                 id="amount"
@@ -199,7 +201,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
 
             <div>
               <label htmlFor="price" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-                Price
+                {t('manageOfferForm.priceLabel')}
               </label>
               <input
                 id="price"
@@ -217,7 +219,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
       )}
 
       <button type="submit" style={{ width: '100%', marginTop: 8 }}>
-        Add {operationLabel} Offer Operation
+        {t('manageOfferForm.submit', { operation: operationLabel })}
       </button>
     </form>
   );

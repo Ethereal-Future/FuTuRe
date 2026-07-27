@@ -1,11 +1,13 @@
 import { useState, useRef, useEffect, useId } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SearchableSelect — searchable dropdown for asset/option selection.
  * Props: value, onChange, options ([{ value, label, description? }]), placeholder, aria-label
  */
 export function SearchableSelect({ value, onChange, options = [], placeholder = 'Select…', 'aria-label': ariaLabel, 'aria-labelledby': ariaLabelledby }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(-1);
@@ -124,15 +126,15 @@ export function SearchableSelect({ value, onChange, options = [], placeholder = 
             style={dropdownStyle}
           >
             <div style={{ padding: '6px 8px', borderBottom: '1px solid #eee' }}>
-              <label htmlFor={`${listboxId}-search`} className="sr-only">Search options</label>
+              <label htmlFor={`${listboxId}-search`} className="sr-only">{t('searchableSelect.ariaLabel')}</label>
               <input
                 ref={inputRef}
                 id={`${listboxId}-search`}
                 value={query}
                 onChange={e => { setQuery(e.target.value); setActiveIndex(0); }}
                 onKeyDown={handleKeyDown}
-                placeholder="Search…"
-                aria-label="Search options"
+                placeholder={t('searchableSelect.placeholder')}
+                aria-label={t('searchableSelect.ariaLabel')}
                 aria-controls={listboxId}
                 aria-autocomplete="list"
                 style={{ margin: 0, fontSize: 13, minHeight: 'unset', padding: '6px 8px' }}
@@ -145,7 +147,7 @@ export function SearchableSelect({ value, onChange, options = [], placeholder = 
               style={{ listStyle: 'none', margin: 0, padding: 0, maxHeight: 180, overflowY: 'auto' }}
             >
               {filtered.length === 0 && (
-                <li role="option" aria-selected={false} aria-disabled="true" style={{ padding: '10px 12px', fontSize: 13, color: '#888' }}>No results</li>
+                <li role="option" aria-selected={false} aria-disabled="true" style={{ padding: '10px 12px', fontSize: 13, color: '#888' }}>{t('searchableSelect.noResults')}</li>
               )}
               {filtered.map((opt, index) => (
                 <li

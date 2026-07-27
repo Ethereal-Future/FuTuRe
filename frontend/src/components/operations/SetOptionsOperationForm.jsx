@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function SetOptionsOperationForm({ onAdd, publicKey }) {
+  const { t } = useTranslation();
   const [inflationDest, setInflationDest] = useState('');
   const [clearFlags, setClearFlags] = useState('');
   const [setFlags, setSetFlags] = useState('');
@@ -16,7 +18,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     const high = highThreshold ? parseInt(highThreshold) : null;
 
     if (med !== null && high !== null && med > high) {
-      setError('Medium threshold cannot be greater than high threshold');
+      setError(t('setOptionsForm.medExceedsHigh'));
       return false;
     }
 
@@ -35,7 +37,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
     if (inflationDest) {
       if (inflationDest === publicKey) {
-        setError('Cannot set inflation destination to own account (use omitSource)');
+        setError(t('setOptionsForm.selfInflationError'));
         return;
       }
       data.inflationDest = inflationDest;
@@ -44,7 +46,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (clearFlags) {
       const num = parseInt(clearFlags);
       if (isNaN(num) || num < 0) {
-        setError('Clear flags must be a valid number');
+        setError(t('setOptionsForm.invalidClearFlags'));
         return;
       }
       data.clearFlags = num;
@@ -53,7 +55,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (setFlags) {
       const num = parseInt(setFlags);
       if (isNaN(num) || num < 0) {
-        setError('Set flags must be a valid number');
+        setError(t('setOptionsForm.invalidSetFlags'));
         return;
       }
       data.setFlags = num;
@@ -62,7 +64,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (masterWeight !== '' && masterWeight !== null) {
       const num = parseInt(masterWeight);
       if (isNaN(num) || num < 0 || num > 255) {
-        setError('Master weight must be 0-255');
+        setError(t('setOptionsForm.invalidMasterWeight'));
         return;
       }
       data.masterWeight = num;
@@ -71,7 +73,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (lowThreshold !== '' && lowThreshold !== null) {
       const num = parseInt(lowThreshold);
       if (isNaN(num) || num < 0 || num > 255) {
-        setError('Low threshold must be 0-255');
+        setError(t('setOptionsForm.invalidLowThreshold'));
         return;
       }
       data.lowThreshold = num;
@@ -80,7 +82,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (medThreshold !== '' && medThreshold !== null) {
       const num = parseInt(medThreshold);
       if (isNaN(num) || num < 0 || num > 255) {
-        setError('Medium threshold must be 0-255');
+        setError(t('setOptionsForm.invalidMedThreshold'));
         return;
       }
       data.medThreshold = num;
@@ -89,7 +91,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     if (highThreshold !== '' && highThreshold !== null) {
       const num = parseInt(highThreshold);
       if (isNaN(num) || num < 0 || num > 255) {
-        setError('High threshold must be 0-255');
+        setError(t('setOptionsForm.invalidHighThreshold'));
         return;
       }
       data.highThreshold = num;
@@ -100,7 +102,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
     }
 
     if (Object.keys(data).length === 0) {
-      setError('At least one option must be set');
+      setError(t('setOptionsForm.noOptionSet'));
       return;
     }
 
@@ -126,7 +128,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="inflation-dest" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Inflation Destination (optional)
+          {t('setOptionsForm.inflationDestLabel')}
         </label>
         <input
           id="inflation-dest"
@@ -141,7 +143,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
       <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
           <label htmlFor="clear-flags" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-            Clear Flags (optional)
+            {t('setOptionsForm.clearFlagsLabel')}
           </label>
           <input
             id="clear-flags"
@@ -156,7 +158,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
         <div>
           <label htmlFor="set-flags" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-            Set Flags (optional)
+            {t('setOptionsForm.setFlagsLabel')}
           </label>
           <input
             id="set-flags"
@@ -172,7 +174,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="master-weight" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Master Weight (0-255, optional)
+          {t('setOptionsForm.masterWeightLabel')}
         </label>
         <input
           id="master-weight"
@@ -189,7 +191,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
       <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
         <div>
           <label htmlFor="low-threshold" style={{ display: 'block', marginBottom: 4, fontSize: '0.8rem' }}>
-            Low Threshold (0-255)
+            {t('setOptionsForm.lowThresholdLabel')}
           </label>
           <input
             id="low-threshold"
@@ -205,7 +207,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
         <div>
           <label htmlFor="med-threshold" style={{ display: 'block', marginBottom: 4, fontSize: '0.8rem' }}>
-            Medium Threshold (0-255)
+            {t('setOptionsForm.medThresholdLabel')}
           </label>
           <input
             id="med-threshold"
@@ -221,7 +223,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
         <div>
           <label htmlFor="high-threshold" style={{ display: 'block', marginBottom: 4, fontSize: '0.8rem' }}>
-            High Threshold (0-255)
+            {t('setOptionsForm.highThresholdLabel')}
           </label>
           <input
             id="high-threshold"
@@ -238,7 +240,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="home-domain" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Home Domain (optional)
+          {t('setOptionsForm.homeDomainLabel')}
         </label>
         <input
           id="home-domain"
@@ -251,7 +253,7 @@ export function SetOptionsOperationForm({ onAdd, publicKey }) {
       </div>
 
       <button type="submit" style={{ width: '100%', marginTop: 8 }}>
-        Add SetOptions Operation
+        {t('setOptionsForm.submit')}
       </button>
     </form>
   );

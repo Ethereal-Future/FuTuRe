@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function PaymentOperationForm({ onAdd, publicKey }) {
+  const { t } = useTranslation();
   const [destination, setDestination] = useState('');
   const [amount, setAmount] = useState('');
   const [asset, setAsset] = useState('XLM');
@@ -13,22 +15,22 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
     setError('');
 
     if (!destination) {
-      setError('Destination account required');
+      setError(t('paymentOperationForm.destinationRequired'));
       return;
     }
 
     if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
-      setError('Valid amount required');
+      setError(t('paymentOperationForm.amountRequired'));
       return;
     }
 
     if (asset !== 'XLM' && !issuer) {
-      setError('Issuer required for non-XLM assets');
+      setError(t('paymentOperationForm.issuerRequired'));
       return;
     }
 
     if (destination === publicKey) {
-      setError('Cannot send to your own account');
+      setError(t('paymentOperationForm.selfSendError'));
       return;
     }
 
@@ -55,7 +57,7 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
       )}
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="payment-destination" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Destination Account
+          {t('paymentOperationForm.destinationLabel')}
         </label>
         <input
           id="payment-destination"
@@ -69,7 +71,7 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="payment-amount" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Amount
+          {t('paymentOperationForm.amountLabel')}
         </label>
         <input
           id="payment-amount"
@@ -86,7 +88,7 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
       <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
         <div>
           <label htmlFor="payment-asset" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-            Asset
+            {t('paymentOperationForm.assetLabel')}
           </label>
           <select
             id="payment-asset"
@@ -97,14 +99,14 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
             <option value="XLM">XLM</option>
             <option value="USDC">USDC</option>
             <option value="EURC">EURC</option>
-            <option value="other">Other</option>
+            <option value="other">{t('paymentOperationForm.other')}</option>
           </select>
         </div>
 
         {asset !== 'XLM' && (
           <div>
             <label htmlFor="payment-issuer" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-              Issuer
+              {t('paymentOperationForm.issuerLabel')}
             </label>
             <input
               id="payment-issuer"
@@ -120,20 +122,20 @@ export function PaymentOperationForm({ onAdd, publicKey }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="payment-memo" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Memo (optional)
+          {t('paymentOperationForm.memoLabel')}
         </label>
         <input
           id="payment-memo"
           type="text"
           value={memo}
           onChange={(e) => setMemo(e.target.value)}
-          placeholder="Memo text"
+          placeholder={t('paymentOperationForm.memoPlaceholder')}
           style={{ width: '100%' }}
         />
       </div>
 
       <button type="submit" style={{ width: '100%', marginTop: 8 }}>
-        Add Payment Operation
+        {t('paymentOperationForm.submit')}
       </button>
     </form>
   );

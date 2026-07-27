@@ -18,6 +18,7 @@ import { isValidStellarAddress } from './utils/validateStellarAddress';
 import { validateAmount, formatAmount } from './utils/validateAmount';
 import { getFriendlyError } from './utils/errorMessages';
 import { formatBalanceWithAsset } from './utils/formatBalance';
+import { formatAmount as formatCurrencyAmount } from './utils/formatAmount';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
@@ -1232,7 +1233,7 @@ function App() {
                   {amountValid &&
                     (xlmUsdRate ? (
                       <p className="rate-estimate" aria-live="polite">
-                        ≈ ${(parseFloat(amount) * xlmUsdRate).toFixed(2)} USD
+                        ≈ {formatCurrencyAmount(parseFloat(amount) * xlmUsdRate, 'USD')}
                         <span className="rate-source"> · live rate</span>
                       </p>
                     ) : (
@@ -1757,7 +1758,7 @@ function App() {
                       {amountValid &&
                         (xlmFiatRate ? (
                           <p className="rate-estimate" aria-live="polite">
-                            ≈ {(parseFloat(amount) * xlmFiatRate).toFixed(2)} {fiatCurrency}
+                            ≈ {formatCurrencyAmount(parseFloat(amount) * xlmFiatRate, fiatCurrency)}
                             <span className="rate-source"> · live rate</span>
                           </p>
                         ) : (

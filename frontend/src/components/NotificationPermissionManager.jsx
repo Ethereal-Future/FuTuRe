@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePushNotifications } from '../hooks/usePushNotifications';
 
 /**
@@ -6,6 +7,7 @@ import { usePushNotifications } from '../hooks/usePushNotifications';
  * Automatically registers service worker and handles subscription
  */
 export function NotificationPermissionManager({ publicKey, onStatusChange }) {
+  const { t } = useTranslation();
   const {
     supported,
     permission,
@@ -81,7 +83,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
         color: '#166534',
       }}>
         <p style={{ margin: 0 }}>
-          ✅ Push notifications enabled for incoming payments
+          {t('notificationPermission.enabled')}
         </p>
       </div>
     );
@@ -99,7 +101,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
         color: '#991b1b',
       }}>
         <p style={{ margin: 0 }}>
-          Notifications are blocked. Enable them in your browser settings to receive payment alerts.
+          {t('notificationPermission.blocked')}
         </p>
       </div>
     );
@@ -116,10 +118,10 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
           marginBottom: 16,
         }}>
           <p style={{ margin: '0 0 8px 0', fontSize: '0.9rem', color: '#78350f', fontWeight: 600 }}>
-            🔔 Enable Payment Notifications?
+            {t('notificationPermission.promptTitle')}
           </p>
           <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#78350f' }}>
-            Get notified instantly when you receive Stellar payments.
+            {t('notificationPermission.promptBody')}
           </p>
           <div style={{ display: 'flex', gap: 8 }}>
             <button
@@ -137,7 +139,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
                 opacity: loading ? 0.7 : 1,
               }}
             >
-              {loading ? 'Enabling...' : 'Enable'}
+              {loading ? t('notificationPermission.enabling') : t('notificationPermission.enable')}
             </button>
             <button
               type="button"
@@ -152,12 +154,12 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
                 fontSize: '0.85rem',
               }}
             >
-              Later
+              {t('notificationPermission.later')}
             </button>
           </div>
           {error && (
             <p style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: '#991b1b' }}>
-              Error: {error}
+              {t('notificationPermission.errorPrefix', { error })}
             </p>
           )}
         </div>
@@ -180,7 +182,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
             fontWeight: 500,
           }}
         >
-          🔔 Enable Push Notifications
+          {t('notificationPermission.enableButton')}
         </button>
       )}
 
@@ -195,7 +197,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
           color: '#1e40af',
         }}>
           <p style={{ margin: '0 0 8px 0', fontWeight: 600 }}>
-            ℹ️ Notifications enabled but not monitoring
+            {t('notificationPermission.notMonitoring')}
           </p>
           <button
             type="button"
@@ -211,7 +213,7 @@ export function NotificationPermissionManager({ publicKey, onStatusChange }) {
               fontSize: '0.85rem',
             }}
           >
-            Disable
+            {t('notificationPermission.disable')}
           </button>
         </div>
       )}

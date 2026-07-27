@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { getContacts, createContact, deleteContact } from '../api/stellar.js';
 
 /**
@@ -8,6 +9,7 @@ import { getContacts, createContact, deleteContact } from '../api/stellar.js';
  * Props: onSelect, prefillAddress
  */
 export function AddressBook({ onSelect, prefillAddress = '' }) {
+  const { t } = useTranslation();
   const [contacts, setContacts] = useState([]);
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState('');
@@ -58,7 +60,7 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
   return (
     <div>
       <button type="button" onClick={() => setOpen(o => !o)} style={{ marginBottom: 8 }}>
-        📒 Address Book {contacts.length > 0 && `(${contacts.length})`}
+        {t('addressBook.title')} {contacts.length > 0 && `(${contacts.length})`}
       </button>
       <AnimatePresence>
         {open && (
@@ -69,17 +71,17 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
             style={{ overflow: 'hidden' }}
           >
             <div style={panelStyle}>
-              <label htmlFor="addr-book-search" className="sr-only">Search contacts</label>
+              <label htmlFor="addr-book-search" className="sr-only">{t('addressBook.searchAriaLabel')}</label>
               <input
                 id="addr-book-search"
-                aria-label="Search contacts"
-                placeholder="Search contacts…"
+                aria-label={t('addressBook.searchAriaLabel')}
+                placeholder={t('addressBook.searchPlaceholder')}
                 value={search}
                 onChange={e => setSearch(e.target.value)}
                 style={{ marginBottom: 8 }}
               />
               {filtered.length === 0 && (
-                <p style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>No contacts found.</p>
+                <p style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>{t('addressBook.empty')}</p>
               )}
               {filtered.map(c => (
                 <div key={c.id ?? c.address} style={rowStyle}>
@@ -90,19 +92,19 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
                     </div>
                   </div>
                   <button type="button" onClick={() => { onSelect?.(c.address); setOpen(false); }} style={smBtn}>
-                    Use
+                    {t('addressBook.use')}
                   </button>
-                  <button type="button" onClick={() => remove(c)} style={{ ...smBtn, background: '#ef4444' }} aria-label={`Remove ${c.name}`}>
+                  <button type="button" onClick={() => remove(c)} style={{ ...smBtn, background: '#ef4444' }} aria-label={t('addressBook.removeContact', { name: c.name })}>
                     ✕
                   </button>
                 </div>
               ))}
               <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
-                <label htmlFor="addr-book-new-name" className="sr-only">Contact name</label>
-                <input id="addr-book-new-name" aria-label="Contact name" placeholder="Name" value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 6 }} />
-                <label htmlFor="addr-book-new-address" className="sr-only">Stellar address</label>
-                <input id="addr-book-new-address" aria-label="Stellar address" placeholder="Stellar Address" value={newAddress} onChange={e => setNewAddress(e.target.value)} style={{ marginBottom: 6 }} />
-                <button type="button" onClick={add}>+ Add Contact</button>
+                <label htmlFor="addr-book-new-name" className="sr-only">{t('addressBook.namePlaceholder')}</label>
+                <input id="addr-book-new-name" aria-label={t('addressBook.namePlaceholder')} placeholder={t('addressBook.nameLabel')} value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 6 }} />
+                <label htmlFor="addr-book-new-address" className="sr-only">{t('addressBook.addressPlaceholder')}</label>
+                <input id="addr-book-new-address" aria-label={t('addressBook.addressPlaceholder')} placeholder={t('addressBook.addressLabel')} value={newAddress} onChange={e => setNewAddress(e.target.value)} style={{ marginBottom: 6 }} />
+                <button type="button" onClick={add}>{t('addressBook.addContact')}</button>
               </div>
             </div>
           </motion.div>

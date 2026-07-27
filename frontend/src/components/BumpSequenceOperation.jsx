@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 import { useMessages } from '../hooks/useMessages';
 
 export function BumpSequenceOperation({ publicKey }) {
+  const { t } = useTranslation();
   const [currentSequence, setCurrentSequence] = useState(null);
   const [targetSequence, setTargetSequence] = useState('');
   const [loading, setLoading] = useState(false);
@@ -29,7 +31,7 @@ export function BumpSequenceOperation({ publicKey }) {
     setSuccess(false);
 
     if (!targetSequence || isNaN(targetSequence)) {
-      setError('Please enter a valid sequence number');
+      setError(t('bumpSequence.invalidTarget'));
       return;
     }
 
@@ -37,7 +39,7 @@ export function BumpSequenceOperation({ publicKey }) {
     const currentNum = BigInt(currentSequence);
 
     if (targetNum <= currentNum) {
-      setError(`Target sequence must be greater than current sequence (${currentSequence})`);
+      setError(t('bumpSequence.mustBeGreater', { current: currentSequence }));
       return;
     }
 
@@ -51,7 +53,7 @@ export function BumpSequenceOperation({ publicKey }) {
       setSuccess(true);
       setCurrentSequence(response.data.newSequence);
       setTargetSequence(String(BigInt(response.data.newSequence) + 1n));
-      msg.success(`Sequence bumped to ${response.data.newSequence}`);
+      msg.success(t('bumpSequence.bumpedTo', { sequence: response.data.newSequence }));
     } catch (e) {
       const errorMsg = e?.response?.data?.error ?? e.message;
       setError(errorMsg);
@@ -64,10 +66,10 @@ export function BumpSequenceOperation({ publicKey }) {
   return (
     <div style={{ padding: 12, background: '#fef2f2', borderRadius: 6, border: '1px solid #fecaca' }}>
       <h4 style={{ margin: '0 0 12px 0', color: '#991b1b' }}>
-        ⚠️ Bump Sequence Number
+        {t('bumpSequence.title')}
       </h4>
       <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#64748b' }}>
-        Use this to resolve stuck transactions due to sequence number mismatches. Only experienced users should use this feature.
+        {t('bumpSequence.description')}
       </p>
 
       {error && (
@@ -78,17 +80,17 @@ export function BumpSequenceOperation({ publicKey }) {
 
       {success && (
         <div style={{ padding: 8, background: '#dcfce7', border: '1px solid #86efac', borderRadius: 4, marginBottom: 12, color: '#166534', fontSize: '0.9rem' }}>
-          ✓ Sequence number bumped successfully
+          {t('bumpSequence.success')}
         </div>
       )}
 
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem', fontWeight: 500 }}>
-          Current Sequence
+          {t('bumpSequence.currentSequence')}
         </label>
         <input
           type="text"
-          value={currentSequence ?? 'Loading…'}
+          value={currentSequence ?? t('bumpSequence.loading')}
           disabled
           style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 4, background: '#f3f4f6' }}
         />
@@ -96,7 +98,7 @@ export function BumpSequenceOperation({ publicKey }) {
 
       <div style={{ marginBottom: 12 }}>
         <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem', fontWeight: 500 }}>
-          Target Sequence
+          {t('bumpSequence.targetSequence')}
         </label>
         <input
           type="number"
@@ -104,10 +106,10 @@ export function BumpSequenceOperation({ publicKey }) {
           onChange={(e) => setTargetSequence(e.target.value)}
           min={currentSequence ? String(BigInt(currentSequence) + 1n) : '0'}
           style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 4 }}
-          placeholder="Enter target sequence number"
+          placeholder={t('bumpSequence.targetPlaceholder')}
         />
         <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8rem' }}>
-          Must be greater than {currentSequence ?? '(loading)'}
+          {t('bumpSequence.mustBeGreaterThan', { current: currentSequence ?? '(loading)' })}
         </p>
       </div>
 
@@ -125,7 +127,7 @@ export function BumpSequenceOperation({ publicKey }) {
           fontWeight: 500,
         }}
       >
-        {loading ? 'Processing…' : 'Bump Sequence'}
+        {loading ? t('bumpSequence.processing') : t('bumpSequence.submit')}
       </button>
     </div>
   );

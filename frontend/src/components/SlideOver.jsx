@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SlideOver — panel that slides in from the right for master-detail views,
@@ -7,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
  * behind it.
  */
 export function SlideOver({ open, onClose, title, children }) {
+  const { t } = useTranslation();
   const panelRef = useRef(null);
   const triggerRef = useRef(null);
 
@@ -77,7 +79,7 @@ export function SlideOver({ open, onClose, title, children }) {
           >
             <div className="slideover-header">
               {title && <h3>{title}</h3>}
-              <button type="button" className="qr-close" onClick={onClose} aria-label="Close">✕</button>
+              <button type="button" className="qr-close" onClick={onClose} aria-label={t('common.close')}>✕</button>
             </div>
             <div className="slideover-content">{children}</div>
           </motion.div>

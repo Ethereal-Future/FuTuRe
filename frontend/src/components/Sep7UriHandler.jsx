@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { parseSep7Uri, extractOriginDomain } from '../utils/sep7Parser';
 import { Modal } from '../design-system/Modal';
 
 export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
+  const { t } = useTranslation();
   const [parsed, setParsed] = useState(null);
   const [error, setError] = useState(null);
 
@@ -25,13 +27,13 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
 
   if (!parsed.valid) {
     return (
-      <Modal open={true} onClose={onClose} title="Invalid Payment Link" size="sm">
+      <Modal open={true} onClose={onClose} title={t('sep7.invalidTitle')} size="sm">
         <div style={{ padding: '16px', color: '#dc2626' }}>
           <p style={{ marginTop: 0 }}>
-            <strong>Error:</strong> {error}
+            <strong>{t('sep7.errorLabel')}</strong> {error}
           </p>
           <button type="button" onClick={onClose} style={{ marginTop: 16 }}>
-            Close
+            {t('common.close')}
           </button>
         </div>
       </Modal>
@@ -39,7 +41,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
   }
 
   return (
-    <Modal open={true} onClose={onClose} title="Payment Request" size="sm">
+    <Modal open={true} onClose={onClose} title={t('sep7.title')} size="sm">
       <div className="sep7-handler">
         {parsed.originDomain && (
           <div style={{
@@ -50,7 +52,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
             marginBottom: 16,
           }}>
             <p style={{ margin: 0, fontSize: '0.9rem', color: '#1e40af' }}>
-              <strong>Origin:</strong> {parsed.originDomain}
+              <strong>{t('sep7.originLabel')}</strong> {parsed.originDomain}
             </p>
           </div>
         )}
@@ -64,30 +66,30 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
             marginBottom: 16,
           }}>
             <p style={{ margin: 0, fontSize: '0.9rem', color: '#78350f' }}>
-              <strong>Message:</strong> {parsed.message}
+              <strong>{t('sep7.messageLabel')}</strong> {parsed.message}
             </p>
           </div>
         )}
 
         <dl style={{ marginBottom: 16 }}>
-          <dt style={{ fontWeight: 600, marginTop: 12 }}>Recipient</dt>
+          <dt style={{ fontWeight: 600, marginTop: 12 }}>{t('sep7.recipient')}</dt>
           <dd style={{ fontFamily: 'monospace', fontSize: '0.85rem', wordBreak: 'break-all' }}>
             {parsed.destination}
           </dd>
 
           {parsed.amount && (
             <>
-              <dt style={{ fontWeight: 600, marginTop: 12 }}>Amount</dt>
+              <dt style={{ fontWeight: 600, marginTop: 12 }}>{t('sep7.amount')}</dt>
               <dd>{parsed.amount} {parsed.assetCode}</dd>
             </>
           )}
 
           {parsed.memo && (
             <>
-              <dt style={{ fontWeight: 600, marginTop: 12 }}>Memo</dt>
+              <dt style={{ fontWeight: 600, marginTop: 12 }}>{t('sep7.memo')}</dt>
               <dd>
                 <div style={{ fontSize: '0.85rem', color: '#666' }}>
-                  Type: <strong>{parsed.memoType}</strong>
+                  {t('sep7.typeLabel')} <strong>{parsed.memoType}</strong>
                 </div>
                 <div style={{ fontFamily: 'monospace', fontSize: '0.85rem', wordBreak: 'break-all' }}>
                   {parsed.memo}
@@ -98,7 +100,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
 
           {parsed.assetCode !== 'XLM' && parsed.assetIssuer && (
             <>
-              <dt style={{ fontWeight: 600, marginTop: 12 }}>Asset Issuer</dt>
+              <dt style={{ fontWeight: 600, marginTop: 12 }}>{t('sep7.assetIssuer')}</dt>
               <dd style={{ fontFamily: 'monospace', fontSize: '0.85rem', wordBreak: 'break-all' }}>
                 {parsed.assetIssuer}
               </dd>
@@ -108,7 +110,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
 
         <div style={{ background: '#f3f4f6', borderRadius: 6, padding: 12, marginBottom: 16 }}>
           <p style={{ margin: 0, fontSize: '0.85rem', color: '#6b7280' }}>
-            ℹ️ The form will be pre-filled with this information. You can review and modify it before sending.
+            {t('sep7.prefillNotice')}
           </p>
         </div>
 
@@ -126,7 +128,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
               cursor: 'pointer',
             }}
           >
-            Continue
+            {t('common.continue')}
           </button>
           <button
             type="button"
@@ -140,7 +142,7 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
               cursor: 'pointer',
             }}
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import jsQR from 'jsqr';
+import { useTranslation } from 'react-i18next';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 
 /**
@@ -27,6 +28,7 @@ const hasBarcodeDetector =
   typeof window !== 'undefined' && 'BarcodeDetector' in window;
 
 export function QRScanner({ onScan, onClose }) {
+  const { t } = useTranslation();
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const modalRef = useRef(null);
@@ -135,8 +137,8 @@ export function QRScanner({ onScan, onClose }) {
         aria-labelledby="qr-scanner-title"
       >
         <div className="qr-header">
-          <h3 id="qr-scanner-title">Scan QR Code</h3>
-          <button className="qr-close" onClick={onClose} aria-label="Close QR scanner">✕</button>
+          <h3 id="qr-scanner-title">{t('qrScanner.title')}</h3>
+          <button className="qr-close" onClick={onClose} aria-label={t('qrScanner.close')}>✕</button>
         </div>
 
         {error ? (
@@ -150,11 +152,11 @@ export function QRScanner({ onScan, onClose }) {
               style={{ width: '100%', borderRadius: '8px', display: 'block' }}
               muted
               playsInline
-              aria-label="Camera viewfinder for QR scanning"
+              aria-label={t('qrScanner.viewfinderLabel')}
             />
             <canvas ref={canvasRef} style={{ display: 'none' }} aria-hidden="true" />
             <p style={{ textAlign: 'center', marginTop: '0.5rem', fontSize: '0.875rem', opacity: 0.7 }}>
-              Point camera at a Stellar address QR code
+              {t('qrScanner.hint')}
             </p>
           </div>
         )}

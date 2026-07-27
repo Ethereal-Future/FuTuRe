@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client.js';
+import { formatAmount, formatAssetAmount } from '../utils/formatAmount';
 
 const TOOLTIP = `Stellar charges a small network fee per transaction (base fee × operations). `
   + `The fee is burned and not collected by any party. `
@@ -22,11 +23,11 @@ export function FeeDisplay({ amount, visible }) {
 
   const amtNum = parseFloat(amount) || 0;
   const feeXLM = parseFloat(fee.feeXLM);
-  const total = (amtNum + feeXLM).toFixed(7).replace(/\.?0+$/, '');
+  const total = formatAssetAmount(amtNum + feeXLM);
   const xlmUsd = fee.xlmUsd ? parseFloat(fee.xlmUsd) : null;
-  const totalUsd = xlmUsd ? ((amtNum + feeXLM) * xlmUsd).toFixed(2) : null;
+  const totalUsd = xlmUsd ? formatAmount((amtNum + feeXLM) * xlmUsd, 'USD') : null;
   const savingsUsd = fee.feeUsd
-    ? (fee.traditionalFeeUsd - parseFloat(fee.feeUsd)).toFixed(2)
+    ? formatAmount(fee.traditionalFeeUsd - parseFloat(fee.feeUsd), 'USD')
     : null;
 
   return (
@@ -46,8 +47,8 @@ export function FeeDisplay({ amount, visible }) {
       <div className="fee-row">
         <span className="fee-label">Fee</span>
         <span className="fee-val">
-          {fee.feeXLM} XLM
-          {fee.feeUsd && <span className="fee-usd"> ≈ ${fee.feeUsd}</span>}
+          {formatAssetAmount(fee.feeXLM)} XLM
+          {fee.feeUsd && <span className="fee-usd"> ≈ {formatAmount(fee.feeUsd, 'USD')}</span>}
         </span>
       </div>
 
@@ -56,14 +57,14 @@ export function FeeDisplay({ amount, visible }) {
           <span className="fee-label">Total (amount + fee)</span>
           <span className="fee-val">
             {total} XLM
-            {totalUsd && <span className="fee-usd"> ≈ ${totalUsd}</span>}
+            {totalUsd && <span className="fee-usd"> ≈ {totalUsd}</span>}
           </span>
         </div>
       )}
 
       {savingsUsd && (
         <div className="fee-row fee-saving">
-          <span>💸 Save ~${savingsUsd} vs. traditional wire (avg ${fee.traditionalFeeUsd})</span>
+          <span>💸 Save ~{savingsUsd} vs. traditional wire (avg {formatAmount(fee.traditionalFeeUsd, 'USD')})</span>
         </div>
       )}
     </div>

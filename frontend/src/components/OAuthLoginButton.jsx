@@ -1,10 +1,12 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * OAuth Login Button Component
  * Provides social login options (Google, GitHub)
  */
 export function GoogleLoginButton({ className = '' }) {
+  const { t } = useTranslation();
   const handleGoogleLogin = () => {
     window.location.href = '/api/auth/oauth/google';
   };
@@ -13,7 +15,7 @@ export function GoogleLoginButton({ className = '' }) {
     <button
       onClick={handleGoogleLogin}
       className={`oauth-button google-button ${className}`}
-      aria-label="Sign in with Google"
+      aria-label={t('oauth.signInWithGoogle')}
     >
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
@@ -33,7 +35,7 @@ export function GoogleLoginButton({ className = '' }) {
           fill="#EA4335"
         />
       </svg>
-      <span>Sign in with Google</span>
+      <span>{t('oauth.signInWithGoogle')}</span>
     </button>
   );
 }
@@ -43,6 +45,7 @@ export function GoogleLoginButton({ className = '' }) {
  * Processes OAuth callback and stores tokens
  */
 export function OAuthCallbackHandler() {
+  const { t } = useTranslation();
   React.useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const accessToken = params.get('accessToken');
@@ -58,7 +61,7 @@ export function OAuthCallbackHandler() {
     }
   }, []);
 
-  return <div>Processing login...</div>;
+  return <div>{t('oauth.processing')}</div>;
 }
 
 export default GoogleLoginButton;

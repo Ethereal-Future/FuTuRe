@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Modal } from '../design-system/Modal';
 import { downloadFile, copyToClipboard, generateStellarLabUrl, formatXdrForDisplay } from '../utils/xdrExport';
 
 export function XdrExportModal({ open, onClose, xdr, isSigned = true, isTestnet = false }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   if (!xdr) return null;
@@ -29,22 +31,20 @@ export function XdrExportModal({ open, onClose, xdr, isSigned = true, isTestnet 
   const displayXdr = formatXdrForDisplay(xdr, 80);
 
   return (
-    <Modal open={open} onClose={onClose} title="Export Transaction XDR" size="lg">
+    <Modal open={open} onClose={onClose} title={t('xdrExport.title')} size="lg">
       <div className="xdr-export-modal">
         <div className="xdr-status">
           <p>
-            <strong>Status:</strong> {isSigned ? '✓ Signed Transaction' : '◯ Unsigned Transaction'}
+            <strong>{t('xdrExport.statusLabel')}</strong> {isSigned ? t('xdrExport.signed') : t('xdrExport.unsigned')}
           </p>
           <p style={{ fontSize: '0.85rem', color: '#666', marginTop: 8 }}>
-            {isSigned
-              ? 'This signed transaction can be submitted to the Stellar network.'
-              : 'This unsigned transaction needs signatures before submission.'}
+            {isSigned ? t('xdrExport.signedHint') : t('xdrExport.unsignedHint')}
           </p>
         </div>
 
         <div className="xdr-display">
           <label htmlFor="xdr-textarea" style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>
-            Transaction Envelope (XDR)
+            {t('xdrExport.envelopeLabel')}
           </label>
           <textarea
             id="xdr-textarea"
@@ -72,28 +72,28 @@ export function XdrExportModal({ open, onClose, xdr, isSigned = true, isTestnet 
             className="btn-primary"
             style={{ background: copied ? '#10b981' : undefined }}
           >
-            {copied ? '✓ Copied to clipboard' : '📋 Copy XDR'}
+            {copied ? t('xdrExport.copied') : t('xdrExport.copy')}
           </button>
           <button
             type="button"
             onClick={handleDownloadXdr}
             className="btn-secondary"
           >
-            ⬇️ Download as .xdr file
+            {t('xdrExport.download')}
           </button>
           <button
             type="button"
             onClick={handleOpenInLab}
             className="btn-secondary"
           >
-            🔬 Open in Stellar Lab
+            {t('xdrExport.openInLab')}
           </button>
           <button
             type="button"
             onClick={onClose}
             className="btn-clear"
           >
-            Close
+            {t('common.close')}
           </button>
         </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { StatusMessage } from './StatusMessage.jsx';
+import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * Display asset balance with trustline limits and ability to modify limits
@@ -42,14 +43,14 @@ export function AssetBalanceWithTrustline({ accountId, onSuccess }) {
 
   const formatBalance = (balance, limit, assetCode) => {
     if (assetCode === 'XLM') {
-      return `${parseFloat(balance).toFixed(2)} XLM`;
+      return `${formatAssetAmount(balance, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} XLM`;
     }
 
     if (limit === null) {
-      return `${parseFloat(balance).toFixed(7)} ${assetCode}`;
+      return `${formatAssetAmount(balance)} ${assetCode}`;
     }
 
-    return `${parseFloat(balance).toFixed(7)} / ${parseFloat(limit).toFixed(7)} ${assetCode}`;
+    return `${formatAssetAmount(balance)} / ${formatAssetAmount(limit)} ${assetCode}`;
   };
 
   const handleModifyLimit = async (assetCode, asset) => {

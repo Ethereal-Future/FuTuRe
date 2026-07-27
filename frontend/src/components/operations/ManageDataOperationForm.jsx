@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 export function ManageDataOperationForm({ onAdd }) {
+  const { t } = useTranslation();
   const [dataKey, setDataKey] = useState('');
   const [dataValue, setDataValue] = useState('');
   const [deleteMode, setDeleteMode] = useState(false);
@@ -11,12 +13,12 @@ export function ManageDataOperationForm({ onAdd }) {
     setError('');
 
     if (!dataKey || dataKey.length === 0 || dataKey.length > 64) {
-      setError('Key required (1-64 bytes)');
+      setError(t('manageDataForm.keyRequired'));
       return;
     }
 
     if (!deleteMode && (!dataValue || dataValue.length > 64)) {
-      setError('Value required and must be 1-64 bytes');
+      setError(t('manageDataForm.valueRequired'));
       return;
     }
 
@@ -40,7 +42,7 @@ export function ManageDataOperationForm({ onAdd }) {
 
       <div style={{ marginBottom: 8 }}>
         <label htmlFor="data-key" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-          Key (max 64 bytes)
+          {t('manageDataForm.keyLabel')}
         </label>
         <input
           id="data-key"
@@ -52,7 +54,7 @@ export function ManageDataOperationForm({ onAdd }) {
           style={{ width: '100%' }}
         />
         <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-          Current: {dataKey.length}/64 bytes
+          {t('manageDataForm.currentBytes', { count: dataKey.length })}
         </p>
       </div>
 
@@ -65,32 +67,32 @@ export function ManageDataOperationForm({ onAdd }) {
           style={{ width: 'auto', minHeight: 'unset' }}
         />
         <label htmlFor="delete-mode" style={{ fontWeight: 600, cursor: 'pointer', fontSize: '0.85rem' }}>
-          Delete this entry
+          {t('manageDataForm.deleteEntry')}
         </label>
       </div>
 
       {!deleteMode && (
         <div style={{ marginBottom: 8 }}>
           <label htmlFor="data-value" style={{ display: 'block', marginBottom: 4, fontSize: '0.85rem' }}>
-            Value (max 64 bytes)
+            {t('manageDataForm.valueLabel')}
           </label>
           <textarea
             id="data-value"
             value={dataValue}
             onChange={(e) => setDataValue(e.target.value)}
-            placeholder="Enter data value (UTF-8 text)"
+            placeholder={t('manageDataForm.valuePlaceholder')}
             maxLength="64"
             rows="3"
             style={{ width: '100%' }}
           />
           <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-            Current: {dataValue.length}/64 bytes
+            {t('manageDataForm.currentBytes', { count: dataValue.length })}
           </p>
         </div>
       )}
 
       <button type="submit" style={{ width: '100%', marginTop: 8 }}>
-        Add Data Operation
+        {t('manageDataForm.submit')}
       </button>
     </form>
   );

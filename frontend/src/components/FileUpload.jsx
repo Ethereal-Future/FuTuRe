@@ -1,10 +1,12 @@
 import { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import { useFileUpload } from '../hooks/useFileUpload';
 
 const STATUS_ICON = { pending: '⏳', uploading: '⬆️', done: '✅', error: '❌' };
 
 function FilePreview({ entry, onRemove }) {
+  const { t } = useTranslation();
   return (
     <motion.div
       className="fu-file-item"
@@ -32,7 +34,7 @@ function FilePreview({ entry, onRemove }) {
         type="button"
         className="fu-remove-btn"
         onClick={() => onRemove(entry.id)}
-        aria-label={`Remove ${entry.file.name}`}
+        aria-label={t('fileUpload.remove', { name: entry.file.name })}
         disabled={entry.status === 'uploading'}
       >
         ✕
@@ -42,6 +44,7 @@ function FilePreview({ entry, onRemove }) {
 }
 
 export function FileUpload({ onUpload, label = 'Upload Files' }) {
+  const { t } = useTranslation();
   const inputRef = useRef(null);
   const [dragging, setDragging] = useState(false);
   const { files, errors, addFiles, removeFile, uploadAll, clearAll } = useFileUpload(onUpload);
@@ -68,12 +71,12 @@ export function FileUpload({ onUpload, label = 'Upload Files' }) {
         onClick={() => inputRef.current?.click()}
         role="button"
         tabIndex={0}
-        aria-label="Drop files here or click to browse"
+        aria-label={t('fileUpload.dropZone')}
         onKeyDown={(e) => e.key === 'Enter' && inputRef.current?.click()}
       >
         <span className="fu-dropzone-icon">📁</span>
-        <p className="fu-dropzone-text">Drag &amp; drop files here, or <u>browse</u></p>
-        <p className="fu-dropzone-hint">Images, PDF, CSV, TXT · max 10MB · up to 10 files</p>
+        <p className="fu-dropzone-text">{t('fileUpload.dragDrop')} <u>{t('fileUpload.browse')}</u></p>
+        <p className="fu-dropzone-hint">{t('fileUpload.hint')}</p>
         <input
           ref={inputRef}
           type="file"
@@ -111,7 +114,7 @@ export function FileUpload({ onUpload, label = 'Upload Files' }) {
             </button>
           )}
           <button type="button" className="btn-clear" onClick={clearAll} style={{ background: 'var(--muted)' }}>
-            Clear All
+            {t('fileUpload.clearAll')}
           </button>
         </div>
       )}

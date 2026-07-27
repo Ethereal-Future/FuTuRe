@@ -1,7 +1,7 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
-import LanguageDetector from 'i18next-browser-languagedetector';
 
+import { detectLanguage } from '../utils/detectLanguage';
 import en from './locales/en.json';
 import ar from './locales/ar.json';
 import he from './locales/he.json';
@@ -24,18 +24,17 @@ export const SUPPORTED_LANGUAGES = [
   { code: 'pt', name: 'Português', dir: 'ltr' },
 ];
 
+const initialLanguage = detectLanguage({
+  supportedCodes: SUPPORTED_LANGUAGES.map(({ code }) => code),
+});
+
 i18n
-  .use(LanguageDetector)
   .use(initReactI18next)
   .init({
     resources: { en, ar, he, fr, es, zh, pt },
+    lng: initialLanguage,
     fallbackLng: 'en',
     interpolation: { escapeValue: false },
-    detection: {
-      order: ['localStorage', 'navigator'],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'i18n_language',
-    },
   })
   .then(() => {
     const lang = i18n.language?.split('-')[0] ?? 'en';

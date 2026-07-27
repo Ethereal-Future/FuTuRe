@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 
 /**
  * SkeletonText — Placeholder for lines of text.
@@ -10,6 +11,7 @@ export function SkeletonText({
   className = '',
   ...props
 }) {
+  const { t } = useTranslation();
   const getLineWidth = (index) => {
     if (Array.isArray(width)) {
       return width[index] || '100%';
@@ -26,7 +28,7 @@ export function SkeletonText({
       className={`skeleton-text-container ${className}`}
       role="status"
       aria-busy="true"
-      aria-label="Loading content"
+      aria-label={t('skeleton.loadingContent')}
       {...props}
     >
       {Array.from({ length: lines }).map((_, i) => (
@@ -48,12 +50,13 @@ export function SkeletonText({
  * SkeletonCard — Placeholder matching the shape of a transaction item.
  */
 export function SkeletonCard({ className = '', ...props }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`tx-row tx-skeleton ${className}`}
       role="status"
       aria-busy="true"
-      aria-label="Loading transaction"
+      aria-label={t('skeleton.loadingTransaction')}
       style={{
         display: 'flex',
         gap: 12,
@@ -79,12 +82,13 @@ export function SkeletonCard({ className = '', ...props }) {
  * SkeletonBalance — Placeholder matching the shape of the account balances.
  */
 export function SkeletonBalance({ rows = 2, className = '', ...props }) {
+  const { t } = useTranslation();
   return (
     <div
       className={`skeleton-balance ${className}`}
       role="status"
       aria-busy="true"
-      aria-label="Loading account balances"
+      aria-label={t('skeleton.loadingBalances')}
       style={{
         marginTop: 10,
         display: 'flex',
