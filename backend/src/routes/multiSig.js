@@ -3,6 +3,7 @@ import { validate, rules } from '../middleware/validate.js';
 import * as MultiSigService from '../services/multiSig.js';
 import { broadcastToAccount } from '../services/websocket.js';
 import { AppError, ErrorCodes } from '../middleware/errorHandler.js';
+import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import logger from '../config/logger.js';
 
 const router = express.Router();
@@ -160,6 +161,8 @@ router.post('/account/update', rules.updateMultiSig, validate, async (req, res) 
  *     summary: Build a multi-sig transaction
  *     description: Creates an unsigned transaction XDR for signers to collect signatures on.
  *     tags: [MultiSig]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdempotencyKey'
  *     requestBody:
  *       required: true
  *       content:
@@ -182,7 +185,7 @@ router.post('/account/update', rules.updateMultiSig, validate, async (req, res) 
  *       500:
  *         description: Server error
  */
-router.post('/transaction/build', rules.buildMultiSigTx, validate, async (req, res) => {
+router.post('/transaction/build', idempotencyMiddleware, rules.buildMultiSigTx, validate, async (req, res) => {
   try {
     const { sourcePublicKey, destination, amount, assetCode } = req.body;
     const result = await MultiSigService.buildMultiSigTransaction(

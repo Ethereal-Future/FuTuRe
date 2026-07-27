@@ -1,9 +1,30 @@
 import express from 'express';
+import { query, validationResult } from 'express-validator';
 import prisma from '../db/client.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { logAdminAction } from '../db/adminAuditLog.js';
 
 const router = express.Router();
+
+// Returns 400 (not the shared 422 `validate` middleware) to match this
+// endpoint's documented contract for malformed/reversed date filters.
+const validateAuditLogDateRange = [
+  query('from').optional().isISO8601().withMessage('from must be a valid ISO 8601 date'),
+  query('to').optional().isISO8601().withMessage('to must be a valid ISO 8601 date'),
+  (req, res, next) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array().map((e) => ({ field: e.path, message: e.msg })) });
+    }
+
+    const { from, to } = req.query;
+    if (from && to && new Date(from) > new Date(to)) {
+      return res.status(400).json({ error: '`from` must not be later than `to`' });
+    }
+
+    next();
+  },
+];
 
 router.get('/stats', requireAdmin, async (req, res) => {
   try {
@@ -99,7 +120,34 @@ router.put('/kyc/:userId/reject', requireAdmin, async (req, res) => {
   }
 });
 
-router.get('/audit-log', requireAdmin, async (req, res) => {
+/**
+ * @swagger
+ * /api/admin/audit-log:
+ *   get:
+ *     summary: List admin audit log entries
+ *     tags: [Admin]
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: ISO 8601 timestamp — only include entries created at or after this time.
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: ISO 8601 timestamp — only include entries created at or before this time. Must not be earlier than `from`.
+ *     responses:
+ *       200:
+ *         description: Paginated audit log entries
+ *       400:
+ *         description: Malformed `from`/`to` (not ISO 8601) or `from` later than `to`
+ *       500:
+ *         description: Server error
+ */
+router.get('/audit-log', requireAdmin, validateAuditLogDateRange, async (req, res) => {
   try {
     const { page = 1, limit = 50, adminUserId, actionType, from, to } = req.query;
     const take = Math.min(parseInt(limit), 200);
