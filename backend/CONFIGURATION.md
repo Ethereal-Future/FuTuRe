@@ -92,6 +92,25 @@ Everything else has a safe default for local development.
 | `RATE_LIMIT_MESSAGE` | string | — | `"Too many requests..."` | Error message returned when rate-limited. | `"Slow down!"` |
 | `RATE_LIMIT_WHITELIST` | CSV | — | — | Comma-separated IPs/CIDR ranges exempt from rate limiting. | `127.0.0.1,10.0.0.0/8` |
 
+#### Endpoint-specific limits
+
+In addition to the global IP-based limiter, the following routes have dedicated **per-user** limiters
+(keyed on the authenticated user id, falling back to IP for unauthenticated requests):
+
+| Route | Limiter | Window | Max | Reason |
+|---|---|---|---|---|
+| `POST /api/v1/accounts/contacts` | `contactCreateLimiter` | 1 min | 20 | Write-heavy; prevents rapid contact row creation |
+| `PUT /api/v1/admin/kyc/:userId/approve` | `kycActionLimiter` | 10 min | 30 | Sensitive state mutation; limits blast radius of a compromised admin token |
+| `PUT /api/v1/admin/kyc/:userId/reject` | `kycActionLimiter` | 10 min | 30 | Sensitive state mutation; limits blast radius of a compromised admin token |
+
+#### Per-user contact cap
+
+`POST /api/v1/accounts/contacts` also enforces a hard cap of **500 contacts per user**
+(constant `MAX_CONTACTS_PER_USER` in `backend/src/routes/contacts.js`).
+A `400` response is returned once the cap is reached, regardless of rate-limit headroom.
+This prevents a slow-and-steady script from creating an unbounded number of rows within
+rate-limit rules.
+
 ### Caching
 
 | Variable | Type | Required | Default | Description | Example |
