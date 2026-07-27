@@ -1,0 +1,113 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    "security:openssf-scorecard"
+  ],
+
+  "description": "Renovate dependency update automation for FuTuRe (issue #773)",
+
+  "schedule": ["every weekend"],
+
+  "timezone": "UTC",
+
+  "labels": ["dependencies"],
+
+  "assignees": [],
+
+  "reviewers": [],
+
+  "prConcurrentLimit": 10,
+
+  "prHourlyLimit": 4,
+
+  "semanticCommits": "enabled",
+
+  "commitMessagePrefix": "chore(deps):",
+
+  "packageRules": [
+    {
+      "description": "Group all minor and patch npm updates into a single PR to reduce noise",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "matchDepTypes": ["dependencies", "devDependencies"],
+      "groupName": "npm minor and patch updates",
+      "groupSlug": "npm-minor-patch",
+      "labels": ["dependencies", "automerge-candidate"],
+      "schedule": ["every weekend"]
+    },
+    {
+      "description": "Security updates are separate high-priority PRs and run immediately",
+      "matchManagers": ["npm"],
+      "matchCategories": ["security"],
+      "labels": ["dependencies", "security"],
+      "schedule": ["at any time"],
+      "prPriority": 10,
+      "groupName": null
+    },
+    {
+      "description": "Major version bumps are separate PRs requiring manual review",
+      "matchManagers": ["npm"],
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "breaking-change"],
+      "groupName": null,
+      "automerge": false
+    },
+    {
+      "description": "GitHub Actions — keep pinned SHAs up to date",
+      "matchManagers": ["github-actions"],
+      "labels": ["dependencies", "ci"],
+      "groupName": "GitHub Actions",
+      "schedule": ["every weekend"]
+    },
+    {
+      "description": "Backend npm packages",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["backend/package.json"],
+      "labels": ["dependencies", "backend"]
+    },
+    {
+      "description": "Frontend npm packages",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["frontend/package.json"],
+      "labels": ["dependencies", "frontend"]
+    },
+    {
+      "description": "Pin exact versions for Stellar SDK to avoid unexpected breaking changes",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["@stellar/stellar-sdk"],
+      "rangeStrategy": "pin",
+      "labels": ["dependencies", "stellar"]
+    },
+    {
+      "description": "Prisma client and CLI must be kept in sync — update together",
+      "matchManagers": ["npm"],
+      "matchPackageNames": ["prisma", "@prisma/client", "@prisma/adapter-pg"],
+      "groupName": "Prisma",
+      "labels": ["dependencies", "prisma"]
+    }
+  ],
+
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security", "dependencies"],
+    "schedule": ["at any time"]
+  },
+
+  "osvVulnerabilityAlerts": true,
+
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["on the first day of the month"],
+    "labels": ["dependencies", "lock-file-maintenance"]
+  },
+
+  "ignoreDeps": [],
+
+  "ignorePaths": [
+    "e2e/package.json",
+    "mobile-tests/package.json",
+    "security/package.json",
+    "stellar-contract/**"
+  ]
+}

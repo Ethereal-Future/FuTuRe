@@ -35,6 +35,9 @@ jobs:
         run: npm run typecheck
         working-directory: frontend
 
+      - name: Typecheck backend (TypeScript migration - issue #771)
+        run: npx tsc --noEmit
+        working-directory: backend
       - name: Check for hardcoded i18n strings
         run: npm run lint:i18n
 

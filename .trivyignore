@@ -1,0 +1,18 @@
+# .trivyignore — Trivy CVE suppression file (issue #772)
+#
+# Format: one CVE ID per line.
+# Each entry MUST include a dated justification comment explaining:
+#   1. Why the CVE is suppressed.
+#   2. The date the decision was made.
+#   3. A review date (≤ 90 days) to re-evaluate.
+#
+# Example:
+#   CVE-YYYY-NNNNN
+#   # Reason: the vulnerable code path is in a test-only dependency never
+#   #          loaded in production.  Review by: YYYY-MM-DD.
+#
+# ──────────────────────────────────────────────────────────────────────────
+# No suppressions are active at initial setup.
+# Add entries here only after documenting the justification in the linked
+# security advisory issue and getting approval from a maintainer.
+# ──────────────────────────────────────────────────────────────────────────
