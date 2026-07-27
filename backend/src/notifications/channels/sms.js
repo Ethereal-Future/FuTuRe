@@ -7,7 +7,15 @@ import logger from '../../config/logger.js';
 // Lazy-loaded Twilio client
 let twilioClient = null;
 
-function getTwilioClient() {
+/**
+ * Lazily initialise and cache a Twilio client.
+ * Uses dynamic import() — the ESM-safe equivalent of require() — so that the
+ * `twilio` package remains an optional dependency: if it is not installed the
+ * import rejects and we log a clear warning instead of silently stubbing.
+ *
+ * @returns {Promise<object|null>}
+ */
+async function getTwilioClient() {
   if (twilioClient) return twilioClient;
 
   const { TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN } = process.env;
@@ -15,8 +23,7 @@ function getTwilioClient() {
 
   // twilio must be installed separately: npm install twilio
   try {
-    // eslint-disable-next-line no-undef
-    const twilio = require('twilio');
+    const { default: twilio } = await import('twilio');
     twilioClient = twilio(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN);
     return twilioClient;
   } catch {
@@ -34,7 +41,7 @@ const FROM_NUMBER = process.env.TWILIO_FROM_NUMBER ?? '+10000000000';
  * @returns {Promise<{ success: boolean, sid?: string, stub?: boolean }>}
  */
 export async function sendSms(to, { body }) {
-  const client = getTwilioClient();
+  const client = await getTwilioClient();
 
   if (!client) {
     logger.info('sms.stub.sent', { to, body: body.slice(0, 40) });
