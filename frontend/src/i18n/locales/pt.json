@@ -50,6 +50,20 @@
     "queued": "Você está offline. Pagamento na fila, será sincronizado automaticamente.",
     "largeWarning": "⚠️ Por favor revise e confirme o aviso de transação grande abaixo."
   },
+  "sendPayment": {
+    "title": "Enviar pagamento",
+    "recipientLabel": "Endereço do destinatário",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 Escanear",
+    "invalidAddress": "Endereço inválido",
+    "amountLabel": "Valor (XLM)",
+    "sendButton": "Enviar pagamento",
+    "sending": "Enviando…",
+    "kycRequired": "Transações grandes exigem aprovação KYC",
+    "sentSuccess": "Pagamento enviado! Hash: {{hash}}…",
+    "sep7Prefilled": "Detalhes do pagamento pré-preenchidos. Por favor revise e confirme.",
+    "sep7InvalidLink": "Link de pagamento inválido: {{error}}"
+  },
   "validation": {
     "invalidAddress": "Formato de endereço Stellar inválido (deve começar com G e ter 56 caracteres)"
   },

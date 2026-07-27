@@ -1,7 +1,8 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { registerWebhook, listWebhooks, deleteWebhook, rotateWebhookSecret, verifyWebhookSignature } from '../webhooks/store.js';
+import { registerWebhook, listWebhooks, deleteWebhook, rotateWebhookSecret, verifyWebhookSignature, getWebhook } from '../webhooks/store.js';
 import { webhookSignatureMiddleware } from '../webhooks/verifySignature.js';
+import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
 const router = express.Router();
@@ -147,6 +148,75 @@ router.post('/:id/rotate-secret', requireAuth, (req, res) => {
     }
     logger.error({ err }, 'Failed to rotate webhook secret');
     res.status(500).json({ error: 'Failed to rotate webhook secret' });
+  }
+});
+
+/**
+ * @swagger
+ * /api/v1/webhooks/{id}/deliveries:
+ *   get:
+ *     summary: Get paginated delivery history for a webhook, including permanently failed (dead-letter) deliveries
+ *     tags: [Webhooks]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, DELIVERED, FAILED]
+ *     responses:
+ *       200:
+ *         description: Paginated delivery history
+ *       401:
+ *         description: Unauthorized
+ *       404:
+ *         description: Webhook not found
+ */
+router.get('/:id/deliveries', requireAuth, async (req, res) => {
+  try {
+    const webhook = getWebhook(req.params.id);
+    if (!webhook || webhook.accountId !== req.user.sub) {
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+
+    const { page = 1, status } = req.query;
+    const take = Math.min(parseInt(req.query.limit) || 20, 100);
+    const skip = (parseInt(page) - 1) * take;
+
+    const where = { webhookId: webhook.id };
+    if (status) where.status = status;
+
+    const [deliveries, total] = await Promise.all([
+      prisma.webhookDelivery.findMany({
+        where,
+        skip,
+        take,
+        orderBy: { createdAt: 'desc' },
+      }),
+      prisma.webhookDelivery.count({ where }),
+    ]);
+
+    res.json({
+      deliveries,
+      pagination: { page: parseInt(page), limit: take, total, pages: Math.ceil(total / take) },
+    });
+  } catch (err) {
+    logger.error({ err }, 'Failed to load webhook deliveries');
+    res.status(500).json({ error: 'Failed to load webhook deliveries' });
   }
 });
 

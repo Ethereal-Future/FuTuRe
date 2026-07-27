@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 import { isValidStellarAddress } from '../utils/validateStellarAddress';
 import { validateAmount, formatAmount } from '../utils/validateAmount';
@@ -9,6 +10,7 @@ import { useMessages } from '../hooks/useMessages';
 import { makeVariants, tapScale } from '../utils/animations';
 import { useReducedMotion } from 'framer-motion';
 import { QRScanner } from '../components/QRScanner';
+import { AmountInput } from '../components/AmountInput';
 import { ConfirmSendDialog } from '../components/ConfirmSendDialog';
 import { PaymentConfirmationModal } from '../components/PaymentConfirmationModal';
 import { LargeTransactionWarning } from '../components/LargeTransactionWarning';
@@ -18,6 +20,7 @@ import { logError } from '../utils/errorLogger';
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
 
 export function SendPaymentPage() {
+  const { t } = useTranslation();
   const { account, balance, loading, recipient, amount, memo, memoType } = useAppState();
   const dispatch = useAppDispatch();
   const msg = useMessages();
@@ -75,16 +78,15 @@ export function SendPaymentPage() {
   const recipientTouched = recipient.length > 0;
   const largeTransactionBlocked = amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
-  const handleSendMax = () => {
-    if (xlmBalance === null) return;
-    const maxSendable = Math.max(0, parseFloat(xlmBalance) - 1 - 0.00001);
-    dispatch({ type: A.SET_AMOUNT, payload: maxSendable.toFixed(7).replace(/\.?0+$/, '') });
-  };
+  // Reserve buffer (1 XLM minimum reserve + base fee) kept out of the sendable max.
+  const maxSendable = xlmBalance !== null
+    ? Math.max(0, parseFloat(xlmBalance) - 1 - 0.00001).toFixed(7).replace(/\.?0+$/, '')
+    : null;
 
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (largeTransactionBlocked) {
-      msg.error('Large transactions require KYC approval');
+      msg.error(t('sendPayment.kycRequired'));
       return;
     }
 
@@ -99,7 +101,7 @@ export function SendPaymentPage() {
         memoType: memoType || undefined,
       });
 
-      msg.success(`Payment sent! Hash: ${data.hash?.slice(0, 8)}…`);
+      msg.success(t('sendPayment.sentSuccess', { hash: data.hash?.slice(0, 8) }));
       dispatch({ type: A.RESET_FORM });
       setShowPaymentConfirmation(false);
     } catch (error) {
@@ -128,25 +130,25 @@ export function SendPaymentPage() {
         dispatch({ type: A.SET_MEMO_TYPE, payload: parsed.memoType });
       }
     }
-    msg.info('Payment details pre-filled. Please review and confirm.');
+    msg.info(t('sendPayment.sep7Prefilled'));
   };
 
   const handleSep7Error = (error) => {
     setShowSep7Handler(false);
-    msg.error(`Invalid payment link: ${error}`);
+    msg.error(t('sendPayment.sep7InvalidLink', { error }));
   };
 
   return (
     <motion.section className="section" variants={v.fadeSlide}>
-      <h2>Send Payment</h2>
+      <h2>{t('sendPayment.title')}</h2>
 
       <div style={{ marginBottom: 16 }}>
-        <label htmlFor="recipient">Recipient Address</label>
+        <label htmlFor="recipient">{t('sendPayment.recipientLabel')}</label>
         <div style={{ display: 'flex', gap: 8 }}>
           <input
             id="recipient"
             type="text"
-            placeholder="G…"
+            placeholder={t('sendPayment.recipientPlaceholder')}
             value={recipient}
             onChange={(e) => dispatch({ type: A.SET_RECIPIENT, payload: e.target.value })}
             style={{
@@ -161,38 +163,22 @@ export function SendPaymentPage() {
             onClick={() => setShowScanner(!showScanner)}
             style={{ padding: '8px 16px', background: '#0066cc', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
           >
-            📱 Scan
+            {t('sendPayment.scanButton')}
           </button>
         </div>
-        {recipientTouched && !recipientValid && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>Invalid address</p>}
+        {recipientTouched && !recipientValid && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>{t('sendPayment.invalidAddress')}</p>}
       </div>
 
       {showScanner && <QRScanner onScan={(data) => { dispatch({ type: A.SET_RECIPIENT, payload: data }); setShowScanner(false); }} />}
 
       <div style={{ marginBottom: 16 }}>
-        <label htmlFor="amount">Amount (XLM)</label>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input
-            id="amount"
-            type="number"
-            placeholder="0.00"
-            value={amount}
-            onChange={(e) => dispatch({ type: A.SET_AMOUNT, payload: e.target.value })}
-            style={{
-              flex: 1,
-              padding: '8px 12px',
-              border: amountTouched && !amountValid ? '2px solid #dc2626' : '1px solid #d1d5db',
-              borderRadius: 4,
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleSendMax}
-            style={{ padding: '8px 16px', background: '#10b981', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
-          >
-            Max
-          </button>
-        </div>
+        <label id="amount-label">{t('sendPayment.amountLabel')}</label>
+        <AmountInput
+          value={amount}
+          onChange={(value) => dispatch({ type: A.SET_AMOUNT, payload: value })}
+          currency="XLM"
+          availableBalance={maxSendable}
+        />
         {amountTouched && amountError && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>{amountError}</p>}
       </div>
 
@@ -212,7 +198,7 @@ export function SendPaymentPage() {
           fontWeight: 500,
         }}
       >
-        {loading === 'send' ? 'Sending…' : 'Send Payment'}
+        {loading === 'send' ? t('sendPayment.sending') : t('sendPayment.sendButton')}
       </button>
 
       <PaymentConfirmationModal

@@ -61,6 +61,13 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
       'react/prop-types': 'off',
+      'no-restricted-syntax': [
+        'warn',
+        {
+          selector: "Literal[value=/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/]",
+          message: 'Avoid hardcoded hex colors — use a design token from src/design-system/tokens.js or a CSS custom property (var(--token)) instead.',
+        },
+      ],
     },
   },
   prettier,

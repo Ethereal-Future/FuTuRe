@@ -76,6 +76,20 @@
     "largeWarning": "⚠️ يرجى مراجعة وتأكيد تحذير المعاملة الكبيرة أدناه.",
     "kycRequired": "المعاملات الكبيرة التي تتجاوز {{limit}} XLM تستلزم موافقة KYC."
   },
+  "sendPayment": {
+    "title": "إرسال دفعة",
+    "recipientLabel": "عنوان المستلم",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 مسح",
+    "invalidAddress": "عنوان غير صالح",
+    "amountLabel": "المبلغ (XLM)",
+    "sendButton": "إرسال الدفعة",
+    "sending": "جارٍ الإرسال…",
+    "kycRequired": "المعاملات الكبيرة تتطلب موافقة KYC",
+    "sentSuccess": "تم إرسال الدفعة! الرمز: {{hash}}…",
+    "sep7Prefilled": "تم تعبئة تفاصيل الدفع مسبقًا. يرجى المراجعة والتأكيد.",
+    "sep7InvalidLink": "رابط دفع غير صالح: {{error}}"
+  },
   "confirmation": {
     "title": "تأكيد الدفعة",
     "close": "إغلاق نافذة تأكيد الدفعة",

@@ -50,6 +50,20 @@
     "queued": "אתה לא מחובר. התשלום נוסף לתור ויסונכרן אוטומטית.",
     "largeWarning": "⚠️ אנא בדוק ואשר את אזהרת העסקה הגדולה למטה."
   },
+  "sendPayment": {
+    "title": "שלח תשלום",
+    "recipientLabel": "כתובת הנמען",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 סרוק",
+    "invalidAddress": "כתובת לא תקינה",
+    "amountLabel": "סכום (XLM)",
+    "sendButton": "שלח תשלום",
+    "sending": "שולח…",
+    "kycRequired": "עסקאות גדולות דורשות אישור KYC",
+    "sentSuccess": "התשלום נשלח! גיבוב: {{hash}}…",
+    "sep7Prefilled": "פרטי התשלום מולאו מראש. אנא בדוק ואשר.",
+    "sep7InvalidLink": "קישור תשלום לא תקין: {{error}}"
+  },
   "validation": {
     "invalidAddress": "פורמט כתובת Stellar לא חוקי (חייב להתחיל ב-G ולהיות 56 תווים)"
   },
