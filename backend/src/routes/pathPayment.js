@@ -9,6 +9,7 @@ import {
   recordPathPaymentAnalytic,
 } from '../services/pathPayment.js';
 import { validate, rules } from '../middleware/validate.js';
+import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
 
 const router = Router();
@@ -104,9 +105,27 @@ router.post(
   },
 );
 
+/**
+ * @swagger
+ * /api/path-payment/send:
+ *   post:
+ *     summary: Execute a path payment
+ *     description: Sends a cross-asset payment along a conversion path.
+ *     tags: [PathPayment]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdempotencyKey'
+ *     responses:
+ *       200:
+ *         description: Path payment result
+ *       422:
+ *         description: Validation error
+ *       500:
+ *         description: Server error
+ */
 // Execute path payment
 router.post(
   '/send',
+  idempotencyMiddleware,
   body('sourceSecret').trim().matches(STELLAR_SECRET_KEY).withMessage('Invalid Stellar secret key'),
   body('destination')
     .trim()

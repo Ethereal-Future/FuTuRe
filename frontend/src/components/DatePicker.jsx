@@ -41,7 +41,7 @@ export function DatePicker({ from, to, onChange }) {
         <button
           type="button"
           onClick={clear}
-          style={{ alignSelf: 'flex-end', background: 'none', color: '#888', border: '1px solid #ddd', borderRadius: 4, padding: '8px 10px', fontSize: 12, cursor: 'pointer', width: 'auto', minHeight: 'unset', minWidth: 'unset' }}
+          style={{ alignSelf: 'flex-end', background: 'none', color: 'var(--muted)', border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', fontSize: 12, cursor: 'pointer', width: 'auto', minHeight: 'unset', minWidth: 'unset' }}
           aria-label={t('datePicker.clearDates')}
         >
           {t('datePicker.clear')}
@@ -51,5 +51,5 @@ export function DatePicker({ from, to, onChange }) {
   );
 }
 
-const labelStyle = { fontSize: 12, color: '#555', fontWeight: 600 };
-const inputStyle = { border: '1px solid #ddd', borderRadius: 4, padding: '8px 10px', fontSize: 14, minHeight: 44 };
+const labelStyle = { fontSize: 12, color: 'var(--muted)', fontWeight: 600 };
+const inputStyle = { border: '1px solid var(--border)', borderRadius: 4, padding: '8px 10px', fontSize: 14, minHeight: 44, background: 'var(--surface)', color: 'var(--text)' };

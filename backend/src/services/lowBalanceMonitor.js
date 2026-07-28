@@ -5,8 +5,14 @@ import * as StellarService from './stellar.js';
 import prisma from '../db/client.js';
 import { sendNotification } from '../notifications/index.js';
 import logger from '../config/logger.js';
+import { runWithConcurrency } from '../utils/concurrency.js';
+import { recordCustomMetric } from '../monitoring/metrics.js';
 
 const ALERT_RECHECK_INTERVAL_HOURS = 24; // Re-alert every 24 hours if still below threshold
+const BALANCE_CHECK_PAGE_SIZE = 200;
+const BALANCE_CHECK_CONCURRENCY = 15;
+
+let balanceCheckRunning = false;
 
 /**
  * Check if a balance alert should be sent based on suppression rules.
@@ -128,35 +134,69 @@ export async function checkAndAlertBalance(userId) {
 
 /**
  * Check balances for all users with low balance alerts enabled.
- * Called by scheduled job.
+ * Called by scheduled job. Users are paged through in bounded batches and
+ * checked with bounded concurrency, rather than loading everyone into
+ * memory and processing sequentially.
  * @returns {Promise<object>} Summary of alerts sent
  */
 export async function checkAllUserBalances() {
-  try {
-    // Get all users with low balance alerts enabled
-    const usersWithAlerts = await prisma.notificationPreference.findMany({
-      where: { lowBalanceAlertEnabled: true },
-      select: { userId: true },
-    });
+  if (balanceCheckRunning) {
+    logger.warn('lowBalanceMonitor.batchCheckSkipped', { reason: 'already_running' });
+    return { alertsSent: 0, checksFailed: 0, usersChecked: 0, skipped: true };
+  }
 
+  balanceCheckRunning = true;
+  const startedAt = Date.now();
+
+  try {
     let alertsSent = 0;
     let checksFailed = 0;
+    let usersChecked = 0;
+    let cursor = null;
 
-    for (const userPref of usersWithAlerts) {
-      try {
-        const sent = await checkAndAlertBalance(userPref.userId);
-        if (sent) alertsSent++;
-      } catch (error) {
-        checksFailed++;
-        logger.error('lowBalanceMonitor.checkFailed', { userId: userPref.userId, error: error.message });
-      }
+    for (;;) {
+      const page = await prisma.notificationPreference.findMany({
+        where: { lowBalanceAlertEnabled: true },
+        select: { id: true, userId: true },
+        orderBy: { id: 'asc' },
+        take: BALANCE_CHECK_PAGE_SIZE,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+
+      if (page.length === 0) break;
+
+      await runWithConcurrency(
+        page,
+        async (userPref) => {
+          try {
+            const sent = await checkAndAlertBalance(userPref.userId);
+            if (sent) alertsSent++;
+          } catch (error) {
+            checksFailed++;
+            logger.error('lowBalanceMonitor.checkFailed', { userId: userPref.userId, error: error.message });
+          }
+        },
+        BALANCE_CHECK_CONCURRENCY,
+      );
+
+      usersChecked += page.length;
+      cursor = page[page.length - 1].id;
+
+      if (page.length < BALANCE_CHECK_PAGE_SIZE) break;
     }
 
-    logger.info('lowBalanceMonitor.batchCheck', { alertsSent, checksFailed, usersChecked: usersWithAlerts.length });
-    return { alertsSent, checksFailed, usersChecked: usersWithAlerts.length };
+    const durationMs = Date.now() - startedAt;
+    recordCustomMetric('lowBalanceMonitor.job_duration_ms', durationMs, 'ms');
+    recordCustomMetric('lowBalanceMonitor.users_checked', usersChecked, 'count');
+    recordCustomMetric('lowBalanceMonitor.checks_failed', checksFailed, 'count');
+
+    logger.info('lowBalanceMonitor.batchCheck', { alertsSent, checksFailed, usersChecked, durationMs });
+    return { alertsSent, checksFailed, usersChecked };
   } catch (error) {
     logger.error('lowBalanceMonitor.batchCheckFailed', { error: error.message });
     return { alertsSent: 0, checksFailed: 0, usersChecked: 0 };
+  } finally {
+    balanceCheckRunning = false;
   }
 }
 

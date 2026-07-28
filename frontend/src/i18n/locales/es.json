@@ -50,6 +50,20 @@
     "queued": "Estás sin conexión. Pago en cola, se sincronizará automáticamente.",
     "largeWarning": "⚠️ Por favor revisa y confirma la advertencia de transacción grande."
   },
+  "sendPayment": {
+    "title": "Enviar pago",
+    "recipientLabel": "Dirección del destinatario",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 Escanear",
+    "invalidAddress": "Dirección inválida",
+    "amountLabel": "Monto (XLM)",
+    "sendButton": "Enviar pago",
+    "sending": "Enviando…",
+    "kycRequired": "Las transacciones grandes requieren aprobación KYC",
+    "sentSuccess": "¡Pago enviado! Hash: {{hash}}…",
+    "sep7Prefilled": "Detalles del pago prellenados. Por favor revisa y confirma.",
+    "sep7InvalidLink": "Enlace de pago inválido: {{error}}"
+  },
   "validation": {
     "invalidAddress": "Formato de dirección Stellar inválido (debe comenzar con G y tener 56 caracteres)"
   },

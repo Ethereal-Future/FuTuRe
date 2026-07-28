@@ -50,6 +50,20 @@
     "queued": "您处于离线状态。付款已排队，将在联网后自动同步。",
     "largeWarning": "⚠️ 请查看并确认下方的大额交易警告。"
   },
+  "sendPayment": {
+    "title": "发送付款",
+    "recipientLabel": "收款人地址",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 扫描",
+    "invalidAddress": "地址无效",
+    "amountLabel": "金额 (XLM)",
+    "sendButton": "发送付款",
+    "sending": "发送中…",
+    "kycRequired": "大额交易需要 KYC 审批",
+    "sentSuccess": "付款已发送！哈希：{{hash}}…",
+    "sep7Prefilled": "付款详情已预填。请查看并确认。",
+    "sep7InvalidLink": "付款链接无效：{{error}}"
+  },
   "validation": {
     "invalidAddress": "Stellar地址格式无效（必须以G开头且为56个字符）"
   },

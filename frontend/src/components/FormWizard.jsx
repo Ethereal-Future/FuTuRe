@@ -41,10 +41,10 @@ export function FormWizard({ steps = [], onComplete }) {
           <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
             <div style={{
               width: '100%', height: 4, borderRadius: 2,
-              background: i <= current ? '#0066cc' : '#e5e7eb',
+              background: i <= current ? 'var(--primary)' : 'var(--border)',
               transition: 'background 0.3s',
             }} />
-            <span style={{ fontSize: 11, color: i === current ? '#0066cc' : '#888', fontWeight: i === current ? 700 : 400 }}>
+            <span style={{ fontSize: 11, color: i === current ? 'var(--primary)' : 'var(--muted)', fontWeight: i === current ? 700 : 400 }}>
               {s.title}
             </span>
           </div>
@@ -85,7 +85,7 @@ export function FormWizard({ steps = [], onComplete }) {
 }
 
 const backBtnStyle = {
-  background: 'white', color: '#0066cc', border: '1px solid #0066cc',
+  background: 'var(--surface)', color: 'var(--primary)', border: '1px solid var(--primary)',
   borderRadius: 4, padding: '10px 16px', fontSize: 14, cursor: 'pointer',
   width: 'auto', minHeight: 44,
 };

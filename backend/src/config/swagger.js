@@ -685,6 +685,15 @@ const options = {
           bearerFormat: 'JWT',
         },
       },
+      parameters: {
+        IdempotencyKey: {
+          name: 'Idempotency-Key',
+          in: 'header',
+          required: false,
+          description: 'Unique client-generated key (1-255 alphanumeric/hyphen characters). When provided, a repeated request with the same key returns the original cached response instead of creating a duplicate resource. Optional — requests without it are processed normally.',
+          schema: { type: 'string', example: 'a1b2c3d4-e5f6-4a1b-8c3d-4e5f6a1b2c3d' },
+        },
+      },
     },
     security: [{ bearerAuth: [] }],
   },

@@ -336,3 +336,32 @@ model AdminAuditLog {
   @@index([actionType])
   @@index([createdAt])
 }
+
+enum WebhookDeliveryStatus {
+  PENDING
+  DELIVERED
+  FAILED
+}
+
+// Durable record of every dispatched webhook event, one row per attempt cycle.
+// Replaces the previous fire-and-forget setTimeout retry loop so pending
+// retries survive process restarts and account owners can query failures.
+model WebhookDelivery {
+  id            String                @id @default(uuid())
+  webhookId     String
+  accountId     String
+  eventType     String
+  payload       Json
+  attempt       Int                   @default(0)
+  maxAttempts   Int                   @default(3)
+  status        WebhookDeliveryStatus @default(PENDING)
+  lastError     String?
+  nextAttemptAt DateTime              @default(now())
+  deliveredAt   DateTime?
+  createdAt     DateTime              @default(now())
+  updatedAt     DateTime              @updatedAt
+
+  @@index([webhookId, createdAt])
+  @@index([accountId, createdAt])
+  @@index([status, nextAttemptAt])
+}
