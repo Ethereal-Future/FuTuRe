@@ -33,6 +33,7 @@ Everything else has a safe default for local development.
 | `CONFIG_VERSION` | integer | — | `1` | Config schema version. Must match the expected value or startup fails. | `1` |
 | `CONFIG_WATCH` | boolean | — | `false` | Reload config when `.env*` files change (ignored in `test`). | `true` |
 | `PORT` | integer | — | `3001` | TCP port the Express server listens on. | `3001` |
+| `TRUST_PROXY_HOPS` | integer | — | `0` | Number of trusted reverse-proxy hops in front of this server. Passed to Express's `app.set('trust proxy', n)`, which controls how many `X-Forwarded-For` entries (from the right) are trusted when deriving `req.ip`. Set this to match your actual topology — an incorrect value either lets clients spoof their IP (too high) or rate-limits everyone as the proxy's IP (too low). `0` = no proxy, connect directly (default). `1` = single load balancer/reverse proxy in front. `2` = CDN + load balancer. | `1` |
 
 ### CORS
 
@@ -91,6 +92,25 @@ Everything else has a safe default for local development.
 | `RATE_LIMIT_MAX` | integer | — | `100` | Max requests per window per IP. | `100` |
 | `RATE_LIMIT_MESSAGE` | string | — | `"Too many requests..."` | Error message returned when rate-limited. | `"Slow down!"` |
 | `RATE_LIMIT_WHITELIST` | CSV | — | — | Comma-separated IPs/CIDR ranges exempt from rate limiting. | `127.0.0.1,10.0.0.0/8` |
+
+#### Endpoint-specific limits
+
+In addition to the global IP-based limiter, the following routes have dedicated **per-user** limiters
+(keyed on the authenticated user id, falling back to IP for unauthenticated requests):
+
+| Route | Limiter | Window | Max | Reason |
+|---|---|---|---|---|
+| `POST /api/v1/accounts/contacts` | `contactCreateLimiter` | 1 min | 20 | Write-heavy; prevents rapid contact row creation |
+| `PUT /api/v1/admin/kyc/:userId/approve` | `kycActionLimiter` | 10 min | 30 | Sensitive state mutation; limits blast radius of a compromised admin token |
+| `PUT /api/v1/admin/kyc/:userId/reject` | `kycActionLimiter` | 10 min | 30 | Sensitive state mutation; limits blast radius of a compromised admin token |
+
+#### Per-user contact cap
+
+`POST /api/v1/accounts/contacts` also enforces a hard cap of **500 contacts per user**
+(constant `MAX_CONTACTS_PER_USER` in `backend/src/routes/contacts.js`).
+A `400` response is returned once the cap is reached, regardless of rate-limit headroom.
+This prevents a slow-and-steady script from creating an unbounded number of rows within
+rate-limit rules.
 
 ### Caching
 

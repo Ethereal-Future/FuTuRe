@@ -78,6 +78,10 @@ try {
 const app = express();
 const PORT = getConfig().server.port;
 
+// Trust a fixed number of proxy hops so req.ip reflects the real client IP
+// instead of a spoofable X-Forwarded-For header (see TRUST_PROXY_HOPS in CONFIGURATION.md).
+app.set('trust proxy', getConfig().server.trustProxyHops);
+
 // Compress all responses (gzip for broad support, brotli when client supports it)
 app.use(compression({
   filter: (req, res) => {
