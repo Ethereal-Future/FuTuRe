@@ -149,6 +149,17 @@
   "chartsDashboard": {
     "empty": "No data yet. Create an account and make transactions to see charts."
   },
+  "wsStatus": {
+    "label": "Status do WebSocket: {{status}}",
+    "connected": "Conectado",
+    "disconnected": "Desconectado",
+    "reconnecting": "Reconectando…",
+    "failed": "Conexão perdida"
+  },
+  "formWizard": {
+    "progressLabel": "Passo {{current}} de {{total}}",
+    "stepAnnouncement": "{{title}}, passo {{current}} de {{total}}"
+  },
   "inlineConfirmation": {
     "ariaLabel": "Confirm clear form"
   },

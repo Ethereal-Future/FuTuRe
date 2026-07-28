@@ -248,6 +248,17 @@
   "chartsDashboard": {
     "empty": "No data yet. Create an account and make transactions to see charts."
   },
+  "wsStatus": {
+    "label": "حالة WebSocket: {{status}}",
+    "connected": "متصل",
+    "disconnected": "غير متصل",
+    "reconnecting": "جارٍ إعادة الاتصال…",
+    "failed": "فُقد الاتصال"
+  },
+  "formWizard": {
+    "progressLabel": "الخطوة {{current}} من {{total}}",
+    "stepAnnouncement": "{{title}}، الخطوة {{current}} من {{total}}"
+  },
   "inlineConfirmation": {
     "ariaLabel": "Confirm clear form"
   },
