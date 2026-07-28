@@ -3,6 +3,7 @@ import express from 'express';
 import { body, param, validationResult } from 'express-validator';
 import * as StreamingService from '../services/streaming.js';
 import logger from '../config/logger.js';
+import { idempotencyMiddleware } from '../middleware/idempotency.js';
 
 const router = express.Router();
 
@@ -45,6 +46,8 @@ const streamRules = {
  *   post:
  *     summary: Create a streaming payment
  *     tags: [Streaming]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdempotencyKey'
  *     requestBody:
  *       required: true
  *       content:
@@ -82,7 +85,7 @@ const streamRules = {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/', streamRules.create, validate, async (req, res) => {
+router.post('/', idempotencyMiddleware, streamRules.create, validate, async (req, res) => {
   try {
     const stream = await StreamingService.createStream(req.body);
     res.status(201).json(withNextPaymentAt(stream));
