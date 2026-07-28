@@ -2,6 +2,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { getContacts, createContact, deleteContact } from '../api/stellar.js';
+import { isValidStellarAddress } from '../utils/validateStellarAddress';
+import { useMessages } from '../hooks/useMessages';
 
 /**
  * AddressBook — manage saved recipients synced with the backend.
@@ -10,12 +12,15 @@ import { getContacts, createContact, deleteContact } from '../api/stellar.js';
  */
 export function AddressBook({ onSelect, prefillAddress = '' }) {
   const { t } = useTranslation();
+  const msg = useMessages();
   const [contacts, setContacts] = useState([]);
   const [open, setOpen] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAddress, setNewAddress] = useState(prefillAddress);
+  const [newAddressTouched, setNewAddressTouched] = useState(false);
   const [search, setSearch] = useState('');
   const [synced, setSynced] = useState(false);
+  const [confirmingRemoveId, setConfirmingRemoveId] = useState(null);
 
   useEffect(() => { if (prefillAddress) setNewAddress(prefillAddress); }, [prefillAddress]);
 
@@ -36,8 +41,11 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
     c.address.toLowerCase().includes(search.toLowerCase())
   );
 
+  const newAddressValid = isValidStellarAddress(newAddress);
+
   const add = useCallback(async () => {
     if (!newName.trim() || !newAddress.trim()) return;
+    if (!newAddressValid) return;
     try {
       const contact = await createContact({ name: newName.trim(), address: newAddress.trim() });
       setContacts(prev => [...prev, contact]);
@@ -48,14 +56,21 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
     }
     setNewName('');
     setNewAddress('');
-  }, [newName, newAddress]);
+    setNewAddressTouched(false);
+  }, [newName, newAddress, newAddressValid]);
 
   const remove = useCallback(async (contact) => {
     setContacts(prev => prev.filter(c => c.address !== contact.address));
     if (contact.id) {
-      try { await deleteContact(contact.id); } catch { /* best-effort */ }
+      try { 
+        await deleteContact(contact.id); 
+      } catch (error) {
+        // Rollback on failure
+        setContacts(prev => [...prev, contact]);
+        msg.error(t('addressBook.removeFailed'));
+      }
     }
-  }, []);
+  }, [msg, t]);
 
   return (
     <div>
@@ -94,17 +109,75 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
                   <button type="button" onClick={() => { onSelect?.(c.address); setOpen(false); }} style={smBtn}>
                     {t('addressBook.use')}
                   </button>
-                  <button type="button" onClick={() => remove(c)} style={{ ...smBtn, background: '#ef4444' }} aria-label={t('addressBook.removeContact', { name: c.name })}>
-                    ✕
-                  </button>
+                  {confirmingRemoveId === (c.id ?? c.address) ? (
+                    <>
+                      <button 
+                        type="button" 
+                        onClick={() => { remove(c); setConfirmingRemoveId(null); }} 
+                        style={{ ...smBtn, background: '#ef4444' }}
+                        aria-label={t('addressBook.confirmRemove')}
+                      >
+                        {t('addressBook.confirmRemove')}
+                      </button>
+                      <button 
+                        type="button" 
+                        onClick={() => setConfirmingRemoveId(null)} 
+                        style={{ ...smBtn, background: '#6b7280' }}
+                        aria-label={t('addressBook.cancelRemove')}
+                      >
+                        {t('addressBook.cancelRemove')}
+                      </button>
+                    </>
+                  ) : (
+                    <button 
+                      type="button" 
+                      onClick={() => setConfirmingRemoveId(c.id ?? c.address)} 
+                      style={{ ...smBtn, background: '#ef4444' }}
+                      aria-label={t('addressBook.removeContact', { name: c.name })}
+                    >
+                      ✕
+                    </button>
+                  )}
                 </div>
               ))}
               <div style={{ borderTop: '1px solid #eee', paddingTop: 8, marginTop: 8 }}>
                 <label htmlFor="addr-book-new-name" className="sr-only">{t('addressBook.namePlaceholder')}</label>
-                <input id="addr-book-new-name" aria-label={t('addressBook.namePlaceholder')} placeholder={t('addressBook.nameLabel')} value={newName} onChange={e => setNewName(e.target.value)} style={{ marginBottom: 6 }} />
+                <input 
+                  id="addr-book-new-name" 
+                  aria-label={t('addressBook.namePlaceholder')} 
+                  placeholder={t('addressBook.nameLabel')} 
+                  value={newName} 
+                  onChange={e => setNewName(e.target.value)} 
+                  style={{ marginBottom: 6 }} 
+                />
                 <label htmlFor="addr-book-new-address" className="sr-only">{t('addressBook.addressPlaceholder')}</label>
-                <input id="addr-book-new-address" aria-label={t('addressBook.addressPlaceholder')} placeholder={t('addressBook.addressLabel')} value={newAddress} onChange={e => setNewAddress(e.target.value)} style={{ marginBottom: 6 }} />
-                <button type="button" onClick={add}>{t('addressBook.addContact')}</button>
+                <input 
+                  id="addr-book-new-address" 
+                  aria-label={t('addressBook.addressPlaceholder')} 
+                  placeholder={t('addressBook.addressLabel')} 
+                  value={newAddress} 
+                  onChange={e => { setNewAddress(e.target.value); setNewAddressTouched(true); }} 
+                  onBlur={() => setNewAddressTouched(true)}
+                  style={{ 
+                    marginBottom: 6,
+                    border: newAddressTouched && newAddress ? (newAddressValid ? '1px solid #22c55e' : '1px solid #ef4444') : '1px solid #ccc'
+                  }}
+                  aria-invalid={newAddressTouched && newAddress && !newAddressValid}
+                  aria-describedby={newAddressTouched && newAddress && !newAddressValid ? 'addr-book-address-error' : undefined}
+                />
+                {newAddressTouched && newAddress && !newAddressValid && (
+                  <p id="addr-book-address-error" role="alert" style={{ color: '#ef4444', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
+                    {t('addressBook.invalidAddress')}
+                  </p>
+                )}
+                <button 
+                  type="button" 
+                  onClick={add}
+                  disabled={!newName.trim() || !newAddress.trim() || !newAddressValid}
+                  style={{ opacity: (!newName.trim() || !newAddress.trim() || !newAddressValid) ? 0.5 : 1, cursor: (!newName.trim() || !newAddress.trim() || !newAddressValid) ? 'not-allowed' : 'pointer' }}
+                >
+                  {t('addressBook.addContact')}
+                </button>
               </div>
             </div>
           </motion.div>
