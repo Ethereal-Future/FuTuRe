@@ -1,4 +1,5 @@
 import { getWebhook, getWebhooksForAccount, signPayload } from './store.js';
+import { validateWebhookUrl } from './urlValidator.js';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
@@ -6,6 +7,13 @@ const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // ms, indexed by attempt number (0-based)
 
 async function deliverOnce(webhook, payload) {
+  // Re-check the URL at delivery time in case the resolved address changed
+  // since registration (DNS rebinding into a private/internal range).
+  const validation = await validateWebhookUrl(webhook.url);
+  if (!validation.valid) {
+    throw new Error(`Webhook URL failed validation: ${validation.error}`);
+  }
+
   const signature = signPayload(webhook.signingSecret, payload);
 
   const res = await fetch(webhook.url, {
@@ -37,13 +45,22 @@ async function attemptDelivery(delivery) {
     });
   }
 
-  const payload = { webhookId: webhook.id, event: { type: delivery.eventType, accountId: delivery.accountId, data: delivery.payload }, timestamp: Date.now() };
+  const payload = {
+    webhookId: webhook.id,
+    event: { type: delivery.eventType, accountId: delivery.accountId, data: delivery.payload },
+    timestamp: Date.now(),
+  };
 
   try {
     await deliverOnce(webhook, payload);
     return prisma.webhookDelivery.update({
       where: { id: delivery.id },
-      data: { status: 'DELIVERED', attempt: delivery.attempt + 1, deliveredAt: new Date(), lastError: null },
+      data: {
+        status: 'DELIVERED',
+        attempt: delivery.attempt + 1,
+        deliveredAt: new Date(),
+        lastError: null,
+      },
     });
   } catch (err) {
     const attempt = delivery.attempt + 1;
@@ -55,7 +72,10 @@ async function attemptDelivery(delivery) {
       });
     }
 
-    logger.error({ webhookId: webhook.id, error: err.message }, `Webhook delivery failed after ${attempt} attempts`);
+    logger.error(
+      { webhookId: webhook.id, error: err.message },
+      `Webhook delivery failed after ${attempt} attempts`,
+    );
     return prisma.webhookDelivery.update({
       where: { id: delivery.id },
       data: { status: 'FAILED', attempt, lastError: err.message },
@@ -71,23 +91,34 @@ async function attemptDelivery(delivery) {
 export async function dispatchEvent(accountId, eventType, data) {
   try {
     const hooks = getWebhooksForAccount(accountId).filter(
-      w => w.events.includes('*') || w.events.includes(eventType)
+      (w) => w.events.includes('*') || w.events.includes(eventType),
     );
     if (!hooks.length) return [];
 
-    const deliveries = await Promise.all(hooks.map(w => prisma.webhookDelivery.create({
-      data: {
-        webhookId: w.id,
-        accountId,
-        eventType,
-        payload: data,
-        maxAttempts: MAX_RETRIES,
-      },
-    })));
+    const deliveries = await Promise.all(
+      hooks.map((w) =>
+        prisma.webhookDelivery.create({
+          data: {
+            webhookId: w.id,
+            accountId,
+            eventType,
+            payload: data,
+            maxAttempts: MAX_RETRIES,
+          },
+        }),
+      ),
+    );
 
-    await Promise.all(deliveries.map(d => attemptDelivery(d).catch(err => {
-      logger.error({ webhookId: d.webhookId, error: err.message }, 'Webhook delivery attempt threw');
-    })));
+    await Promise.all(
+      deliveries.map((d) =>
+        attemptDelivery(d).catch((err) => {
+          logger.error(
+            { webhookId: d.webhookId, error: err.message },
+            'Webhook delivery attempt threw',
+          );
+        }),
+      ),
+    );
 
     return deliveries;
   } catch (err) {
