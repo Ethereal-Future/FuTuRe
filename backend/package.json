@@ -56,6 +56,9 @@
     "ws": "^8.20.0",
     "zod": "^3.24.4"
   },
+  "optionalDependencies": {
+    "twilio": "^5.3.3"
+  },
   "devDependencies": {
     "eslint": "^9.28.0",
     "eslint-config-prettier": "^10.1.8",
