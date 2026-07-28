@@ -28,7 +28,7 @@ jobs:
         run: docker build -t future-backend:${{ github.sha }} ./backend
 
       - name: Run Trivy on backend image
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: future-backend:${{ github.sha }}
           format: sarif
@@ -56,7 +56,7 @@ jobs:
         run: docker build -t future-frontend:${{ github.sha }} ./frontend
 
       - name: Run Trivy on frontend image
-        uses: aquasecurity/trivy-action@76071ef0d7ec797419534a183b498b4d6366cf37 # v0.31.0
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: future-frontend:${{ github.sha }}
           format: sarif
