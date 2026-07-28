@@ -63,7 +63,7 @@ export function AutoComplete({ value, onChange, suggestions = [], placeholder, o
                 role="option"
                 aria-selected={i === activeIdx}
                 onMouseDown={() => pick(item)}
-                style={{ ...itemStyle, background: i === activeIdx ? '#e8f0fe' : 'white' }}
+                style={{ ...itemStyle, background: i === activeIdx ? 'var(--card)' : 'var(--surface)' }}
               >
                 {item}
               </li>
@@ -77,10 +77,10 @@ export function AutoComplete({ value, onChange, suggestions = [], placeholder, o
 
 const dropdownStyle = {
   position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
-  background: 'white', border: '1px solid #ddd', borderRadius: 4,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.1)', listStyle: 'none',
+  background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 4,
+  boxShadow: 'var(--shadow)', listStyle: 'none',
   maxHeight: 200, overflowY: 'auto', margin: 0, padding: 0,
 };
 const itemStyle = {
-  padding: '8px 12px', cursor: 'pointer', fontSize: 14,
+  padding: '8px 12px', cursor: 'pointer', fontSize: 14, color: 'var(--text)',
 };

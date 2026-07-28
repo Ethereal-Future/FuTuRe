@@ -50,6 +50,20 @@
     "queued": "Vous êtes hors ligne. Paiement mis en file d'attente.",
     "largeWarning": "⚠️ Veuillez examiner et confirmer l'avertissement de grande transaction ci-dessous."
   },
+  "sendPayment": {
+    "title": "Envoyer un paiement",
+    "recipientLabel": "Adresse du destinataire",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 Scanner",
+    "invalidAddress": "Adresse invalide",
+    "amountLabel": "Montant (XLM)",
+    "sendButton": "Envoyer le paiement",
+    "sending": "Envoi en cours…",
+    "kycRequired": "Les transactions importantes nécessitent une approbation KYC",
+    "sentSuccess": "Paiement envoyé ! Hash : {{hash}}…",
+    "sep7Prefilled": "Détails du paiement pré-remplis. Veuillez vérifier et confirmer.",
+    "sep7InvalidLink": "Lien de paiement invalide : {{error}}"
+  },
   "validation": {
     "invalidAddress": "Format d'adresse Stellar invalide (doit commencer par G et comporter 56 caractères)"
   },

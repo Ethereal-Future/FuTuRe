@@ -50,6 +50,20 @@
     "queued": "You are offline. Payment queued and will sync automatically.",
     "largeWarning": "⚠️ Please review and confirm the large transaction warning below."
   },
+  "sendPayment": {
+    "title": "Send Payment",
+    "recipientLabel": "Recipient Address",
+    "recipientPlaceholder": "G…",
+    "scanButton": "📱 Scan",
+    "invalidAddress": "Invalid address",
+    "amountLabel": "Amount (XLM)",
+    "sendButton": "Send Payment",
+    "sending": "Sending…",
+    "kycRequired": "Large transactions require KYC approval",
+    "sentSuccess": "Payment sent! Hash: {{hash}}…",
+    "sep7Prefilled": "Payment details pre-filled. Please review and confirm.",
+    "sep7InvalidLink": "Invalid payment link: {{error}}"
+  },
   "validation": {
     "invalidAddress": "Invalid Stellar address format (must start with G and be 56 characters)"
   },

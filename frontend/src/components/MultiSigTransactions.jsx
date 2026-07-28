@@ -7,16 +7,16 @@ import { Spinner } from './Spinner';
 import { StatusMessage } from './StatusMessage';
 
 const STATUS_BADGE = {
-  PENDING:   { label: 'Pending', color: '#f59e0b' },
-  SUBMITTED: { label: 'Submitted', color: '#22c55e' },
-  FAILED:    { label: 'Failed', color: '#ef4444' },
-  EXPIRED:   { label: 'Expired', color: '#6b7280' },
+  PENDING:   { label: 'Pending', color: 'var(--warning)' },
+  SUBMITTED: { label: 'Submitted', color: 'var(--success)' },
+  FAILED:    { label: 'Failed', color: 'var(--danger)' },
+  EXPIRED:   { label: 'Expired', color: 'var(--muted)' },
 };
 
 function StatusBadge({ status }) {
-  const badge = STATUS_BADGE[status] ?? { label: status, color: '#6b7280' };
+  const badge = STATUS_BADGE[status] ?? { label: status, color: 'var(--muted)' };
   return (
-    <span style={{ background: badge.color, color: '#fff', borderRadius: 4, padding: '2px 8px', fontSize: '0.75rem', fontWeight: 600 }}>
+    <span style={{ background: badge.color, color: 'var(--on-primary)', borderRadius: 4, padding: '2px 8px', fontSize: '0.75rem', fontWeight: 600 }}>
       {badge.label}
     </span>
   );
@@ -176,7 +176,7 @@ export function MultiSigTransactions({ publicKey }) {
       {error && <StatusMessage type="error" message={error} />}
       {success && <StatusMessage type="success" message={success} />}
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid #e5e7eb' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, borderBottom: '1px solid var(--border)' }}>
         {['setup', 'build', 'sign', 'pending'].map((tab) => (
           <button
             key={tab}
@@ -185,9 +185,9 @@ export function MultiSigTransactions({ publicKey }) {
             style={{
               padding: '8px 12px',
               border: 'none',
-              background: activeTab === tab ? '#2563eb' : 'transparent',
-              color: activeTab === tab ? '#fff' : '#666',
-              borderBottom: activeTab === tab ? '2px solid #2563eb' : 'none',
+              background: activeTab === tab ? 'var(--primary)' : 'transparent',
+              color: activeTab === tab ? 'var(--on-primary)' : 'var(--muted)',
+              borderBottom: activeTab === tab ? '2px solid var(--primary)' : 'none',
               cursor: 'pointer',
               fontWeight: 500,
               fontSize: '0.9rem',
@@ -207,7 +207,7 @@ export function MultiSigTransactions({ publicKey }) {
                 placeholder="S..."
                 value={setupForm.sourceSecret}
                 onChange={(e) => setSetupForm({ ...setupForm, sourceSecret: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
                 autoComplete="off"
               />
             </FormField>
@@ -217,7 +217,7 @@ export function MultiSigTransactions({ publicKey }) {
                 placeholder="GBRPYHIL2CI3..."
                 value={setupForm.signerPublicKey}
                 onChange={(e) => setSetupForm({ ...setupForm, signerPublicKey: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
             <FormField label="Signer Weight" required>
@@ -227,7 +227,7 @@ export function MultiSigTransactions({ publicKey }) {
                 max="255"
                 value={setupForm.signerWeight}
                 onChange={(e) => setSetupForm({ ...setupForm, signerWeight: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
@@ -238,7 +238,7 @@ export function MultiSigTransactions({ publicKey }) {
                   max="255"
                   value={setupForm.lowThreshold}
                   onChange={(e) => setSetupForm({ ...setupForm, lowThreshold: e.target.value })}
-                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                  style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
                 />
               </FormField>
               <FormField label="Medium Threshold" required>
@@ -248,7 +248,7 @@ export function MultiSigTransactions({ publicKey }) {
                   max="255"
                   value={setupForm.medThreshold}
                   onChange={(e) => setSetupForm({ ...setupForm, medThreshold: e.target.value })}
-                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                  style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
                 />
               </FormField>
               <FormField label="High Threshold" required>
@@ -258,11 +258,11 @@ export function MultiSigTransactions({ publicKey }) {
                   max="255"
                   value={setupForm.highThreshold}
                   onChange={(e) => setSetupForm({ ...setupForm, highThreshold: e.target.value })}
-                  style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                  style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
                 />
               </FormField>
             </div>
-            <button type="submit" disabled={loading} style={{ padding: 10, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            <button type="submit" disabled={loading} style={{ padding: 10, background: 'var(--primary)', color: 'var(--on-primary)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
               {loading ? <Spinner /> : 'Create Multi-Sig Account'}
             </button>
           </form>
@@ -276,7 +276,7 @@ export function MultiSigTransactions({ publicKey }) {
                 placeholder="GBRPYHIL2CI3..."
                 value={buildForm.destination}
                 onChange={(e) => setBuildForm({ ...buildForm, destination: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
             <FormField label="Amount (XLM)" required>
@@ -286,32 +286,32 @@ export function MultiSigTransactions({ publicKey }) {
                 min="0"
                 value={buildForm.amount}
                 onChange={(e) => setBuildForm({ ...buildForm, amount: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
             <FormField label="Asset Code">
               <select
                 value={buildForm.assetCode}
                 onChange={(e) => setBuildForm({ ...buildForm, assetCode: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               >
                 <option value="XLM">XLM</option>
                 <option value="USDC">USDC</option>
               </select>
             </FormField>
             {builtTx && (
-              <div style={{ padding: 12, background: '#f0f9ff', border: '1px solid #bfdbfe', borderRadius: 4 }}>
+              <div style={{ padding: 12, background: 'var(--surface)', border: '1px solid var(--info)', borderRadius: 4 }}>
                 <p style={{ fontSize: '0.875rem', margin: '0 0 8px 0' }}><strong>{t('multiSig.transactionIdLabel')}</strong> <code>{builtTx.txId}</code></p>
                 <button
                   type="button"
                   onClick={() => navigator.clipboard.writeText(builtTx.txId)}
-                  style={{ fontSize: '0.75rem', padding: '4px 8px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer' }}
+                  style={{ fontSize: '0.75rem', padding: '4px 8px', background: 'var(--primary)', color: 'var(--on-primary)', border: 'none', borderRadius: 3, cursor: 'pointer' }}
                 >
                   {t('multiSig.copyTxId')}
                 </button>
               </div>
             )}
-            <button type="submit" disabled={loading} style={{ padding: 10, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            <button type="submit" disabled={loading} style={{ padding: 10, background: 'var(--primary)', color: 'var(--on-primary)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
               {loading ? <Spinner /> : 'Build Transaction'}
             </button>
           </form>
@@ -325,7 +325,7 @@ export function MultiSigTransactions({ publicKey }) {
                 placeholder="multisig-..."
                 value={signForm.txId}
                 onChange={(e) => setSignForm({ ...signForm, txId: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
             <FormField label="Your Secret Key" required>
@@ -334,10 +334,10 @@ export function MultiSigTransactions({ publicKey }) {
                 placeholder="S..."
                 value={signForm.signerSecret}
                 onChange={(e) => setSignForm({ ...signForm, signerSecret: e.target.value })}
-                style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4 }}
+                style={{ width: '100%', padding: 8, border: '1px solid var(--border)', borderRadius: 4 }}
               />
             </FormField>
-            <button type="submit" disabled={signLoading} style={{ padding: 10, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
+            <button type="submit" disabled={signLoading} style={{ padding: 10, background: 'var(--primary)', color: 'var(--on-primary)', border: 'none', borderRadius: 4, cursor: 'pointer' }}>
               {signLoading ? <Spinner /> : 'Sign Transaction'}
             </button>
           </form>
@@ -348,24 +348,24 @@ export function MultiSigTransactions({ publicKey }) {
             {pendingLoading ? (
               <Spinner />
             ) : pendingTxs.length === 0 ? (
-              <p style={{ color: '#999' }}>{t('multiSig.noPendingTransactions')}</p>
+              <p style={{ color: 'var(--muted)' }}>{t('multiSig.noPendingTransactions')}</p>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                 {pendingTxs.map((tx) => (
-                  <div key={tx.txId} style={{ padding: 12, border: '1px solid #e5e7eb', borderRadius: 4 }}>
+                  <div key={tx.txId} style={{ padding: 12, border: '1px solid var(--border)', borderRadius: 4 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                       <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>→ {tx.destination.slice(0, 12)}...</span>
                       <StatusBadge status={tx.status} />
                     </div>
                     <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>{t('multiSig.amountLabel')}</strong> {tx.amount} {tx.assetCode}</p>
                     <p style={{ margin: '4px 0', fontSize: '0.875rem' }}><strong>{t('multiSig.signaturesLabel')}</strong> {tx.signatures.length}</p>
-                    <p style={{ margin: '4px 0', fontSize: '0.75rem', color: '#666' }}>{t('multiSig.txIdLabel')} <code>{tx.txId}</code></p>
+                    <p style={{ margin: '4px 0', fontSize: '0.75rem', color: 'var(--muted)' }}>{t('multiSig.txIdLabel')} <code>{tx.txId}</code></p>
                     {tx.status === 'pending' && (
                       <button
                         type="button"
                         onClick={() => handleSubmitTx(tx.txId)}
                         disabled={loading}
-                        style={{ marginTop: 8, padding: '6px 12px', background: '#22c55e', color: '#fff', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: '0.875rem' }}
+                        style={{ marginTop: 8, padding: '6px 12px', background: 'var(--success)', color: 'var(--on-primary)', border: 'none', borderRadius: 3, cursor: 'pointer', fontSize: '0.875rem' }}
                       >
                         {t('multiSig.submitTransaction')}
                       </button>

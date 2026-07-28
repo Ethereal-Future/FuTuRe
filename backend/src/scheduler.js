@@ -4,6 +4,7 @@ import { expireStaleTransactions } from './services/multiSig.js';
 import { startScheduler as startBackupScheduler } from './backup/manager.js';
 import { sendScheduledDigests } from './services/digestGenerator.js';
 import { checkAllUserBalances } from './services/lowBalanceMonitor.js';
+import { processDueWebhookDeliveries } from './webhooks/dispatcher.js';
 
 let intervals = [];
 
@@ -30,6 +31,18 @@ export async function startScheduler() {
     }
   }, 60 * 1000);
   intervals.push(multiSigInterval);
+
+  // Webhook delivery retry worker - check every 10 seconds so pending
+  // retries survive a process restart instead of living in a setTimeout.
+  const webhookDeliveryInterval = setInterval(async () => {
+    try {
+      const count = await processDueWebhookDeliveries();
+      if (count > 0) logger.info('scheduler.webhookDelivery.processed', { count });
+    } catch (err) {
+      logger.error('scheduler.webhookDelivery.failed', { error: err.message });
+    }
+  }, 10 * 1000);
+  intervals.push(webhookDeliveryInterval);
 
   // Backup scheduler
   try {
