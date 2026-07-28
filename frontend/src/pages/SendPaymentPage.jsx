@@ -11,7 +11,6 @@ import { makeVariants, tapScale } from '../utils/animations';
 import { useReducedMotion } from 'framer-motion';
 import { QRScanner } from '../components/QRScanner';
 import { AmountInput } from '../components/AmountInput';
-import { ConfirmSendDialog } from '../components/ConfirmSendDialog';
 import { PaymentConfirmationModal } from '../components/PaymentConfirmationModal';
 import { LargeTransactionWarning } from '../components/LargeTransactionWarning';
 import { Sep7UriHandler } from '../components/Sep7UriHandler';
@@ -25,7 +24,6 @@ export function SendPaymentPage() {
   const dispatch = useAppDispatch();
   const msg = useMessages();
 
-  const [showConfirm, setShowConfirm] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
   const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
   const [kycStatus, setKycStatus] = useState(null);
@@ -157,6 +155,8 @@ export function SendPaymentPage() {
               border: recipientTouched && !recipientValid ? '2px solid #dc2626' : '1px solid #d1d5db',
               borderRadius: 4,
             }}
+            aria-invalid={recipientTouched && !recipientValid}
+            aria-describedby={recipientTouched && !recipientValid ? 'recipient-error' : undefined}
           />
           <button
             type="button"
@@ -166,7 +166,11 @@ export function SendPaymentPage() {
             {t('sendPayment.scanButton')}
           </button>
         </div>
-        {recipientTouched && !recipientValid && <p style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>{t('sendPayment.invalidAddress')}</p>}
+        {recipientTouched && !recipientValid && (
+          <p id="recipient-error" role="alert" style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>
+            {t('sendPayment.invalidAddress')}
+          </p>
+        )}
       </div>
 
       {showScanner && <QRScanner onScan={(data) => { dispatch({ type: A.SET_RECIPIENT, payload: data }); setShowScanner(false); }} />}
@@ -209,18 +213,6 @@ export function SendPaymentPage() {
         amount={amount}
         estimatedFee="0.00001"
         loading={loading === 'send'}
-      />
-
-      <ConfirmSendDialog
-        open={showConfirm}
-        recipient={recipient}
-        amount={amount}
-        asset="XLM"
-        sourceSecret={account?.secretKey}
-        memo={memo}
-        memoType={memoType}
-        onConfirm={() => { setShowConfirm(false); sendPayment(); }}
-        onCancel={() => setShowConfirm(false)}
       />
 
       {showSep7Handler && (
