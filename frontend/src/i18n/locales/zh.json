@@ -149,6 +149,17 @@
   "chartsDashboard": {
     "empty": "No data yet. Create an account and make transactions to see charts."
   },
+  "wsStatus": {
+    "label": "WebSocket 状态：{{status}}",
+    "connected": "已连接",
+    "disconnected": "已断开",
+    "reconnecting": "重新连接中…",
+    "failed": "连接丢失"
+  },
+  "formWizard": {
+    "progressLabel": "第 {{current}} 步，共 {{total}} 步",
+    "stepAnnouncement": "{{title}}，第 {{current}} 步，共 {{total}} 步"
+  },
   "inlineConfirmation": {
     "ariaLabel": "Confirm clear form"
   },

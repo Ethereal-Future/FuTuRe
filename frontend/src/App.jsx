@@ -969,7 +969,7 @@ function App() {
                   animate={{ opacity: [0.6, 1, 0.6] }}
                   transition={{ repeat: Infinity, duration: 2 }}
                   style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: 6 }}
-                  aria-label={`WebSocket status: ${wsStatus}`}
+                  aria-label={t('wsStatus.label', { status: t(`wsStatus.${wsStatus}`, wsStatus) })}
                   role="status"
                 >
                   <span
@@ -986,7 +986,7 @@ function App() {
                     aria-hidden="true"
                     className={wsStatus === 'failed' ? 'ws-status-failed' : ''}
                   >
-                    {wsStatus === 'failed' ? 'Connection lost' : wsStatus}
+                    {t(`wsStatus.${wsStatus}`, wsStatus)}
                   </span>
                 </motion.span>
               </div>

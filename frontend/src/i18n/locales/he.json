@@ -149,6 +149,17 @@
   "chartsDashboard": {
     "empty": "No data yet. Create an account and make transactions to see charts."
   },
+  "wsStatus": {
+    "label": "סטטוס WebSocket: {{status}}",
+    "connected": "מחובר",
+    "disconnected": "מנותק",
+    "reconnecting": "מתחבר מחדש…",
+    "failed": "החיבור אבד"
+  },
+  "formWizard": {
+    "progressLabel": "שלב {{current}} מתוך {{total}}",
+    "stepAnnouncement": "{{title}}, שלב {{current}} מתוך {{total}}"
+  },
   "inlineConfirmation": {
     "ariaLabel": "Confirm clear form"
   },

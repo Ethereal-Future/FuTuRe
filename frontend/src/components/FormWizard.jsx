@@ -35,20 +35,38 @@ export function FormWizard({ steps = [], onComplete }) {
 
   return (
     <div>
-      {/* Progress bar */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 20 }}>
+      {/* Progress indicator — announced to screen readers as a group with step position */}
+      <div
+        role="group"
+        aria-label={t('formWizard.progressLabel', { current: current + 1, total: steps.length })}
+        style={{ display: 'flex', gap: 4, marginBottom: 20 }}
+      >
         {steps.map((s, i) => (
-          <div key={i} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-            <div style={{
-              width: '100%', height: 4, borderRadius: 2,
-              background: i <= current ? 'var(--primary)' : 'var(--border)',
-              transition: 'background 0.3s',
-            }} />
-            <span style={{ fontSize: 11, color: i === current ? 'var(--primary)' : 'var(--muted)', fontWeight: i === current ? 700 : 400 }}>
+          <div
+            key={i}
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
+            aria-current={i === current ? 'step' : undefined}
+          >
+            <div
+              role="presentation"
+              style={{
+                width: '100%', height: 4, borderRadius: 2,
+                background: i <= current ? 'var(--primary)' : 'var(--border)',
+                transition: 'background 0.3s',
+              }}
+            />
+            <span
+              style={{ fontSize: 11, color: i === current ? 'var(--primary)' : 'var(--muted)', fontWeight: i === current ? 700 : 400 }}
+              aria-hidden={i !== current ? 'true' : undefined}
+            >
               {s.title}
             </span>
           </div>
         ))}
+      </div>
+      {/* Visually-hidden live region so step changes are announced */}
+      <div aria-live="polite" aria-atomic="true" className="sr-only">
+        {t('formWizard.stepAnnouncement', { title: step.title, current: current + 1, total: steps.length })}
       </div>
 
       {/* Step content */}
