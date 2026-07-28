@@ -1,7 +1,15 @@
 import express from 'express';
 import { requireAuth } from '../middleware/auth.js';
-import { registerWebhook, listWebhooks, deleteWebhook, rotateWebhookSecret, verifyWebhookSignature, getWebhook } from '../webhooks/store.js';
+import {
+  registerWebhook,
+  listWebhooks,
+  deleteWebhook,
+  rotateWebhookSecret,
+  verifyWebhookSignature,
+  getWebhook,
+} from '../webhooks/store.js';
 import { webhookSignatureMiddleware } from '../webhooks/verifySignature.js';
+import { validateWebhookUrl } from '../webhooks/urlValidator.js';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
@@ -36,18 +44,23 @@ const router = express.Router();
  *       401:
  *         description: Unauthorized
  */
-router.post('/', requireAuth, (req, res) => {
+router.post('/', requireAuth, async (req, res) => {
   const { url, events } = req.body;
-  
+
   if (!url) return res.status(400).json({ error: 'url is required' });
-  
+
+  const validation = await validateWebhookUrl(url);
+  if (!validation.valid) {
+    return res.status(400).json({ error: validation.error });
+  }
+
   try {
     const webhook = registerWebhook({
       url,
       accountId: req.user.sub,
       events: events || ['*'],
     });
-    
+
     logger.info({ webhookId: webhook.id, accountId: req.user.sub }, 'Webhook registered');
     res.status(201).json(webhook);
   } catch (err) {
@@ -104,9 +117,18 @@ router.get('/', requireAuth, (req, res) => {
  */
 router.delete('/:id', requireAuth, (req, res) => {
   try {
-    const deleted = deleteWebhook(req.params.id);
-    if (!deleted) return res.status(404).json({ error: 'Webhook not found' });
-    
+    const webhook = getWebhook(req.params.id);
+    if (!webhook || webhook.accountId !== req.user.sub) {
+      if (webhook) {
+        logger.warn(
+          { webhookId: req.params.id, accountId: req.user.sub, ownerAccountId: webhook.accountId },
+          'Denied cross-account webhook delete attempt',
+        );
+      }
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+
+    deleteWebhook(req.params.id);
     logger.info({ webhookId: req.params.id, accountId: req.user.sub }, 'Webhook deleted');
     res.json({ message: 'Webhook deleted' });
   } catch (err) {
@@ -139,6 +161,17 @@ router.delete('/:id', requireAuth, (req, res) => {
  */
 router.post('/:id/rotate-secret', requireAuth, (req, res) => {
   try {
+    const webhook = getWebhook(req.params.id);
+    if (!webhook || webhook.accountId !== req.user.sub) {
+      if (webhook) {
+        logger.warn(
+          { webhookId: req.params.id, accountId: req.user.sub, ownerAccountId: webhook.accountId },
+          'Denied cross-account webhook secret rotation attempt',
+        );
+      }
+      return res.status(404).json({ error: 'Webhook not found' });
+    }
+
     const result = rotateWebhookSecret(req.params.id);
     logger.info({ webhookId: req.params.id, accountId: req.user.sub }, 'Webhook secret rotated');
     res.json(result);
@@ -251,18 +284,21 @@ router.get('/:id/deliveries', requireAuth, async (req, res) => {
  * Signature is verified via HMAC-SHA256 before any processing occurs.
  */
 router.post('/incoming', webhookSignatureMiddleware, (req, res) => {
-  logger.info({ source: req.headers['x-webhook-source'] ?? 'unknown' }, 'Incoming webhook received');
+  logger.info(
+    { source: req.headers['x-webhook-source'] ?? 'unknown' },
+    'Incoming webhook received',
+  );
   // Dispatch to application logic based on payload type
   res.status(200).json({ received: true });
 });
 
 router.post('/verify', (req, res) => {
   const { webhookId, signature, payload } = req.body;
-  
+
   if (!webhookId || !signature || !payload) {
     return res.status(400).json({ error: 'webhookId, signature, and payload are required' });
   }
-  
+
   const valid = verifyWebhookSignature(webhookId, signature, payload);
   res.json({ valid });
 });
