@@ -15,6 +15,7 @@ const counters = {
   payments_total: 0,
   payments_failed_total: 0,
   accounts_created_total: 0,
+  idempotency_bypass_total: 0,
 };
 
 // ── Business gauges ──────────────────────────────────────────────────────────
@@ -161,6 +162,7 @@ export function toPrometheusText() {
   counter('payments_total', 'Total number of successful payments', counters.payments_total);
   counter('payments_failed_total', 'Total number of failed payments', counters.payments_failed_total);
   counter('accounts_created_total', 'Total number of accounts created', counters.accounts_created_total);
+  counter('idempotency_bypass_total', 'Total requests where idempotency protection was bypassed due to a Redis failure', counters.idempotency_bypass_total);
 
   // Business gauges
   gauge('active_streams', 'Number of currently active payment streams', gauges.active_streams);

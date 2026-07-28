@@ -258,6 +258,14 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
   const port = parseInteger(env.PORT, { envVarName: 'PORT', defaultValue: 3001 });
   assertValidPort(port, { envVarName: 'PORT' });
 
+  const trustProxyHops = parseInteger(env.TRUST_PROXY_HOPS, {
+    envVarName: 'TRUST_PROXY_HOPS',
+    defaultValue: 0,
+  });
+  if (!Number.isInteger(trustProxyHops) || trustProxyHops < 0) {
+    throw new Error('TRUST_PROXY_HOPS must be a non-negative integer');
+  }
+
   const stellarNetwork = parseStellarNetwork(env.STELLAR_NETWORK, {
     appEnv: resolvedAppEnv,
     envVarName: 'STELLAR_NETWORK',
@@ -343,6 +351,7 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
     },
     server: {
       port,
+      trustProxyHops,
     },
     cors: {
       allowedOrigins,
