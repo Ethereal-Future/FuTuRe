@@ -28,6 +28,26 @@ function useExport(title = 'chart') {
   return { ref, exportPng };
 }
 
+/**
+ * DataTable — visually hidden accessible table alternative for chart data.
+ * Visible only to screen readers via sr-only styling.
+ */
+function DataTable({ caption, headers, rows }) {
+  return (
+    <table className="sr-only">
+      <caption>{caption}</caption>
+      <thead>
+        <tr>{headers.map(h => <th key={h} scope="col">{h}</th>)}</tr>
+      </thead>
+      <tbody>
+        {rows.map((row, i) => (
+          <tr key={i}>{row.map((cell, j) => <td key={j}>{cell}</td>)}</tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
 function ChartCard({ title, children, onExport }) {
   return (
     <div style={cardStyle}>
@@ -67,6 +87,11 @@ export function TransactionVolumeChart({ data = [] }) {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      <DataTable
+        caption="Transaction Volume"
+        headers={['Date', 'Sent (XLM)', 'Received (XLM)']}
+        rows={data.map(d => [d.date, d.sent, d.received])}
+      />
     </ChartCard>
   );
 }
@@ -98,6 +123,11 @@ export function BalanceHistoryChart({ data = [] }) {
           </AreaChart>
         </ResponsiveContainer>
       </div>
+      <DataTable
+        caption="Balance History"
+        headers={['Date', 'Balance (XLM)']}
+        rows={data.map(d => [d.date, d.balance])}
+      />
     </ChartCard>
   );
 }
@@ -137,6 +167,11 @@ export function PortfolioPieChart({ data = [] }) {
           </PieChart>
         </ResponsiveContainer>
       </div>
+      <DataTable
+        caption="Portfolio Breakdown"
+        headers={['Asset', 'Balance (XLM)', 'Share (%)']}
+        rows={data.map(d => [d.asset, d.balance, total > 0 ? ((d.balance / total) * 100).toFixed(2) : '0.00'])}
+      />
     </ChartCard>
   );
 }
@@ -164,6 +199,11 @@ export function TransactionFlowChart({ data = [] }) {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      <DataTable
+        caption="Transaction Flow"
+        headers={['Date', 'Inflow (XLM)', 'Outflow (XLM)']}
+        rows={data.map(d => [d.time, d.inflow, d.outflow])}
+      />
     </ChartCard>
   );
 }
