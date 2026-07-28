@@ -22,7 +22,7 @@
     "@stellar/stellar-base": "^12.1.1",
     "@stellar/stellar-sdk": "^12.3.0",
     "@tanstack/react-query": "^5.100.14",
-    "@tanstack/react-virtual": "^3.13.23",
+    "@tanstack/react-virtual": "^3.14.8",
     "axios": "^1.7.2",
     "framer-motion": "^12.38.0",
     "i18next": "^23.11.5",
