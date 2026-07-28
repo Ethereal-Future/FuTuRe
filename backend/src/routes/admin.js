@@ -3,8 +3,19 @@ import prisma from '../db/client.js';
 import { requireAdmin } from '../middleware/adminAuth.js';
 import { logAdminAction } from '../db/adminAuditLog.js';
 import { createPerUserRateLimiter } from '../middleware/rateLimiter.js';
+import { cacheMiddleware } from '../middleware/cache.js';
 
 const router = express.Router();
+
+/**
+ * TTL for the /stats cache entry.
+ * 30 seconds gives a dashboard acceptable freshness without hammering the DB
+ * on every auto-refresh cycle.
+ */
+export const ADMIN_STATS_TTL_SECONDS = 30;
+
+/** Stable cache key — stats are global, not per-user or per-tenant. */
+const STATS_CACHE_KEY = 'admin:stats';
 
 /**
  * Dedicated per-admin rate limiter for KYC state-mutation routes.
@@ -18,27 +29,68 @@ const kycActionLimiter = createPerUserRateLimiter({
   message: 'Too many KYC actions. Please slow down.',
 });
 
-router.get('/stats', requireAdmin, async (req, res) => {
-  try {
-    const [totalUsers, totalTransactions, activeStreams, pendingKYC, openAMLAlerts] = await Promise.all([
-      prisma.user.count({ where: { deletedAt: null } }),
-      prisma.transaction.count({ where: { deletedAt: null } }),
-      prisma.paymentStream.count({ where: { status: 'ACTIVE' } }),
-      prisma.kYCRecord.count({ where: { status: 'PENDING' } }),
-      prisma.aMLAlert.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
-    ]);
+/**
+ * @swagger
+ * /api/v1/admin/stats:
+ *   get:
+ *     summary: Aggregate dashboard stats (cached 30 s)
+ *     tags: [Admin]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Aggregate counts with a generatedAt timestamp
+ *         headers:
+ *           X-Cache:
+ *             schema: { type: string, enum: [HIT, MISS] }
+ *             description: Whether the response was served from cache
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalUsers:       { type: integer }
+ *                 totalTransactions: { type: integer }
+ *                 activeStreams:     { type: integer }
+ *                 pendingKYC:       { type: integer }
+ *                 openAMLAlerts:    { type: integer }
+ *                 generatedAt:
+ *                   type: string
+ *                   format: date-time
+ *                   description: ISO timestamp of when the stats were last computed
+ *       500:
+ *         description: Internal server error
+ */
+router.get(
+  '/stats',
+  requireAdmin,
+  cacheMiddleware(ADMIN_STATS_TTL_SECONDS, () => STATS_CACHE_KEY),
+  async (req, res) => {
+    try {
+      const [totalUsers, totalTransactions, activeStreams, pendingKYC, openAMLAlerts] =
+        await Promise.all([
+          prisma.user.count({ where: { deletedAt: null } }),
+          prisma.transaction.count({ where: { deletedAt: null } }),
+          prisma.paymentStream.count({ where: { status: 'ACTIVE' } }),
+          prisma.kYCRecord.count({ where: { status: 'PENDING' } }),
+          prisma.aMLAlert.count({
+            where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
+          }),
+        ]);
 
-    res.json({
-      totalUsers,
-      totalTransactions,
-      activeStreams,
-      pendingKYC,
-      openAMLAlerts,
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve admin stats' });
-  }
-});
+      res.json({
+        totalUsers,
+        totalTransactions,
+        activeStreams,
+        pendingKYC,
+        openAMLAlerts,
+        generatedAt: new Date().toISOString(),
+      });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to retrieve admin stats' });
+    }
+  },
+);
 
 router.get('/users', requireAdmin, async (req, res) => {
   try {
