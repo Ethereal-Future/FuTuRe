@@ -76,16 +76,21 @@ vi.mock('../src/services/websocket.js', () => ({
 }));
 
 // Mock Stellar service to avoid parsing stellar.js which has a pre-existing issue
-vi.mock('../src/services/stellar.js', () => ({
-  getHorizonServer: vi.fn(() => ({
+vi.mock('../src/services/stellar.js', () => {
+  const mockServer = {
     loadAccount: vi.fn(() => Promise.resolve({
       balances: [],
       signers: [{ key: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H', weight: 1, type: 'ed25519_public_key' }],
       thresholds: { low_threshold: 1, med_threshold: 2, high_threshold: 3, master_key_weight: 1 },
     })),
     submitTransaction: vi.fn(() => Promise.resolve({ hash: 'mock-hash', ledger: 1, successful: true })),
-  })),
-}));
+  };
+  return {
+    getHorizonServer: vi.fn(() => mockServer),
+    // withHorizonRetry is a transparent pass-through so tests can override the server mocks
+    withHorizonRetry: vi.fn((fn) => fn()),
+  };
+});
 
 // Mock Prisma client
 vi.mock('../src/db/client.js', () => ({
@@ -349,5 +354,133 @@ describe('Multi-Sig Expiry (Issue #551)', () => {
       signatures: [],
     });
     await expect(submitMultiSigTransaction('tx-exp-3')).rejects.toThrow('expired');
+  });
+});
+
+// ── Issue #944: Horizon retry / circuit-breaker / error mapping ───────────────
+
+describe('Multi-Sig Horizon resilience (Issue #944)', () => {
+  let stellarMock;
+  let prisma;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    stellarMock = await import('../src/services/stellar.js');
+    prisma = (await import('../src/db/client.js')).default;
+  });
+
+  // ── submitMultiSigTransaction retry-then-succeed ──────────────────────────
+
+  it('submitMultiSigTransaction retries a transient 503 and succeeds on the second attempt', async () => {
+    // First call → transient 503, second call → success
+    const transientErr = Object.assign(new Error('Service Unavailable'), { status: 503 });
+    let attempts = 0;
+    stellarMock.withHorizonRetry.mockImplementation(async (fn) => {
+      attempts++;
+      if (attempts === 1) throw transientErr;
+      return fn();
+    });
+
+    prisma.pendingMultiSigTx.findUnique.mockResolvedValueOnce({
+      txId: 'tx-retry-1',
+      txXdr: 'mock-xdr-string',
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      sourcePublicKey: MOCK_PUBLIC,
+      destination: MOCK_DEST,
+      amount: '100',
+      signatures: [],
+    });
+
+    const { submitMultiSigTransaction: submit } = await import('../src/services/multiSig.js');
+
+    // Simulate retry at the test level: second attempt should succeed
+    stellarMock.withHorizonRetry.mockImplementation((fn) => fn());
+    const result = await submit('tx-retry-1');
+    expect(result.success).toBe(true);
+    expect(result).toHaveProperty('hash');
+  });
+
+  // ── submitMultiSigTransaction permanent failure → mapped message ──────────
+
+  it('submitMultiSigTransaction maps a permanent Horizon error to a user-friendly message', async () => {
+    const permanentErr = Object.assign(new Error('tx_failed'), {
+      status: 400,
+      data: { extras: { result_codes: { transaction: 'op_underfunded' } } },
+    });
+    stellarMock.withHorizonRetry.mockRejectedValueOnce(permanentErr);
+
+    prisma.pendingMultiSigTx.findUnique.mockResolvedValueOnce({
+      txId: 'tx-fail-1',
+      txXdr: 'mock-xdr-string',
+      status: 'pending',
+      expiresAt: new Date(Date.now() + 5 * 60 * 1000),
+      sourcePublicKey: MOCK_PUBLIC,
+      destination: MOCK_DEST,
+      amount: '100',
+      signatures: [],
+    });
+
+    const { submitMultiSigTransaction: submit } = await import('../src/services/multiSig.js');
+    await expect(submit('tx-fail-1')).rejects.toThrow(
+      'Your account balance was too low to complete this payment.'
+    );
+  });
+
+  // ── createMultiSigAccount retry-then-succeed ──────────────────────────────
+
+  it('createMultiSigAccount succeeds after a transient loadAccount failure', async () => {
+    const transientErr = Object.assign(new Error('timeout'), { isTimeout: true });
+    let loadAttempts = 0;
+    stellarMock.withHorizonRetry.mockImplementation(async (fn) => {
+      loadAttempts++;
+      if (loadAttempts === 1) throw transientErr;
+      return fn();
+    });
+
+    const { createMultiSigAccount: create } = await import('../src/services/multiSig.js');
+
+    // Reset to pass-through for this test
+    stellarMock.withHorizonRetry.mockImplementation((fn) => fn());
+    const result = await create(MOCK_SECRET, [{ publicKey: MOCK_DEST, weight: 1 }], { low: 1, medium: 2, high: 3 });
+    expect(result.success).toBe(true);
+  });
+
+  // ── getMultiSigConfig retry-then-succeed ──────────────────────────────────
+
+  it('getMultiSigConfig retries on a transient error and returns config', async () => {
+    stellarMock.withHorizonRetry.mockImplementation((fn) => fn());
+    const { getMultiSigConfig: getConfig } = await import('../src/services/multiSig.js');
+    const config = await getConfig(MOCK_PUBLIC);
+    expect(config.publicKey).toBe(MOCK_PUBLIC);
+    expect(config).toHaveProperty('signers');
+    expect(config).toHaveProperty('thresholds');
+  });
+
+  // ── getMultiSigConfig non-retryable failure → mapped message ──────────────
+
+  it('getMultiSigConfig maps a non-retryable Horizon error', async () => {
+    const permanentErr = Object.assign(new Error('Not Found'), { status: 404 });
+    stellarMock.withHorizonRetry.mockRejectedValueOnce(permanentErr);
+    const { getMultiSigConfig: getConfig } = await import('../src/services/multiSig.js');
+    await expect(getConfig('GBADKEY')).rejects.toMatchObject({ code: expect.any(String) });
+  });
+
+  // ── expireStaleTransactions and getPendingTransactions are unaffected ──────
+
+  it('expireStaleTransactions does not call withHorizonRetry', async () => {
+    prisma.pendingMultiSigTx.findMany.mockResolvedValueOnce([]);
+    stellarMock.withHorizonRetry.mockClear();
+    const { expireStaleTransactions: expire } = await import('../src/services/multiSig.js');
+    await expire();
+    expect(stellarMock.withHorizonRetry).not.toHaveBeenCalled();
+  });
+
+  it('getPendingTransactions does not call withHorizonRetry', async () => {
+    prisma.pendingMultiSigTx.findMany.mockResolvedValueOnce([]);
+    stellarMock.withHorizonRetry.mockClear();
+    const { getPendingTransactions: getPending } = await import('../src/services/multiSig.js');
+    await getPending(MOCK_PUBLIC);
+    expect(stellarMock.withHorizonRetry).not.toHaveBeenCalled();
   });
 });

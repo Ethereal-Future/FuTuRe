@@ -567,11 +567,13 @@ export async function sendPayment(
  * Create a trustline for a non-XLM asset on an account. No-ops if the trustline already exists.
  * @param {string} sourceSecret - Secret key of the account adding the trustline
  * @param {string} assetCode - Asset code to trust (e.g. 'USDC')
+ * @param {string} [assetIssuer] - Optional issuer override; falls back to config/assets.js registry
+ * @param {string|number} [limit] - Optional trust limit; defaults to maximum if omitted
  * @returns {Promise<{hash?: string, assetCode: string, issuer: string, alreadyExists?: boolean}>}
  * @throws {Error} If the asset issuer is unknown or Horizon submission fails
  */
-export async function createTrustline(sourceSecret, assetCode) {
-  const issuer = getIssuer(assetCode);
+export async function createTrustline(sourceSecret, assetCode, assetIssuer, limit) {
+  const issuer = assetIssuer || getIssuer(assetCode);
   if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
 
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
@@ -593,11 +595,14 @@ export async function createTrustline(sourceSecret, assetCode) {
 
   const asset = new StellarSDK.Asset(assetCode, issuer);
 
+  const changeTrustOpts = { asset };
+  if (limit !== undefined && limit !== null) changeTrustOpts.limit = limit.toString();
+
   const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
   })
-    .addOperation(StellarSDK.Operation.changeTrust({ asset }))
+    .addOperation(StellarSDK.Operation.changeTrust(changeTrustOpts))
     .setTimeout(30)
     .build();
 
@@ -1006,6 +1011,79 @@ export async function getTrustlines(publicKey) {
       limit: b.limit,
       authorized: b.is_authorized === true,
     }));
+}
+
+/**
+ * Update the limit on an existing trustline.
+ * @param {string} sourceSecret - Secret key of the account owning the trustline
+ * @param {string} assetCode - Asset code of the trustline to update
+ * @param {string} assetIssuer - Issuer public key of the asset
+ * @param {string|number} newLimit - New trust limit (must be >= current balance)
+ * @returns {Promise<{hash: string, assetCode: string, issuer: string, newLimit: string}>}
+ * @throws {Error} If newLimit is invalid or Horizon submission fails
+ */
+export async function updateTrustlineLimit(sourceSecret, assetCode, assetIssuer, newLimit) {
+  const issuer = assetIssuer || getIssuer(assetCode);
+  if (!issuer) throw new Error(`Unknown asset or missing issuer for ${assetCode}`);
+
+  const limitNum = parseFloat(newLimit);
+  if (isNaN(limitNum) || limitNum < 0) throw new Error('newLimit must be a non-negative number');
+
+  const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  const sourcePublicKey = sourceKeypair.publicKey();
+  const correlationId = randomUUID();
+  logger.info('stellar.updateTrustlineLimit', { publicKey: sourcePublicKey, assetCode, newLimit, correlationId });
+
+  const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
+
+  const asset = new StellarSDK.Asset(assetCode, issuer);
+  const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC,
+  })
+    .addOperation(StellarSDK.Operation.changeTrust({ asset, limit: newLimit.toString() }))
+    .setTimeout(30)
+    .build();
+
+  transaction.sign(sourceKeypair);
+
+  let result;
+  try {
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
+  } catch (err) {
+    logger.error('stellar.updateTrustlineLimit.failed', { publicKey: sourcePublicKey, assetCode, correlationId, error: err.message });
+    throw err;
+  }
+
+  logger.info('stellar.updateTrustlineLimit.success', { publicKey: sourcePublicKey, assetCode, correlationId, hash: result.hash });
+
+  await eventMonitor.publishEvent(sourcePublicKey, {
+    type: 'TrustlineLimitUpdated',
+    data: { assetCode, issuer, newLimit: newLimit.toString(), hash: result.hash },
+    version: 1,
+  });
+
+  return { hash: result.hash, assetCode, issuer, newLimit: newLimit.toString() };
+}
+
+/**
+ * Create trustlines for multiple assets in sequence, collecting per-asset success/failure.
+ * Skips assets that already have an existing trustline (alreadyExists).
+ * @param {string} sourceSecret - Secret key of the account creating trustlines
+ * @param {Array<{code: string, issuer?: string, limit?: string|number}>} assets - Assets to trust
+ * @returns {Promise<Array<{success: boolean, assetCode: string, issuer: string, hash?: string, alreadyExists?: boolean, error?: string}>>}
+ */
+export async function batchCreateTrustlines(sourceSecret, assets) {
+  const results = [];
+  for (const asset of assets) {
+    try {
+      const result = await createTrustline(sourceSecret, asset.code, asset.issuer, asset.limit);
+      results.push({ success: true, assetCode: asset.code, issuer: result.issuer, ...result });
+    } catch (err) {
+      results.push({ success: false, assetCode: asset.code, issuer: asset.issuer ?? null, error: err.message });
+    }
+  }
+  return results;
 }
 
 /**

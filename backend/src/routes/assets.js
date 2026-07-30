@@ -3,9 +3,12 @@ import { param, body } from 'express-validator';
 import { validate, rules } from '../middleware/validate.js';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
 import AssetRegistryService from '../services/assetRegistry.js';
-import TrustlineManagerService from '../services/trustlineManager.js';
 import AssetPortfolioService from '../services/assetPortfolio.js';
 import AssetConverterService from '../services/assetConverter.js';
+import {
+  createTrustline as stellarCreateTrustline,
+  getTrustlines as stellarGetTrustlines,
+} from '../services/stellar.js';
 
 const ASSET_CODE_REGEX = /^[A-Z0-9]{1,12}$/;
 const STELLAR_PUBLIC_KEY_REGEX = /^G[A-Z2-7]{55}$/;
@@ -18,7 +21,10 @@ const networkPassphrase =
   process.env.STELLAR_NETWORK_PASSPHRASE || 'Test SDF Network ; September 2015';
 
 const assetRegistry = new AssetRegistryService(horizonUrl);
-const trustlineManager = new TrustlineManagerService(horizonUrl, networkPassphrase);
+// Thin adapter so AssetPortfolioService (which expects a trustlineManager object) uses stellar.js
+const trustlineManager = {
+  getTrustlines: (publicKey) => stellarGetTrustlines(publicKey),
+};
 const portfolioService = new AssetPortfolioService(assetRegistry, trustlineManager);
 const converterService = new AssetConverterService(horizonUrl, networkPassphrase);
 
@@ -80,7 +86,7 @@ router.get('/', (req, res) => {
 router.get('/trustlines/:publicKey', publicKeyParam('publicKey'), validate, async (req, res) => {
   try {
     const { publicKey } = req.params;
-    const trustlines = await trustlineManager.getTrustlines(publicKey);
+    const trustlines = await stellarGetTrustlines(publicKey);
     res.json(trustlines);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -175,7 +181,7 @@ router.post(
   async (req, res) => {
     try {
       const { sourceSecret, assetCode, assetIssuer, limit } = req.body;
-      const result = await trustlineManager.createTrustline(
+      const result = await stellarCreateTrustline(
         sourceSecret,
         assetCode,
         assetIssuer,
