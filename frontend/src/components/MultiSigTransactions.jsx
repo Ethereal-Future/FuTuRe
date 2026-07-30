@@ -6,18 +6,29 @@ import { FormField } from './FormField';
 import { Spinner } from './Spinner';
 import { StatusMessage } from './StatusMessage';
 
-const STATUS_BADGE = {
-  PENDING:   { label: 'Pending', color: 'var(--warning)' },
-  SUBMITTED: { label: 'Submitted', color: 'var(--success)' },
-  FAILED:    { label: 'Failed', color: 'var(--danger)' },
-  EXPIRED:   { label: 'Expired', color: 'var(--muted)' },
+const STATUS_BADGE_COLOR = {
+  PENDING:   'var(--warning)',
+  SUBMITTED: 'var(--success)',
+  FAILED:    'var(--danger)',
+  EXPIRED:   'var(--muted)',
 };
 
+function getStatusLabel(status, t) {
+  switch (status) {
+    case 'PENDING':   return t('multiSig.status.pending');
+    case 'SUBMITTED': return t('multiSig.status.submitted');
+    case 'FAILED':    return t('multiSig.status.failed');
+    case 'EXPIRED':   return t('multiSig.status.expired');
+    default:          return t('multiSig.status.unknown', { status });
+  }
+}
+
 function StatusBadge({ status }) {
-  const badge = STATUS_BADGE[status] ?? { label: status, color: 'var(--muted)' };
+  const { t } = useTranslation();
+  const color = STATUS_BADGE_COLOR[status] ?? 'var(--muted)';
   return (
-    <span style={{ background: badge.color, color: 'var(--on-primary)', borderRadius: 4, padding: '2px 8px', fontSize: '0.75rem', fontWeight: 600 }}>
-      {badge.label}
+    <span style={{ background: color, color: 'var(--on-primary)', borderRadius: 4, padding: '2px 8px', fontSize: '0.75rem', fontWeight: 600 }}>
+      {getStatusLabel(status, t)}
     </span>
   );
 }

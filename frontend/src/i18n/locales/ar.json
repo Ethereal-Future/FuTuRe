@@ -440,7 +440,14 @@
     "amountLabel": "Amount:",
     "signaturesLabel": "Signatures:",
     "txIdLabel": "txId:",
-    "submitTransaction": "Submit Transaction"
+    "submitTransaction": "Submit Transaction",
+    "status": {
+      "pending": "قيد الانتظار",
+      "submitted": "مُرسَل",
+      "failed": "فشل",
+      "expired": "منتهي الصلاحية",
+      "unknown": "{{status}}"
+    }
   },
   "notificationPermission": {
     "enabled": "✅ Push notifications enabled for incoming payments",
@@ -653,6 +660,12 @@
     "anyoneStrong": "Anyone with this key",
     "anyoneRest": "can access and transfer all your funds",
     "acknowledge": "I Understand the Risks"
+  },
+  "virtualList": {
+    "emptyDefault": "لا توجد عناصر للعرض.",
+    "listLabel": "قائمة، {{count}} عناصر",
+    "transactionListLabel": "قائمة المعاملات، {{count}} معاملة",
+    "noTransactions": "لا توجد معاملات بعد."
   },
   "secretKeyDisplay": {
     "publicKeyLabel": "Public Key (safe to share)",

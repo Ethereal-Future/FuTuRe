@@ -1,5 +1,6 @@
 import { useRef, useState, useCallback, useEffect, useMemo } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useTranslation } from 'react-i18next';
 
 // ─── Shared ───────────────────────────────────────────────────────────────────
 
@@ -45,6 +46,7 @@ function useListPerf(label = 'VirtualList') {
  *   height       – container height in px (default 480)
  *   overscan     – extra rows to render outside viewport (default 5)
  *   emptyState   – JSX shown when items is empty
+ *   ariaLabel    – accessible label for the list (e.g. "Transaction list, 500 items")
  *   showPerf     – show perf overlay (dev only)
  */
 export function VirtualList({
@@ -54,8 +56,10 @@ export function VirtualList({
   height = 480,
   overscan = 5,
   emptyState,
+  ariaLabel,
   showPerf = false,
 }) {
+  const { t } = useTranslation();
   const parentRef = useRef(null);
   const perf = useListPerf('VirtualList');
 
@@ -67,16 +71,26 @@ export function VirtualList({
   });
 
   if (items.length === 0) {
-    return emptyState ?? <div style={emptyStyle}>No items to display.</div>;
+    return emptyState ?? <div style={emptyStyle}>{t('virtualList.emptyDefault')}</div>;
   }
+
+  const listLabel = ariaLabel ?? t('virtualList.listLabel', { count: items.length });
 
   return (
     <div style={{ position: 'relative' }}>
-      <div ref={parentRef} style={{ height, overflowY: 'auto', ...scrollStyle }}>
+      <div
+        ref={parentRef}
+        role="list"
+        aria-label={listLabel}
+        style={{ height, overflowY: 'auto', ...scrollStyle }}
+      >
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map(vRow => (
             <div
               key={vRow.key}
+              role="listitem"
+              aria-setsize={items.length}
+              aria-posinset={vRow.index + 1}
               data-index={vRow.index}
               ref={virtualizer.measureElement}
               style={{
@@ -93,7 +107,7 @@ export function VirtualList({
         </div>
       </div>
       {showPerf && (
-        <div style={perfOverlayStyle}>
+        <div style={perfOverlayStyle} aria-hidden="true">
           renders: {perf.renders} | last: {perf.lastMs.toFixed(1)}ms | visible: {virtualizer.getVirtualItems().length}/{items.length}
         </div>
       )}
@@ -165,8 +179,10 @@ export function InfiniteVirtualList({
   overscan = 5,
   renderItem,
   emptyState,
+  ariaLabel,
   showPerf = false,
 }) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const parentRef = useRef(null);
   const perf = useListPerf('InfiniteVirtualList');
@@ -192,16 +208,26 @@ export function InfiniteVirtualList({
   }, [virtualizer.getVirtualItems(), hasMore, loading, items.length, onLoadMore]);
 
   if (items.length === 0 && !hasMore) {
-    return emptyState ?? <div style={emptyStyle}>No items to display.</div>;
+    return emptyState ?? <div style={emptyStyle}>{t('virtualList.emptyDefault')}</div>;
   }
+
+  const listLabel = ariaLabel ?? t('virtualList.listLabel', { count: items.length });
 
   return (
     <div style={{ position: 'relative' }}>
-      <div ref={parentRef} style={{ height, overflowY: 'auto', ...scrollStyle }}>
+      <div
+        ref={parentRef}
+        role="list"
+        aria-label={listLabel}
+        style={{ height, overflowY: 'auto', ...scrollStyle }}
+      >
         <div style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
           {virtualizer.getVirtualItems().map(vRow => (
             <div
               key={vRow.key}
+              role="listitem"
+              aria-setsize={items.length}
+              aria-posinset={vRow.index + 1}
               data-index={vRow.index}
               ref={virtualizer.measureElement}
               style={{
@@ -218,7 +244,7 @@ export function InfiniteVirtualList({
         </div>
       </div>
       {showPerf && (
-        <div style={perfOverlayStyle}>
+        <div style={perfOverlayStyle} aria-hidden="true">
           renders: {perf.renders} | visible: {virtualizer.getVirtualItems().length}/{count} | {loading ? 'loading…' : 'idle'}
         </div>
       )}
@@ -238,6 +264,8 @@ export function InfiniteVirtualList({
  *   height       – container height (default 480)
  */
 export function TransactionList({ transactions = [], hasMore, onLoadMore, height = 480 }) {
+  const { t } = useTranslation();
+
   const renderItem = useCallback((tx) => (
     <div style={txRowStyle}>
       <span style={{ fontSize: 18 }}>{tx.type === 'received' ? '📥' : '📤'}</span>
@@ -268,7 +296,8 @@ export function TransactionList({ transactions = [], hasMore, onLoadMore, height
       height={height}
       hasMore={hasMore}
       onLoadMore={onLoadMore}
-      emptyState={<div style={emptyStyle}>No transactions yet.</div>}
+      ariaLabel={t('virtualList.transactionListLabel', { count: transactions.length })}
+      emptyState={<div style={emptyStyle}>{t('virtualList.noTransactions')}</div>}
     />
   );
 }
