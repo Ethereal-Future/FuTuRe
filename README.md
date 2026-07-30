@@ -89,13 +89,13 @@ docker compose up --build
 
 ### Service communication
 
-| From | To | Address |
-|---|---|---|
-| backend | postgres | `postgres:5432` |
-| backend | redis | `redis:6379` |
-| frontend (Vite proxy) | backend | `http://backend:3001` |
-| browser | frontend | `http://localhost:3000` |
-| browser | backend | `http://localhost:3001` |
+| From                  | To       | Address                 |
+| --------------------- | -------- | ----------------------- |
+| backend               | postgres | `postgres:5432`         |
+| backend               | redis    | `redis:6379`            |
+| frontend (Vite proxy) | backend  | `http://backend:3001`   |
+| browser               | frontend | `http://localhost:3000` |
+| browser               | backend  | `http://localhost:3001` |
 
 ## Usage
 
@@ -132,13 +132,13 @@ The app calls Friendbot automatically when you click **Create Account** in the U
 
 ### Testnet vs. Mainnet Configuration
 
-| Setting | Testnet | Mainnet |
-|---|---|---|
-| `STELLAR_NETWORK` | `testnet` | `mainnet` |
-| `HORIZON_URL` | `https://horizon-testnet.stellar.org` | `https://horizon.stellar.org` |
-| Network passphrase | `Test SDF Network ; September 2015` | `Public Global Stellar Network ; September 2015` |
-| Friendbot available | ✅ Yes | ❌ No |
-| Real funds | ❌ No | ✅ Yes |
+| Setting             | Testnet                               | Mainnet                                          |
+| ------------------- | ------------------------------------- | ------------------------------------------------ |
+| `STELLAR_NETWORK`   | `testnet`                             | `mainnet`                                        |
+| `HORIZON_URL`       | `https://horizon-testnet.stellar.org` | `https://horizon.stellar.org`                    |
+| Network passphrase  | `Test SDF Network ; September 2015`   | `Public Global Stellar Network ; September 2015` |
+| Friendbot available | ✅ Yes                                | ❌ No                                            |
+| Real funds          | ❌ No                                 | ✅ Yes                                           |
 
 Set `STELLAR_NETWORK=testnet` (the default) in `backend/.env` for local development. Change to `mainnet` only for production deployments.
 
@@ -151,6 +151,10 @@ Set `STELLAR_NETWORK=testnet` (the default) in `backend/.env` for local developm
 - Add transaction history
 - Mobile app development
 
+## Architecture
+
+See [docs/architecture.md](docs/architecture.md) for the full system diagram, component descriptions, payment flow walkthrough, and deployment topology.
+
 ## Guides
 
 - [Security best practices for integrators](docs/guides/security.md) — API key storage, webhook verification, private key management, CSP, replay attacks, front-running
@@ -159,16 +163,17 @@ Set `STELLAR_NETWORK=testnet` (the default) in `backend/.env` for local developm
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, running tests, branch naming, PR process, code style, and commit message conventions.
+
 ## Architecture Decision Records
 
 Key technology choices are documented as ADRs in [`docs/adr/`](docs/adr/0000-index.md):
 
-| ADR | Decision |
-|---|---|
-| [ADR-0001](docs/adr/0001-stellar-blockchain.md) | Stellar as the blockchain layer |
-| [ADR-0002](docs/adr/0002-prisma-orm.md) | Prisma as the ORM |
-| [ADR-0003](docs/adr/0003-caching-strategy.md) | Multi-level caching (in-memory L1 + Redis L2) |
-| [ADR-0004](docs/adr/0004-auth-approach.md) | JWT auth with refresh token rotation |
+| ADR                                             | Decision                                      |
+| ----------------------------------------------- | --------------------------------------------- |
+| [ADR-0001](docs/adr/0001-stellar-blockchain.md) | Stellar as the blockchain layer               |
+| [ADR-0002](docs/adr/0002-prisma-orm.md)         | Prisma as the ORM                             |
+| [ADR-0003](docs/adr/0003-caching-strategy.md)   | Multi-level caching (in-memory L1 + Redis L2) |
+| [ADR-0004](docs/adr/0004-auth-approach.md)      | JWT auth with refresh token rotation          |
 
 ## Resources
 
