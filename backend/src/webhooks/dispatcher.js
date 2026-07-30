@@ -37,7 +37,7 @@ async function deliverOnce(webhook, payload) {
  * maxAttempts is exhausted — the dead-letter state callers can query.
  */
 async function attemptDelivery(delivery) {
-  const webhook = getWebhook(delivery.webhookId);
+  const webhook = await getWebhook(delivery.webhookId);
   if (!webhook || webhook.accountId !== delivery.accountId) {
     return prisma.webhookDelivery.update({
       where: { id: delivery.id },
@@ -90,7 +90,7 @@ async function attemptDelivery(delivery) {
  */
 export async function dispatchEvent(accountId, eventType, data) {
   try {
-    const hooks = getWebhooksForAccount(accountId).filter(
+    const hooks = (await getWebhooksForAccount(accountId)).filter(
       (w) => w.events.includes('*') || w.events.includes(eventType),
     );
     if (!hooks.length) return [];

@@ -11,10 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import express from 'express';
 import request from 'supertest';
 
-let currentUser;
+// Shared in-memory store backing the Prisma mock — reset per test.
+let webhookStore;
 
 async function makeWebhooksApp() {
   vi.resetModules();
+  webhookStore = new Map();
 
   vi.doMock('../src/middleware/auth.js', () => ({
     requireAuth: (req, _res, next) => {
@@ -27,13 +29,69 @@ async function makeWebhooksApp() {
     default: { error: vi.fn(), info: vi.fn(), warn: vi.fn() },
   }));
 
-  vi.doMock('../src/db/client.js', () => ({
-    default: {
-      webhookDelivery: {
-        findMany: vi.fn().mockResolvedValue([]),
-        count: vi.fn().mockResolvedValue(0),
-      },
-    },
+  // Mock the full prisma client: both webhook (used by store.js) and
+  // webhookDelivery (used by the deliveries endpoint).
+  vi.doMock('../src/db/client.js', () => {
+    const webhookMethods = {
+      count: vi.fn(({ where }) => {
+        let n = 0;
+        for (const w of webhookStore.values()) {
+          if (w.accountId === where.accountId && w.deletedAt == null) n++;
+        }
+        return Promise.resolve(n);
+      }),
+
+      create: vi.fn(({ data }) => {
+        const row = {
+          id: `wh-${Math.random().toString(36).slice(2)}`,
+          previousSecrets: [],
+          createdAt: new Date(),
+          lastRotatedAt: new Date(),
+          deletedAt: null,
+          ...data,
+        };
+        webhookStore.set(row.id, row);
+        return Promise.resolve(row);
+      }),
+
+      findFirst: vi.fn(({ where }) => {
+        const row = webhookStore.get(where.id);
+        if (!row || row.deletedAt != null) return Promise.resolve(null);
+        return Promise.resolve(row);
+      }),
+
+      findMany: vi.fn(({ where }) => {
+        const rows = [...webhookStore.values()].filter(
+          (w) => (!where.accountId || w.accountId === where.accountId) && w.deletedAt == null,
+        );
+        return Promise.resolve(rows);
+      }),
+
+      updateMany: vi.fn(({ where, data }) => {
+        const row = webhookStore.get(where.id);
+        if (!row || row.deletedAt != null) return Promise.resolve({ count: 0 });
+        Object.assign(row, data);
+        return Promise.resolve({ count: 1 });
+      }),
+
+      update: vi.fn(({ where, data }) => {
+        const row = webhookStore.get(where.id);
+        if (!row) return Promise.resolve(null);
+        Object.assign(row, data);
+        return Promise.resolve(row);
+      }),
+    };
+
+    const webhookDeliveryMethods = {
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+    };
+
+    return { default: { webhook: webhookMethods, webhookDelivery: webhookDeliveryMethods } };
+  });
+
+  vi.doMock('../src/webhooks/urlValidator.js', () => ({
+    validateWebhookUrl: vi.fn().mockResolvedValue({ valid: true }),
   }));
 
   const { default: webhooksRouter } = await import('../src/routes/webhooks.js');
@@ -43,6 +101,8 @@ async function makeWebhooksApp() {
   app.use('/', webhooksRouter);
   return app;
 }
+
+let currentUser;
 
 describe('Webhook ownership checks (issue #912)', () => {
   const accountA = 'account-a';
