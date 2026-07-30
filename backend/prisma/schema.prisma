@@ -337,6 +337,27 @@ model AdminAuditLog {
   @@index([createdAt])
 }
 
+// Persisted webhook registrations – replaces the in-memory Map in
+// backend/src/webhooks/store.js.  A soft-delete column (deletedAt) is used so
+// that the row remains available for foreign-key joins against WebhookDelivery
+// while being hidden from all normal queries.
+model Webhook {
+  id              String    @id @default(uuid())
+  accountId       String
+  url             String
+  events          String[]
+  signingSecret   String
+  previousSecrets String[]  @default([])
+  createdAt       DateTime  @default(now())
+  lastRotatedAt   DateTime  @default(now())
+  deletedAt       DateTime?
+
+  deliveries WebhookDelivery[]
+
+  @@index([accountId])
+  @@index([accountId, deletedAt])
+}
+
 enum WebhookDeliveryStatus {
   PENDING
   DELIVERED
@@ -349,6 +370,7 @@ enum WebhookDeliveryStatus {
 model WebhookDelivery {
   id            String                @id @default(uuid())
   webhookId     String
+  webhook       Webhook               @relation(fields: [webhookId], references: [id])
   accountId     String
   eventType     String
   payload       Json
