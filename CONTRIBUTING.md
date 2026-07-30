@@ -132,18 +132,18 @@ This section is the complete reference for writing, running, and reasoning about
 
 ### Quick-reference command table
 
-| Suite | Command | When to use |
-|---|---|---|
-| Unit + integration (single run) | `npm run test:coverage` | Before every PR |
-| Unit + integration (watch mode) | `npm run test:watch` | During development |
-| Backend tests only | `npm run test --workspace=backend` | When changing backend code |
-| DB integration tests | `npm run test:db --workspace=backend` | When changing Prisma schema or queries |
-| E2E tests (headless) | `npx playwright test` | Before every PR, from `e2e/` directory |
-| E2E tests (headed — visual) | `npx playwright test --headed` | Debugging a failing E2E test |
-| E2E tests (one browser) | `npx playwright test --project=chromium` | Faster local iteration |
-| Mutation tests | `npm run test:mutation` | When adding new unit tests or utility functions |
-| Property-based tests | `npm run test:property` | Included in `npm run test:coverage` |
-| Contract tests | `npm run test:contracts` | When changing API request/response shapes |
+| Suite                           | Command                                  | When to use                                     |
+| ------------------------------- | ---------------------------------------- | ----------------------------------------------- |
+| Unit + integration (single run) | `npm run test:coverage`                  | Before every PR                                 |
+| Unit + integration (watch mode) | `npm run test:watch`                     | During development                              |
+| Backend tests only              | `npm run test --workspace=backend`       | When changing backend code                      |
+| DB integration tests            | `npm run test:db --workspace=backend`    | When changing Prisma schema or queries          |
+| E2E tests (headless)            | `npx playwright test`                    | Before every PR, from `e2e/` directory          |
+| E2E tests (headed — visual)     | `npx playwright test --headed`           | Debugging a failing E2E test                    |
+| E2E tests (one browser)         | `npx playwright test --project=chromium` | Faster local iteration                          |
+| Mutation tests                  | `npm run test:mutation`                  | When adding new unit tests or utility functions |
+| Property-based tests            | `npm run test:property`                  | Included in `npm run test:coverage`             |
+| Contract tests                  | `npm run test:contracts`                 | When changing API request/response shapes       |
 
 ---
 
@@ -167,12 +167,12 @@ Configuration: `vitest.config.js` (root), `vitest.mutation.config.js` (mutation 
 
 Coverage thresholds (enforced in CI):
 
-| Metric | Threshold |
-|---|---|
-| Lines | 80% |
-| Functions | 80% |
-| Branches | 75% |
-| Statements | 80% |
+| Metric     | Threshold |
+| ---------- | --------- |
+| Lines      | 80%       |
+| Functions  | 80%       |
+| Branches   | 75%       |
+| Statements | 80%       |
 
 #### Playwright — end-to-end tests
 
@@ -193,11 +193,11 @@ Configuration: `e2e/playwright.config.js`.
 
 Use the mutation score as a signal, not a hard constraint:
 
-| Score | Meaning |
-|---|---|
-| ≥ 80 (high) | Acceptable — assertions are meaningful |
-| 60–79 (low) | Flag for improvement before merging |
-| < 50 (break) | CI fails — too many mutations survive |
+| Score        | Meaning                                |
+| ------------ | -------------------------------------- |
+| ≥ 80 (high)  | Acceptable — assertions are meaningful |
+| 60–79 (low)  | Flag for improvement before merging    |
+| < 50 (break) | CI fails — too many mutations survive  |
 
 Mutation testing targets `frontend/src/utils/*.js` and `backend/src/services/*.js`. It does not run on every PR by default (it is slow); it runs in CI on the `test:mutation:ci` pipeline job.
 
@@ -290,11 +290,11 @@ choco install k6
 
 #### File location and naming
 
-| Code being tested | Test file location | Example |
-|---|---|---|
-| `backend/src/auth/tokens.js` | `backend/tests/auth.tokens.test.js` | ✔ existing |
+| Code being tested                      | Test file location                          | Example    |
+| -------------------------------------- | ------------------------------------------- | ---------- |
+| `backend/src/auth/tokens.js`           | `backend/tests/auth.tokens.test.js`         | ✔ existing |
 | `frontend/src/utils/validateAmount.js` | `frontend/src/utils/validateAmount.test.js` | ✔ existing |
-| `frontend/src/components/Button.jsx` | `frontend/src/components/Button.test.jsx` | ✔ existing |
+| `frontend/src/components/Button.jsx`   | `frontend/src/components/Button.test.jsx`   | ✔ existing |
 
 Test files must end in `.test.js`, `.test.jsx`, `.spec.js`, or `.spec.jsx`.
 
@@ -582,11 +582,11 @@ All files
 
 #### Thresholds
 
-| Threshold | Score | Consequence |
-|---|---|---|
-| `high` | 80 | Target — acceptable quality |
-| `low` | 60 | Warning — reviewer should request more tests |
-| `break` | 50 | CI hard-fails — PR cannot merge |
+| Threshold | Score | Consequence                                  |
+| --------- | ----- | -------------------------------------------- |
+| `high`    | 80    | Target — acceptable quality                  |
+| `low`     | 60    | Warning — reviewer should request more tests |
+| `break`   | 50    | CI hard-fails — PR cannot merge              |
 
 #### Improving a low score
 
@@ -604,11 +604,11 @@ it('rejects amount of exactly 0', () => {
 
 ### CI behaviour
 
-| Event | Jobs that run |
-|---|---|
-| Every PR | `test` (Vitest + coverage), `lint`, `tsc --noEmit`, `npm audit --audit-level=high`, `e2e-tests` (Playwright) |
-| Merge to `main` | All PR jobs + `security-pipeline`, `docker-scan`, `performance` |
-| Weekly schedule | `mutation-testing`, `backup-verification`, `dependency-updates` |
+| Event           | Jobs that run                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------ |
+| Every PR        | `test` (Vitest + coverage), `lint`, `tsc --noEmit`, `npm audit --audit-level=high`, `e2e-tests` (Playwright) |
+| Merge to `main` | All PR jobs + `security-pipeline`, `docker-scan`, `performance`                                              |
+| Weekly schedule | `mutation-testing`, `backup-verification`, `dependency-updates`                                              |
 
 #### When a CI job fails
 
@@ -678,6 +678,7 @@ npm run dev:backend
 - [ ] No new high/critical vulnerabilities (`npm audit --audit-level=high`)
 - [ ] Code formatted with `npm run format`
 - [ ] PR description explains the change clearly
+- [ ] If this PR adds, removes, or significantly changes a component, service, or data flow: update `docs/architecture.md` in the same PR
 
 ### First-day onboarding checklist
 
@@ -873,15 +874,15 @@ security advisories.
 
 ### What Renovate manages
 
-| Package set | Behaviour |
-|---|---|
-| Minor + patch npm updates | Grouped into a single PR per week |
-| Security-flagged updates | Separate PR opened immediately, labelled `security` |
-| Major npm updates | Separate PR per package, requires manual review |
-| GitHub Actions | Weekly SHA-pin update PR |
-| Prisma (client + CLI + adapter) | Grouped together to keep versions in sync |
-| `@stellar/stellar-sdk` | Pinned exact version — update manually with care |
-| Lock-file maintenance | Monthly PR to refresh `package-lock.json` |
+| Package set                     | Behaviour                                           |
+| ------------------------------- | --------------------------------------------------- |
+| Minor + patch npm updates       | Grouped into a single PR per week                   |
+| Security-flagged updates        | Separate PR opened immediately, labelled `security` |
+| Major npm updates               | Separate PR per package, requires manual review     |
+| GitHub Actions                  | Weekly SHA-pin update PR                            |
+| Prisma (client + CLI + adapter) | Grouped together to keep versions in sync           |
+| `@stellar/stellar-sdk`          | Pinned exact version — update manually with care    |
+| Lock-file maintenance           | Monthly PR to refresh `package-lock.json`           |
 
 ### Reviewing a Renovate PR
 
