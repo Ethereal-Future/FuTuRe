@@ -386,7 +386,14 @@
     "amountLabel": "Amount:",
     "signaturesLabel": "Signatures:",
     "txIdLabel": "txId:",
-    "submitTransaction": "Submit Transaction"
+    "submitTransaction": "Submit Transaction",
+    "status": {
+      "pending": "待处理",
+      "submitted": "已提交",
+      "failed": "失败",
+      "expired": "已过期",
+      "unknown": "{{status}}"
+    }
   },
   "notificationPermission": {
     "enabled": "✅ Push notifications enabled for incoming payments",
@@ -599,6 +606,12 @@
     "anyoneStrong": "Anyone with this key",
     "anyoneRest": "can access and transfer all your funds",
     "acknowledge": "I Understand the Risks"
+  },
+  "virtualList": {
+    "emptyDefault": "没有可显示的项目。",
+    "listLabel": "列表，{{count}} 项",
+    "transactionListLabel": "交易列表，{{count}} 笔交易",
+    "noTransactions": "暂无交易记录。"
   },
   "secretKeyDisplay": {
     "publicKeyLabel": "Public Key (safe to share)",

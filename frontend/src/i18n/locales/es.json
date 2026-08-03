@@ -386,7 +386,14 @@
     "amountLabel": "Amount:",
     "signaturesLabel": "Signatures:",
     "txIdLabel": "txId:",
-    "submitTransaction": "Submit Transaction"
+    "submitTransaction": "Submit Transaction",
+    "status": {
+      "pending": "Pendiente",
+      "submitted": "Enviado",
+      "failed": "Fallido",
+      "expired": "Expirado",
+      "unknown": "{{status}}"
+    }
   },
   "notificationPermission": {
     "enabled": "✅ Push notifications enabled for incoming payments",
@@ -599,6 +606,12 @@
     "anyoneStrong": "Anyone with this key",
     "anyoneRest": "can access and transfer all your funds",
     "acknowledge": "I Understand the Risks"
+  },
+  "virtualList": {
+    "emptyDefault": "No hay elementos para mostrar.",
+    "listLabel": "Lista, {{count}} elementos",
+    "transactionListLabel": "Lista de transacciones, {{count}} transacciones",
+    "noTransactions": "Aún no hay transacciones."
   },
   "secretKeyDisplay": {
     "publicKeyLabel": "Public Key (safe to share)",
