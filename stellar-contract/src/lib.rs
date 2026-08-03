@@ -32,13 +32,18 @@ pub struct Market {
     pub no_shares: i128,
     pub yes_pool: i128,
     pub no_pool: i128,
+    /// Total asset value (XLM/tokens) deposited into the LP pool.
     pub lp_pool: i128,
+    /// Accumulated trading fees claimable by LPs.
     pub lp_fees: i128,
     pub status: MarketStatus,
     pub outcome: Option<bool>, // true = YES won
     pub dispute_bond: i128,
     pub disputer: Option<Address>,
     pub oracle: Option<Address>,
+    /// Total LP shares outstanding. Tracked separately from `lp_pool`
+    /// so that the share/value ratio can diverge as trading changes pool value.
+    pub total_lp_shares: i128,
 }
 
 #[contracttype]
@@ -131,6 +136,7 @@ impl PredictionMarket {
             dispute_bond: 0,
             disputer: None,
             oracle: Some(oracle),
+            total_lp_shares: 0,
         };
         Self::save_market(&env, id, &market);
         env.storage().instance().set(&MKT_CNT, &(id + 1));
@@ -385,11 +391,24 @@ impl PredictionMarket {
         Self::require_not_paused(&env)?;
         let mut market = Self::load_market(&env, market_id)?;
         Self::require_status(&market, &MarketStatus::Open)?;
-        let lp_shares = if market.lp_pool == 0 { amount } else { amount };
+
+        // Mint LP shares proportional to the provider's share of the pool value.
+        // • First provider (empty pool): shares == amount (1:1 bootstrap).
+        // • Subsequent providers: shares = amount * total_lp_shares / lp_pool,
+        //   so later depositors into a more-valuable pool receive fewer shares
+        //   for the same nominal deposit, correctly diluting their claim.
+        let lp_shares = if market.lp_pool == 0 || market.total_lp_shares == 0 {
+            amount
+        } else {
+            (amount * market.total_lp_shares) / market.lp_pool
+        };
+
         market.lp_pool += amount;
+        market.total_lp_shares += lp_shares;
         market.yes_pool += amount / 2;
         market.no_pool += amount / 2;
         Self::save_market(&env, market_id, &market);
+
         let mut pos = Self::load_position(&env, market_id, &provider);
         pos.lp_shares += lp_shares;
         Self::save_position(&env, market_id, &provider, &pos);
@@ -409,12 +428,19 @@ impl PredictionMarket {
         if pos.lp_shares < lp_shares {
             return Err(Error::InsufficientFunds);
         }
-        let payout = if market.lp_pool > 0 {
-            (lp_shares * market.lp_pool) / market.lp_pool.max(1)
+
+        // Payout = redeemed_shares * current_pool_value / total_shares_outstanding.
+        // This means an LP that deposited when the pool was large and trading has
+        // since shifted yes/no prices will receive a payout reflecting the pool's
+        // current total value — not just their original deposit.
+        let payout = if market.total_lp_shares > 0 {
+            (lp_shares * market.lp_pool) / market.total_lp_shares
         } else {
             lp_shares
         };
-        market.lp_pool -= lp_shares;
+
+        market.lp_pool -= payout;
+        market.total_lp_shares -= lp_shares;
         pos.lp_shares -= lp_shares;
         Self::save_market(&env, market_id, &market);
         Self::save_position(&env, market_id, &provider, &pos);
@@ -433,7 +459,10 @@ impl PredictionMarket {
         if pos.lp_shares == 0 {
             return Err(Error::NothingToRedeem);
         }
-        let total_lp = market.lp_pool.max(1);
+        // Fee share = provider_lp_shares / total_lp_shares_outstanding * accumulated_fees.
+        // Use total_lp_shares (share units) not lp_pool (asset units) as the denominator
+        // so that the fee split is proportional to ownership, not to deposit size.
+        let total_lp = market.total_lp_shares.max(1);
         let fee_share = (pos.lp_shares * market.lp_fees) / total_lp;
         market.lp_fees -= fee_share;
         Self::save_market(&env, market_id, &market);
