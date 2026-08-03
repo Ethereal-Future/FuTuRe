@@ -3,7 +3,9 @@ import { eventMonitor } from '../eventSourcing/index.js';
 import { getConfig } from '../config/env.js';
 import prisma from '../db/client.js';
 import { getIssuer } from '../config/assets.js';
-import { getHorizonServer } from './stellar.js';
+import logger from '../config/logger.js';
+import { getHorizonServer, withHorizonRetry } from './stellar.js';
+import { extractStellarErrorCode, getStellarErrorInfo } from '../utils/stellarErrors.js';
 
 function isTestnet() {
   return getConfig().stellar.network === 'testnet';
@@ -24,7 +26,7 @@ function getNetworkPassphrase() {
  */
 export async function createMultiSigAccount(sourceSecret, signers, thresholds, masterWeight = 1) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
-  const sourceAccount = await getHorizonServer().loadAccount(sourceKeypair.publicKey());
+  const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourceKeypair.publicKey()));
   const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: getNetworkPassphrase(),
@@ -52,7 +54,18 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
 
   const transaction = txBuilder.setTimeout(30).build();
   transaction.sign(sourceKeypair);
-  const result = await getHorizonServer().submitTransaction(transaction);
+  let result;
+  try {
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
+  } catch (err) {
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('multiSig.createMultiSigAccount.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
+  }
 
   await eventMonitor.publishEvent(sourceKeypair.publicKey(), {
     type: 'MultiSigAccountCreated',
@@ -89,7 +102,7 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
  * const { txId, txXdr } = await buildMultiSigTransaction('GSRC...', 'GDST...', '100', 'USDC');
  */
 export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM') {
-  const sourceAccount = await getHorizonServer().loadAccount(sourcePublicKey);
+  const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
 
   const asset =
     assetCode === 'XLM'
@@ -198,7 +211,18 @@ export async function submitMultiSigTransaction(txId) {
   if (pending.expiresAt <= new Date()) throw new Error(`Transaction ${txId} has expired`);
 
   const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, getNetworkPassphrase());
-  const result = await getHorizonServer().submitTransaction(transaction);
+  let result;
+  try {
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
+  } catch (err) {
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('multiSig.submitMultiSigTransaction.failed', { txId, code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
+  }
 
   await prisma.pendingMultiSigTx.update({
     where: { txId },
@@ -261,7 +285,18 @@ export function verifySignatures(txXdr, expectedSigners) {
  * @throws {Error} If the account does not exist on the network
  */
 export async function getMultiSigConfig(publicKey) {
-  const account = await getHorizonServer().loadAccount(publicKey);
+  let account;
+  try {
+    account = await withHorizonRetry(() => getHorizonServer().loadAccount(publicKey));
+  } catch (err) {
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('multiSig.getMultiSigConfig.failed', { publicKey, code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
+  }
 
   const signers = account.signers.map((s) => ({
     publicKey: s.key,
@@ -294,7 +329,18 @@ export async function getMultiSigConfig(publicKey) {
  */
 export async function updateMultiSigConfig(sourceSecret, updates) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
-  const sourceAccount = await getHorizonServer().loadAccount(sourceKeypair.publicKey());
+  let sourceAccount;
+  try {
+    sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourceKeypair.publicKey()));
+  } catch (err) {
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('multiSig.updateMultiSigConfig.loadAccount.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
+  }
 
   const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
@@ -334,7 +380,18 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
 
   const transaction = txBuilder.setTimeout(30).build();
   transaction.sign(sourceKeypair);
-  const result = await getHorizonServer().submitTransaction(transaction);
+  let result;
+  try {
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
+  } catch (err) {
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('multiSig.updateMultiSigConfig.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
+  }
 
   await eventMonitor.publishEvent(sourceKeypair.publicKey(), {
     type: 'MultiSigConfigUpdated',

@@ -1,3 +1,10 @@
+/**
+ * @deprecated This module is deprecated. Use the consolidated functions in
+ * `backend/src/services/stellar.js` instead:
+ *   - getBalancesWithLimits → stellar.getTrustlines(publicKey) + stellar.getHorizonServer().loadAccount()
+ *   - modifyTrustlineLimit  → stellar.updateTrustlineLimit(sourceSecret, assetCode, issuer, newLimit)
+ * This module will be removed in the next major release.
+ */
 import StellarSdk from 'stellar-sdk';
 import { horizonServer, networkPassphrase } from '../config/stellar.js';
 import logger from '../config/logger.js';

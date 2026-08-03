@@ -4,13 +4,8 @@ import { getIssuer } from '../config/assets.js';
 import logger from '../config/logger.js';
 import prisma from '../db/client.js';
 import { eventMonitor } from '../eventSourcing/index.js';
-
-let _server;
-function getServer() {
-  const { horizonUrl } = getConfig().stellar;
-  if (!_server) _server = new StellarSDK.Horizon.Server(horizonUrl);
-  return _server;
-}
+import { getHorizonServer, withHorizonRetry } from './stellar.js';
+import { extractStellarErrorCode, getStellarErrorInfo } from '../utils/stellarErrors.js';
 
 function isTestnet() {
   return getConfig().stellar.network === 'testnet';
@@ -51,9 +46,9 @@ export async function findPaths({ sourceAsset, sourceAmount, destinationAsset, d
   const src = toAsset(sourceAsset.code, sourceAsset.issuer);
   const dst = toAsset(destinationAsset.code, destinationAsset.issuer);
 
-  const result = await getServer()
-    .strictSendPaths(src, sourceAmount.toString(), [dst])
-    .call();
+  const result = await withHorizonRetry(() =>
+    getHorizonServer().strictSendPaths(src, sourceAmount.toString(), [dst]).call()
+  );
 
   const paths = (result.records || []).map(r => ({
     sourceAsset: r.source_asset_type === 'native' ? 'XLM' : r.source_asset_code,
@@ -77,9 +72,9 @@ export async function findPathsStrictReceive({ sourceAsset, destinationAsset, de
   const src = toAsset(sourceAsset.code, sourceAsset.issuer);
   const dst = toAsset(destinationAsset.code, destinationAsset.issuer);
 
-  const result = await getServer()
-    .strictReceivePaths([src], dst, destinationAmount.toString())
-    .call();
+  const result = await withHorizonRetry(() =>
+    getHorizonServer().strictReceivePaths([src], dst, destinationAmount.toString()).call()
+  );
 
   const paths = (result.records || []).map(r => ({
     sourceAsset: r.source_asset_type === 'native' ? 'XLM' : r.source_asset_code,
@@ -125,24 +120,27 @@ export async function sendPathPayment({
   const srcAsset = toAsset(sendAsset.code, sendAsset.issuer);
   const dstAsset = toAsset(destAsset.code, destAsset.issuer);
 
-  // Find best path if not provided
+  // Find best path if not provided — single call reused for both resolvedPath and destMin
   let resolvedPath = path;
+  let bestDestAmount = sendAmount;
+
   if (!resolvedPath.length) {
     const paths = await findPaths({ sourceAsset: sendAsset, sourceAmount: sendAmount, destinationAsset: destAsset });
     if (!paths.length) throw new Error('No path found between assets');
+    bestDestAmount = paths[0].destinationAmount;
     resolvedPath = paths[0].path
       .filter(p => p !== sendAsset.code && p !== destAsset.code)
       .map(code => toAsset(code));
   } else {
     resolvedPath = resolvedPath.map(p => toAsset(p.code || p, p.issuer));
+    // Still need bestDestAmount when an explicit path is provided — do one lookup
+    const paths = await findPaths({ sourceAsset: sendAsset, sourceAmount: sendAmount, destinationAsset: destAsset });
+    if (paths.length) bestDestAmount = paths[0].destinationAmount;
   }
 
-  // Determine min destination amount with slippage
-  const bestPaths = await findPaths({ sourceAsset: sendAsset, sourceAmount: sendAmount, destinationAsset: destAsset });
-  const bestDestAmount = bestPaths[0]?.destinationAmount || sendAmount;
   const destMin = applySlippage(bestDestAmount, slippageBps);
 
-  const account = await getServer().loadAccount(sourcePublicKey);
+  const account = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
 
   const tx = new StellarSDK.TransactionBuilder(account, {
     fee: StellarSDK.BASE_FEE,
@@ -163,10 +161,15 @@ export async function sendPathPayment({
 
   let result;
   try {
-    result = await getServer().submitTransaction(tx);
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(tx));
   } catch (err) {
-    logger.error('pathPayment.send.failed', { source: sourcePublicKey, destination, error: err.message });
-    throw err;
+    const code = extractStellarErrorCode(err);
+    const { userMessage } = getStellarErrorInfo(code);
+    logger.error('pathPayment.send.failed', { source: sourcePublicKey, destination, code, error: err.message });
+    const mapped = new Error(userMessage);
+    mapped.code = code;
+    mapped.original = err;
+    throw mapped;
   }
 
   logger.info('pathPayment.send.success', { hash: result.hash, source: sourcePublicKey, destination });

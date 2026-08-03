@@ -1,3 +1,13 @@
+/**
+ * @deprecated TrustlineManagerService is deprecated. Use the consolidated functions in
+ * `backend/src/services/stellar.js` instead:
+ *   - createTrustline   → stellar.createTrustline(sourceSecret, assetCode, assetIssuer, limit)
+ *   - removeTrustline   → stellar.removeTrustline(sourceSecret, assetCode)
+ *   - getTrustlines     → stellar.getTrustlines(publicKey)
+ *   - updateTrustlineLimit → stellar.updateTrustlineLimit(sourceSecret, assetCode, assetIssuer, newLimit)
+ *   - batchCreateTrustlines → stellar.batchCreateTrustlines(sourceSecret, assets)
+ * This module will be removed in the next major release.
+ */
 import * as StellarSdk from '@stellar/stellar-sdk';
 import logger from '../config/logger.js';
 
@@ -6,6 +16,10 @@ import logger from '../config/logger.js';
  */
 class TrustlineManagerService {
   constructor(horizonUrl, networkPassphrase) {
+    console.warn(
+      '[DEPRECATED] TrustlineManagerService is deprecated and will be removed in the next major release. ' +
+      'Use the consolidated functions in backend/src/services/stellar.js instead.',
+    );
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
     this.networkPassphrase = networkPassphrase;
   }
