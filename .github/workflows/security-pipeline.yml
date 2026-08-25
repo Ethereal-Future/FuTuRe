@@ -112,10 +112,88 @@ jobs:
             frontend/audit-frontend.json
           retention-days: 30
 
+  dast:
+    name: DAST – Dynamic Application Security Testing (OWASP ZAP)
+    # Issue #965 — added OWASP ZAP DAST scanning to catch runtime
+    # vulnerabilities (XSS, auth bypass, etc.) that SAST cannot detect.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: future_test
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install backend dependencies
+        run: npm ci
+        working-directory: backend
+
+      - name: Download OWASP ZAP
+        run: |
+          wget -q https://github.com/zaproxy/zaproxy/releases/download/v2.14.0/ZAP_2.14.0_Linux.tar.gz
+          tar -xzf ZAP_2.14.0_Linux.tar.gz
+          sudo mv ZAP_2.14.0 /opt/zap
+          sudo ln -s /opt/zap/zap.sh /usr/local/bin/zap.sh
+
+      - name: Setup test database
+        run: |
+          npm run prisma:migrate:deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/future_test
+
+      - name: Start application
+        run: |
+          npm run dev &
+          npx wait-on http://localhost:3000 --timeout 60000
+        working-directory: backend
+        env:
+          NODE_ENV: test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/future_test
+          STELLAR_NETWORK: testnet
+          HORIZON_URL: https://horizon-testnet.stellar.org
+
+      - name: Run ZAP DAST scan
+        run: node security/zap-scanner.js
+        env:
+          BASE_URL: http://localhost:3000
+
+      - name: Upload ZAP reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-reports-${{ github.sha }}
+          path: reports/
+          retention-days: 30
+
   security-gate:
     name: Security Gate
     runs-on: ubuntu-latest
-    needs: [secret-scan, sast, dependency-scan]
+    needs: [secret-scan, sast, dependency-scan, dast]
     if: always()
     steps:
       - name: Check security gate
@@ -132,6 +210,10 @@ jobs:
             echo "❌ Dependency scan stage failed"
             exit 1
           fi
+          if [ "${{ needs.dast.result }}" != "success" ]; then
+            echo "❌ DAST stage failed"
+            exit 1
+          fi
           echo "✅ Security gate passed"
 
       - name: Comment PR on security failure
@@ -143,5 +225,5 @@ jobs:
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🔒 **Security gate failed.** Review the `security-report` artifact for SAST findings or dependency vulnerabilities before merging.'
+              body: '🔒 **Security gate failed.** Review the `security-report` artifact for SAST findings, dependency vulnerabilities, or DAST findings before merging.'
             })
