@@ -18,7 +18,11 @@ class RetryMetricsService {
   }
 
   /**
-   * Record a retry attempt
+   * Record a retry attempt, tracked by error type and attempt number, and appended to the recent-retry ring buffer.
+   * @param {object} data - Retry details
+   * @param {string} [data.errorType='UNKNOWN'] - Category of the error that triggered the retry
+   * @param {number} [data.attempt=1] - Attempt number for this retry
+   * @returns {void}
    */
   recordRetry(data) {
     this.metrics.totalRetries++;
@@ -43,28 +47,34 @@ class RetryMetricsService {
   }
 
   /**
-   * Record successful retry
+   * Increment the successful-retry counter.
+   * @param {object} [data] - Unused; accepted for call-site symmetry with {@link recordFailure}
+   * @returns {void}
    */
   recordSuccess(data) {
     this.metrics.successfulRetries++;
   }
 
   /**
-   * Record failed retry
+   * Increment the failed-retry counter.
+   * @param {object} [data] - Unused; accepted for call-site symmetry with {@link recordSuccess}
+   * @returns {void}
    */
   recordFailure(data) {
     this.metrics.failedRetries++;
   }
 
   /**
-   * Record circuit breaker trip
+   * Increment the circuit-breaker-trip counter.
+   * @returns {void}
    */
   recordCircuitBreakerTrip() {
     this.metrics.circuitBreakerTrips++;
   }
 
   /**
-   * Get current metrics
+   * Get a snapshot of all retry metrics, including derived success rate and the last 10 retries.
+   * @returns {object} Current metrics plus `successRate` and `recentRetries`
    */
   getMetrics() {
     return {
@@ -77,7 +87,12 @@ class RetryMetricsService {
   }
 
   /**
-   * Get metrics for a specific time period
+   * Filter the recent-retry ring buffer to a time window.
+   * Note: since only the last `maxRecentRetries` retries are retained, older retries
+   * within the window will not appear once the buffer has rolled past them.
+   * @param {Date} startTime - Inclusive lower bound
+   * @param {Date} endTime - Inclusive upper bound
+   * @returns {{count: number, retries: object[]}} Matching retries and their count
    */
   getMetricsForPeriod(startTime, endTime) {
     const periodRetries = this.recentRetries.filter(r => {
@@ -92,7 +107,8 @@ class RetryMetricsService {
   }
 
   /**
-   * Reset metrics
+   * Reset all metrics and the recent-retry buffer to their initial state.
+   * @returns {void}
    */
   reset() {
     this.metrics = {
@@ -108,7 +124,8 @@ class RetryMetricsService {
   }
 
   /**
-   * Export metrics for monitoring systems
+   * Render current metrics in Prometheus text exposition format.
+   * @returns {string} Prometheus-formatted metrics text
    */
   exportPrometheusMetrics() {
     const lines = [];

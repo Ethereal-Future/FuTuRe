@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { rotateKeypair } from '../src/services/keypairRotation.js';
+import { rotateKeypair, KeypairRotationBlockedError } from '../src/services/keypairRotation.js';
 
 vi.mock('../src/services/stellar.js', () => ({
   createAccount: vi.fn(),
   mergeAccount: vi.fn(),
+  getTrustlines: vi.fn(),
+  getOpenOffers: vi.fn(),
   isTestnet: vi.fn(() => true),
 }));
 
@@ -23,7 +25,7 @@ vi.mock('../src/config/logger.js', () => ({
   default: { info: vi.fn(), error: vi.fn(), warn: vi.fn() },
 }));
 
-import { createAccount, mergeAccount } from '../src/services/stellar.js';
+import { createAccount, mergeAccount, getTrustlines, getOpenOffers } from '../src/services/stellar.js';
 import prisma from '../src/db/client.js';
 import { auditLogger } from '../src/security/index.js';
 import { sendNotification } from '../src/notifications/service.js';
@@ -47,6 +49,8 @@ describe('rotateKeypair', () => {
     vi.clearAllMocks();
     createAccount.mockResolvedValue({ publicKey: NEW_PUBLIC, secretKey: NEW_SECRET });
     mergeAccount.mockResolvedValue({ hash: MERGE_HASH, ledger: 100, successful: true });
+    getTrustlines.mockResolvedValue([]);
+    getOpenOffers.mockResolvedValue([]);
     prisma.$transaction.mockImplementation((fn) => fn(prisma));
     prisma.user = { update: vi.fn().mockResolvedValue({}) };
     auditLogger.logSecurityEvent.mockResolvedValue({});
@@ -144,5 +148,47 @@ describe('rotateKeypair', () => {
     await rotateKeypair({ ...BASE_OPTS, adminEmail: undefined });
 
     expect(sendNotification).not.toHaveBeenCalled();
+  });
+
+  it('checks trustlines and offers before creating a new account', async () => {
+    await rotateKeypair(BASE_OPTS);
+
+    expect(getTrustlines).toHaveBeenCalledWith(OLD_PUBLIC);
+    expect(getOpenOffers).toHaveBeenCalledWith(OLD_PUBLIC);
+  });
+
+  it('fails fast with KeypairRotationBlockedError when a non-zero trustline exists, without creating a new account', async () => {
+    getTrustlines.mockResolvedValue([
+      { assetCode: 'USDC', issuer: 'GISSUER', balance: '10.0000000', limit: '1000', authorized: true },
+    ]);
+
+    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow(KeypairRotationBlockedError);
+    expect(createAccount).not.toHaveBeenCalled();
+    expect(mergeAccount).not.toHaveBeenCalled();
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('fails fast with KeypairRotationBlockedError when an open offer exists, without creating a new account', async () => {
+    getOpenOffers.mockResolvedValue([{ id: '1', selling: {}, buying: {} }]);
+
+    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow(KeypairRotationBlockedError);
+    expect(createAccount).not.toHaveBeenCalled();
+    expect(mergeAccount).not.toHaveBeenCalled();
+  });
+
+  it('ignores a zero-balance trustline and proceeds with rotation', async () => {
+    getTrustlines.mockResolvedValue([
+      { assetCode: 'USDC', issuer: 'GISSUER', balance: '0.0000000', limit: '1000', authorized: true },
+    ]);
+
+    await expect(rotateKeypair(BASE_OPTS)).resolves.toMatchObject({ newPublicKey: NEW_PUBLIC });
+    expect(createAccount).toHaveBeenCalled();
+  });
+
+  it('surfaces the error and does not proceed if the mergeability precheck itself fails', async () => {
+    getTrustlines.mockRejectedValue(new Error('Horizon unreachable'));
+
+    await expect(rotateKeypair(BASE_OPTS)).rejects.toThrow('Failed to verify account is mergeable');
+    expect(createAccount).not.toHaveBeenCalled();
   });
 });

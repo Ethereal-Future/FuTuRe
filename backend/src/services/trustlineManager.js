@@ -15,6 +15,10 @@ import logger from '../config/logger.js';
  * Trustline Manager Service
  */
 class TrustlineManagerService {
+  /**
+   * @param {string} horizonUrl - Horizon server URL to connect to
+   * @param {string} networkPassphrase - Network passphrase for transaction signing
+   */
   constructor(horizonUrl, networkPassphrase) {
     console.warn(
       '[DEPRECATED] TrustlineManagerService is deprecated and will be removed in the next major release. ' +
@@ -25,7 +29,14 @@ class TrustlineManagerService {
   }
 
   /**
-   * Create trustline for an asset
+   * @deprecated Use {@link module:stellar.createTrustline} instead.
+   * Submit a `changeTrust` operation to create a trustline for an asset.
+   * @param {string} sourceSecret - Secret key of the trusting account
+   * @param {string} assetCode - Asset code to trust
+   * @param {string} assetIssuer - Issuer public key of the asset
+   * @param {string|number|null} [limit=null] - Trust limit; omitted for the network default (max)
+   * @returns {Promise<{success: boolean, hash: string, asset: {code: string, issuer: string}, limit: string|number|null}>} Submission result
+   * @throws {Error} If Horizon submission fails
    */
   async createTrustline(sourceSecret, assetCode, assetIssuer, limit = null) {
     try {
@@ -63,7 +74,13 @@ class TrustlineManagerService {
   }
 
   /**
-   * Remove trustline (set limit to 0)
+   * @deprecated Use {@link module:stellar.removeTrustline} instead.
+   * Remove a trustline by setting its limit to 0.
+   * @param {string} sourceSecret - Secret key of the account owning the trustline
+   * @param {string} assetCode - Asset code of the trustline to remove
+   * @param {string} assetIssuer - Issuer public key of the asset
+   * @returns {Promise<{success: boolean, hash: string, asset: {code: string, issuer: string}}>} Submission result
+   * @throws {Error} If the account holds a non-zero balance of the asset, or Horizon submission fails
    */
   async removeTrustline(sourceSecret, assetCode, assetIssuer) {
     try {
@@ -106,7 +123,11 @@ class TrustlineManagerService {
   }
 
   /**
-   * Get all trustlines for an account
+   * @deprecated Use {@link module:stellar.getTrustlines} instead.
+   * List all non-native trustlines held by an account.
+   * @param {string} publicKey - Stellar public key of the account
+   * @returns {Promise<Array<{assetCode: string, assetIssuer: string, balance: string, limit: string, buyingLiabilities: string, sellingLiabilities: string}>>} Trustlines
+   * @throws {Error} If the account cannot be loaded
    */
   async getTrustlines(publicKey) {
     try {
@@ -129,7 +150,11 @@ class TrustlineManagerService {
   }
 
   /**
-   * Check if trustline exists
+   * Check whether an account already has a trustline for an asset.
+   * @param {string} publicKey - Stellar public key of the account
+   * @param {string} assetCode - Asset code to check
+   * @param {string} assetIssuer - Issuer public key of the asset
+   * @returns {Promise<boolean>} True if the trustline exists (false on lookup error too)
    */
   async hasTrustline(publicKey, assetCode, assetIssuer) {
     try {
@@ -144,7 +169,11 @@ class TrustlineManagerService {
   }
 
   /**
-   * Get asset balance
+   * Get an account's balance of a specific asset.
+   * @param {string} publicKey - Stellar public key of the account
+   * @param {string} assetCode - Asset code
+   * @param {string} assetIssuer - Issuer public key of the asset
+   * @returns {Promise<string|null>} Balance as a string, or null if no trustline exists or on error
    */
   async getAssetBalance(publicKey, assetCode, assetIssuer) {
     try {
@@ -160,7 +189,14 @@ class TrustlineManagerService {
   }
 
   /**
-   * Update trustline limit
+   * @deprecated Use {@link module:stellar.updateTrustlineLimit} instead.
+   * Update an existing trustline's limit.
+   * @param {string} sourceSecret - Secret key of the account owning the trustline
+   * @param {string} assetCode - Asset code of the trustline to update
+   * @param {string} assetIssuer - Issuer public key of the asset
+   * @param {string|number} newLimit - New trust limit
+   * @returns {Promise<{success: boolean, hash: string, asset: {code: string, issuer: string}, newLimit: string|number}>} Submission result
+   * @throws {Error} If Horizon submission fails
    */
   async updateTrustlineLimit(sourceSecret, assetCode, assetIssuer, newLimit) {
     try {
@@ -198,7 +234,11 @@ class TrustlineManagerService {
   }
 
   /**
-   * Batch create trustlines
+   * @deprecated Use {@link module:stellar.batchCreateTrustlines} instead.
+   * Create trustlines for multiple assets in sequence, collecting per-asset success/failure.
+   * @param {string} sourceSecret - Secret key of the account creating trustlines
+   * @param {Array<{code: string, issuer: string, limit?: string|number}>} assets - Assets to trust
+   * @returns {Promise<Array<object>>} One result per asset, each either the {@link createTrustline} result plus `asset`, or `{success: false, error, asset}`
    */
   async batchCreateTrustlines(sourceSecret, assets) {
     const results = [];

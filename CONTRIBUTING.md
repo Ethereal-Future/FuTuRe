@@ -735,6 +735,26 @@ Key conventions:
 - Keep functions small and single-purpose; avoid deeply nested callbacks.
 - All new CSS must use logical properties instead of physical directional ones, so layouts mirror correctly for RTL locales (Arabic, Hebrew). Use `margin-inline-start`/`margin-inline-end` instead of `margin-left`/`margin-right`, `padding-inline-start`/`padding-inline-end` instead of `padding-left`/`padding-right`, `text-align: start`/`end` instead of `left`/`right`, `border-inline-start`/`border-inline-end` instead of `border-left`/`border-right`, and `inset-inline-start`/`inset-inline-end` instead of positioning with `left`/`right`.
 
+### JSDoc for Backend Services
+
+Every exported function in `backend/src/services/` must have a JSDoc block with:
+
+- A plain-English summary sentence.
+- A `@param` entry for every parameter (name, type, description).
+- A `@returns` tag describing the type and meaning of the return value.
+- An `@throws` tag for any error conditions the function explicitly raises.
+- An `@example` block for complex or non-obvious functions.
+
+A one-line description is sufficient for simple utility functions — accuracy
+matters more than verbosity. Internal/unexported helpers don't require JSDoc,
+though documenting genuinely non-obvious ones is still encouraged. See any
+file in `backend/src/services/` for the established style.
+
+This isn't yet enforced by ESLint — see
+[issue #815](https://github.com/Ethereal-Future/FuTuRe/issues/815) for the
+tracked follow-up to add `eslint-plugin-jsdoc`'s `jsdoc/require-jsdoc` rule
+scoped to this directory.
+
 ### Image Assets
 
 New raster assets (PNG/JPG/WebP) must be provided at 1x, 2x, and 3x

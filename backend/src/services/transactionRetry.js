@@ -4,6 +4,15 @@ import { EventEmitter } from 'events';
  * Transaction Retry Service with exponential backoff and circuit breaker
  */
 class TransactionRetryService extends EventEmitter {
+  /**
+   * @param {object} [config]
+   * @param {number} [config.maxRetries=5] - Default max retry attempts per transaction
+   * @param {number} [config.initialDelay=1000] - Initial backoff delay in ms
+   * @param {number} [config.maxDelay=30000] - Max backoff delay in ms
+   * @param {number} [config.backoffMultiplier=2] - Exponential backoff multiplier
+   * @param {number} [config.circuitBreakerThreshold=10] - Consecutive failures before opening the circuit
+   * @param {number} [config.circuitBreakerTimeout=60000] - Ms an open circuit stays open before allowing a half-open probe
+   */
   constructor(config = {}) {
     super();
     this.config = {
@@ -25,7 +34,15 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Execute transaction with retry logic
+   * Execute a transaction function with exponential-backoff retry and circuit breaker protection.
+   * Emits `transactionSuccess`, `transactionRetry`, `transactionFailed`, `circuitBreakerOpen`,
+   * `circuitBreakerHalfOpen`, and `circuitBreakerClosed` events as appropriate.
+   * @param {() => Promise<any>} transactionFn - The operation to execute
+   * @param {string} transactionId - Id used to track retry history for this operation
+   * @param {object} [options]
+   * @param {number} [options.maxRetries] - Overrides the service's default max retries for this call
+   * @returns {Promise<any>} The resolved value of `transactionFn`
+   * @throws {Error} If the circuit breaker is open, the error is not retryable, or retries are exhausted
    */
   async executeWithRetry(transactionFn, transactionId, options = {}) {
     const maxRetries = options.maxRetries || this.config.maxRetries;
@@ -107,7 +124,9 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Classify error type for different handling strategies
+   * Classify an error into a coarse category for retry/logging decisions.
+   * @param {Error} error - Error to classify
+   * @returns {'NETWORK'|'INSUFFICIENT_FUNDS'|'SEQUENCE_ERROR'|'RATE_LIMIT'|'VALIDATION'|'UNKNOWN'} Error category
    */
   classifyError(error) {
     const message = error.message?.toLowerCase() || '';
@@ -132,7 +151,10 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Determine if error is retryable
+   * Determine whether an error's classification is retryable.
+   * VALIDATION and INSUFFICIENT_FUNDS errors are never retried.
+   * @param {Error} error - Error to evaluate
+   * @returns {boolean} True if the error should be retried
    */
   shouldRetry(error) {
     const errorType = this.classifyError(error);
@@ -147,7 +169,9 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Calculate delay with exponential backoff
+   * Compute the backoff delay for a retry attempt, with up to 30% random jitter.
+   * @param {number} attempt - 1-indexed attempt number
+   * @returns {number} Delay in ms, capped at `config.maxDelay` before jitter is added
    */
   calculateDelay(attempt) {
     const delay = Math.min(
@@ -161,14 +185,17 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Get retry attempts for a transaction
+   * Get the recorded retry attempt history for a transaction.
+   * @param {string} transactionId - Transaction id
+   * @returns {Array<{attempt: number, timestamp: Date, error: string, errorType: string}>} Attempts recorded so far (empty if none)
    */
   getRetryAttempts(transactionId) {
     return this.retryAttempts.get(transactionId) || [];
   }
 
   /**
-   * Get retry statistics
+   * Get aggregate retry and circuit breaker statistics across all tracked transactions.
+   * @returns {{totalTransactions: number, circuitBreakerState: string, circuitBreakerFailures: number, retryDistribution: Object<number, number>}} Retry stats
    */
   getRetryStats() {
     const stats = {
@@ -187,7 +214,8 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Reset circuit breaker manually
+   * Manually reset the circuit breaker to CLOSED and clear its failure count. Emits `circuitBreakerReset`.
+   * @returns {void}
    */
   resetCircuitBreaker() {
     this.circuitBreaker.failures = 0;
@@ -197,7 +225,9 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Clear retry history
+   * Clear retry history for one transaction, or all transactions if none is given.
+   * @param {string|null} [transactionId=null] - Transaction id to clear, or null to clear all
+   * @returns {void}
    */
   clearRetryHistory(transactionId = null) {
     if (transactionId) {
@@ -208,7 +238,9 @@ class TransactionRetryService extends EventEmitter {
   }
 
   /**
-   * Sleep utility
+   * Resolve after a delay.
+   * @param {number} ms - Delay in milliseconds
+   * @returns {Promise<void>}
    */
   sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));

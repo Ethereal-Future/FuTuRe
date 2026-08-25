@@ -1,14 +1,55 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
-import { createAccount, mergeAccount, getBalance, isTestnet } from './stellar.js';
+import { createAccount, mergeAccount, getBalance, getTrustlines, getOpenOffers, isTestnet } from './stellar.js';
 import { auditLogger } from '../security/index.js';
 import { sendNotification } from '../notifications/service.js';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
 /**
+ * Thrown when a keypair rotation cannot proceed because the source account
+ * still holds state (trustlines/offers) that Stellar's `accountMerge`
+ * operation rejects. No new account is created when this is thrown.
+ */
+export class KeypairRotationBlockedError extends Error {
+  constructor(message, details) {
+    super(message);
+    this.name = 'KeypairRotationBlockedError';
+    this.details = details;
+  }
+}
+
+/**
+ * Verify that an account is eligible for `accountMerge`: it must hold no
+ * non-native trustlines with a non-zero balance and no open DEX offers,
+ * both of which cause Horizon to reject the merge operation outright.
+ *
+ * @param {string} publicKey - Account to check
+ * @throws {KeypairRotationBlockedError} If any blocking trustlines or offers are found
+ */
+async function assertMergeable(publicKey) {
+  const [trustlines, offers] = await Promise.all([
+    getTrustlines(publicKey),
+    getOpenOffers(publicKey),
+  ]);
+
+  const nonZeroTrustlines = trustlines.filter((t) => parseFloat(t.balance) > 0);
+
+  if (nonZeroTrustlines.length > 0 || offers.length > 0) {
+    throw new KeypairRotationBlockedError(
+      'Account cannot be merged: clear non-zero trustlines and open offers before rotating keys',
+      {
+        trustlines: nonZeroTrustlines.map((t) => ({ assetCode: t.assetCode, issuer: t.issuer, balance: t.balance })),
+        openOfferCount: offers.length,
+      },
+    );
+  }
+}
+
+/**
  * Rotate the Stellar keypair for a clinic/user account.
  *
  * Workflow:
+ *   0. Verify the old account holds no trustlines/offers that would block the merge
  *   1. Generate new keypair + fund via Friendbot (testnet) or platform account
  *   2. Transfer full XLM balance from old account to new via accountMerge
  *   3. Update DB record to point to new public key
@@ -18,6 +59,11 @@ import logger from '../config/logger.js';
  * Atomicity guarantee: DB is only updated after the Stellar merge succeeds.
  * If the merge fails, the new (empty) account is abandoned — no DB change occurs.
  *
+ * Precondition: the old account must hold only XLM — no non-zero trustlines
+ * and no open DEX offers — since Stellar's `accountMerge` operation rejects
+ * source accounts with sub-entries. This is checked up front so rotation
+ * fails fast without ever creating a new account.
+ *
  * @param {object} opts
  * @param {string} opts.oldPublicKey   - Current account public key
  * @param {string} opts.oldSecretKey   - Current account secret key (needed to sign merge tx)
@@ -25,9 +71,25 @@ import logger from '../config/logger.js';
  * @param {string} [opts.adminEmail]   - Email to notify on success
  * @param {string} [opts.correlationId]
  * @returns {{ newPublicKey: string, newSecretKey: string, mergeHash: string }}
+ * @throws {KeypairRotationBlockedError} If the old account has non-zero trustlines or open offers
  */
 export async function rotateKeypair({ oldPublicKey, oldSecretKey, userId, adminEmail, correlationId }) {
   logger.info('keypairRotation.start', { oldPublicKey, userId, correlationId });
+
+  // Step 0: Fail fast if the account can't be merged — no new account is
+  // created and no Friendbot call is wasted.
+  try {
+    await assertMergeable(oldPublicKey);
+  } catch (err) {
+    if (err instanceof KeypairRotationBlockedError) {
+      logger.warn('keypairRotation.blocked', { oldPublicKey, userId, correlationId, details: err.details });
+      throw err;
+    }
+    // Lookup failure (e.g. Horizon unreachable) — surface it rather than
+    // silently proceeding to a merge that may also fail.
+    logger.error('keypairRotation.precheck.failed', { oldPublicKey, correlationId, error: err.message });
+    throw new Error(`Failed to verify account is mergeable: ${err.message}`);
+  }
 
   // Step 1: Generate and fund new account
   let newPublicKey, newSecretKey;
