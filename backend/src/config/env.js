@@ -285,6 +285,32 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
       ? maybeDecryptEnvValue(assetIssuerRaw.trim(), encryptionKey, { envVarName: 'ASSET_ISSUER' })
       : undefined;
 
+  const defaultSorobanRpcUrl =
+    stellarNetwork === 'testnet' ? 'https://soroban-testnet.stellar.org' : 'https://mainnet.sorobanrpc.com';
+
+  const sorobanRpcUrl = maybeDecryptEnvValue(env.SOROBAN_RPC_URL ?? defaultSorobanRpcUrl, encryptionKey, {
+    envVarName: 'SOROBAN_RPC_URL',
+  });
+  assertValidUrl(sorobanRpcUrl, { envVarName: 'SOROBAN_RPC_URL' });
+
+  const signingKeyRaw = typeof env.STELLAR_SIGNING_KEY === 'string' ? env.STELLAR_SIGNING_KEY : '';
+  const signingKey = maybeDecryptEnvValue(signingKeyRaw, encryptionKey, {
+    envVarName: 'STELLAR_SIGNING_KEY',
+  }).trim();
+  if (!signingKey && stellarNetwork !== 'testnet') {
+    // Non-fatal: a deployment can still boot, but wallets/anchors that fetch our
+    // stellar.toml will see an empty SIGNING_KEY, which they'll treat as
+    // present-but-invalid rather than "not configured". See issue #954.
+    console.warn(
+      '[config] STELLAR_SIGNING_KEY is not set on a non-testnet network — the published stellar.toml SIGNING_KEY field will be empty.'
+    );
+  }
+
+  const serverBaseUrl = maybeDecryptEnvValue(env.SERVER_BASE_URL ?? 'http://localhost:3001', encryptionKey, {
+    envVarName: 'SERVER_BASE_URL',
+  });
+  assertValidUrl(serverBaseUrl, { envVarName: 'SERVER_BASE_URL' });
+
   const allowedOriginsFromEnv = parseCsv(
     maybeDecryptEnvValue(env.ALLOWED_ORIGINS, encryptionKey, { envVarName: 'ALLOWED_ORIGINS' })
   );
@@ -360,6 +386,9 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
       network: stellarNetwork,
       horizonUrl,
       assetIssuer,
+      sorobanRpcUrl,
+      signingKey,
+      serverBaseUrl,
     },
     security: {
       jwtSecret,

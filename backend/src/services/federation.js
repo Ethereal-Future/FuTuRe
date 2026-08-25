@@ -1,4 +1,6 @@
+import * as StellarSDK from '@stellar/stellar-sdk';
 import prisma from '../db/client.js';
+import { getConfig } from '../config/env.js';
 
 const DEFAULT_FEDERATION_DOMAIN = 'futureremit.app';
 
@@ -69,4 +71,54 @@ export async function claimFederationAddress({ publicKey, localPart }) {
   });
 
   return { federationAddress: setting.federationAddress };
+}
+
+/**
+ * ACCOUNTS in a SEP-1 stellar.toml is meant to list this platform's known
+ * Stellar accounts for wallet discovery. The only account the platform
+ * controls end-to-end today is the fee-sponsoring account used for fee-bump
+ * transactions (see wrapWithFeeBump in services/stellar.js) — if that isn't
+ * configured, there is intentionally nothing else to list here yet.
+ * See issue #954.
+ * @returns {string[]} Public keys to advertise in ACCOUNTS.
+ */
+function getKnownAccounts() {
+  const feeSecret = process.env.PLATFORM_FEE_ACCOUNT_SECRET;
+  if (!feeSecret) return [];
+  try {
+    return [StellarSDK.Keypair.fromSecret(feeSecret).publicKey()];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Build this platform's SEP-1 stellar.toml contents, sourced entirely
+ * through getConfig() rather than raw process.env. Shared by the canonical
+ * /.well-known/stellar.toml route (server.js) and the federation-scoped
+ * /api/v1/stellar/federation/stellar.toml route (routes/stellar/federation.js)
+ * so the two can't drift out of sync. See issue #954.
+ * @returns {string} The stellar.toml document body.
+ */
+export function buildStellarToml() {
+  const { stellar } = getConfig();
+  const baseUrl = stellar.serverBaseUrl;
+  const networkPassphrase =
+    stellar.network === 'mainnet'
+      ? 'Public Global Stellar Network ; September 2015'
+      : 'Test SDF Network ; September 2015';
+
+  const accounts = getKnownAccounts();
+
+  return [
+    `FEDERATION_SERVER="${baseUrl}/api/v1/stellar/federation"`,
+    `SIGNING_KEY="${stellar.signingKey}"`,
+    `NETWORK_PASSPHRASE="${networkPassphrase}"`,
+    `TRANSFER_SERVER="${baseUrl}/api/v1/stellar"`,
+    // Advertises this platform as a SEP-0031 sending anchor. See issue #955.
+    `DIRECT_PAYMENT_SERVER="${baseUrl}/api/v1/stellar/sep31"`,
+    `ACCOUNTS=[${accounts.map((account) => `"${account}"`).join(', ')}]`,
+    `VERSION="2.0.0"`,
+    `# Federation domain: ${getFederationDomain()}`,
+  ].join('\n');
 }

@@ -2,6 +2,8 @@
  * Map Stellar error codes to user-friendly messages and determine if retryable.
  */
 
+import logger from '../config/logger.js';
+
 const STELLAR_ERROR_MAP = {
   // Permanent errors
   'op_underfunded': {
@@ -26,6 +28,26 @@ const STELLAR_ERROR_MAP = {
   },
   'op_self_not_allowed': {
     userMessage: 'You cannot send a payment to yourself.',
+    retryable: false,
+  },
+  'op_low_reserve': {
+    userMessage: 'This operation would drop your account below the minimum required XLM reserve.',
+    retryable: false,
+  },
+  'op_no_issuer': {
+    userMessage: 'The asset issuer for this operation does not exist on the network.',
+    retryable: false,
+  },
+  'op_already_exists': {
+    userMessage: 'A trustline for this asset already exists.',
+    retryable: false,
+  },
+  'op_malformed': {
+    userMessage: 'The operation was malformed. Please check the details and try again.',
+    retryable: false,
+  },
+  'op_immutable_set': {
+    userMessage: 'This account has been permanently locked and can no longer be modified.',
     retryable: false,
   },
   'tx_bad_seq': {
@@ -77,10 +99,15 @@ export function getStellarErrorInfo(errorCode) {
   const info = STELLAR_ERROR_MAP[errorCode];
   if (info) return info;
 
-  // Default to a generic retryable error message
+  // An unmapped code is a genuinely unknown/new result code. Presenting a
+  // deterministic on-chain rejection as retryable just encourages pointless
+  // retries against a failure that will never succeed, so default to
+  // non-retryable and log a warning so new codes get visibility. See #953.
+  logger.warn('stellarErrors.unmappedCode', { errorCode });
   return {
-    userMessage: 'The transaction could not be completed. Please try again.',
-    retryable: true,
+    userMessage:
+      'This transaction could not be completed due to an unrecognized network error. Please contact support if this persists.',
+    retryable: false,
   };
 }
 

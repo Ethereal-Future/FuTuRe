@@ -13,7 +13,6 @@ import logger from './config/logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
 import { connectDB, checkDBHealth, disconnectDB } from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import stellarRoutes from './routes/stellar.js';
 import { startHorizonLatencyMonitor } from './services/stellar.js';
 import stellarRoutes from './routes/stellar/index.js';
 import multiSigRoutes from './routes/multiSig.js';
@@ -45,7 +44,7 @@ import accountsRoutes from './routes/accounts.js';
 import contactsRoutes from './routes/contacts.js';
 import clinicsRoutes from './routes/clinics.js';
 import adminRoutes from './routes/admin.js';
-import { getFederationDomain } from './services/federation.js';
+import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
@@ -62,7 +61,6 @@ import { securityMiddleware } from './middleware/securityHeaders.js';
 import { sanitizeInputs } from './middleware/sanitize.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { csrfTokenMiddleware, validateCSRFMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
-import dotenv from 'dotenv';
 import { validateEncryptionKey } from './db/encryption.js';
 
 dotenv.config();
@@ -187,14 +185,7 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/stellar', stellarRoutes);
 app.get('/.well-known/stellar.toml', (_req, res) => {
-  const baseUrl = process.env.SERVER_BASE_URL || 'http://localhost:3001';
-  res.type('text/plain').send([
-    `FEDERATION_SERVER="${baseUrl}/api/v1/stellar/federation"`,
-    `SIGNING_KEY="${process.env.STELLAR_SIGNING_KEY || ''}"`,
-    `NETWORK_PASSPHRASE="${process.env.STELLAR_NETWORK === 'mainnet' ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015'}"`,
-    `VERSION="2.0.0"`,
-    `# Federation domain: ${getFederationDomain()}`,
-  ].join('\n'));
+  res.type('text/plain').send(buildStellarToml());
 });
 
 // Health routes (not versioned - used by load balancers)
