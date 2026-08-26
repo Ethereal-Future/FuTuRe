@@ -108,7 +108,9 @@ aws secretsmanager put-secret-value \
 
 The RDS master password is managed by AWS (`manage_master_user_password = true`) — no manual step needed.
 
-### 5. Plan and apply
+### 5. Plan and apply (first-time bootstrap only)
+
+Before the CI-driven apply workflow (below) can run, the S3 backend from step 1-2 must exist and this first apply must create the baseline resources:
 
 ```bash
 cd infra
@@ -126,7 +128,18 @@ terraform apply \
 
 ## Deploying a New Version
 
-Update the Docker image tag in your CI/CD pipeline or apply directly:
+### Automated (primary path)
+
+`.github/workflows/terraform-apply.yml` runs on every push to `main` that touches `infra/**`:
+
+1. A `plan` job assumes the `AWS_TERRAFORM_APPLY_ROLE_ARN` role via OIDC, resolves `backend_image`/`frontend_image` from the current release version in `.release-please-manifest.json` (the same images `release.yml` builds and pushes to `ghcr.io`), and runs `terraform plan`. The plan is posted to the job summary and, when the change came in via a PR, as a comment on that PR.
+2. An `apply` job then waits for manual approval on the `production` GitHub Environment before running `terraform apply` against the exact plan from step 1.
+
+**One-time setup required** (repo admin): create a `production` environment under **Settings → Environments** with required reviewers configured, and add the `AWS_TERRAFORM_APPLY_ROLE_ARN` secret (an IAM role scoped to `terraform apply` permissions, separate from the read-only `AWS_TERRAFORM_PLAN_ROLE_ARN` used by `terraform-plan.yml`). Without this, the `apply` job will fail to authenticate or will apply without an approval gate.
+
+### Manual (fallback only)
+
+If the automated workflow is unavailable, apply directly — this bypasses the approval gate and CI-verified image tags, so use it only when necessary and coordinate with the team first:
 
 ```bash
 cd infra
@@ -189,6 +202,8 @@ aws ecs update-service \
 ## CI Workflow
 
 The `.github/workflows/terraform-plan.yml` workflow automatically runs `terraform plan` on every pull request that touches files in `infra/`. The plan output is posted as a PR comment for review before merging.
+
+Once a PR merges to `main`, `.github/workflows/terraform-apply.yml` plans and — after manual approval on the `production` environment — applies the same change. See "Deploying a New Version" above.
 
 ### Static Analysis (tfsec)
 

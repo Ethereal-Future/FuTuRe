@@ -1,0 +1,218 @@
+name: Terraform Apply
+
+# Applies infra/** changes to AWS once they land on main. The `apply` job
+# targets the `production` GitHub Environment, which must be configured with
+# required reviewers (Settings → Environments → production → "Required
+# reviewers") so every apply pauses for manual approval — see
+# infra/README.md's "Deploying a New Version" section for one-time setup.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write # Required for OIDC-based AWS authentication
+
+concurrency:
+  group: terraform-apply-production
+  cancel-in-progress: false
+
+jobs:
+  plan:
+    name: Terraform Plan (pre-apply)
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef7e8 # v3.1.2
+        with:
+          terraform_version: '~1.7'
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Resolve CI-built image tags
+        id: images
+        run: |
+          VERSION=$(node -p "require('../.release-please-manifest.json')['.']")
+          echo "Resolved release version: $VERSION"
+          echo "backend_image=ghcr.io/${{ github.repository }}/backend:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "frontend_image=ghcr.io/${{ github.repository }}/frontend:${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan \
+            -no-color \
+            -input=false \
+            -out=tfplan \
+            -var="backend_image=${{ steps.images.outputs.backend_image }}" \
+            -var="frontend_image=${{ steps.images.outputs.frontend_image }}" \
+            2>&1 | tee /tmp/plan_output.txt
+
+      - name: Upload plan artifact for the apply job
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: infra/tfplan
+          retention-days: 1
+
+      - name: Post plan summary
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const planOutput = fs.readFileSync('/tmp/plan_output.txt', 'utf8');
+            const truncated = planOutput.length > 60000
+              ? planOutput.slice(0, 60000) + '\n\n...(truncated — see full logs)'
+              : planOutput;
+
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              '## ⏸️ Terraform Apply — Pending Approval',
+              '',
+              `This plan is queued for \`infra/\` changes on \`${context.sha.slice(0, 7)}\` and is waiting for a reviewer to approve the \`production\` environment gate before it is applied.`,
+              '',
+              `[View / approve this run](${runUrl})`,
+              '',
+              '<details><summary>Show Plan</summary>',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            await core.summary.addRaw(body).write();
+
+            // Best-effort: also comment on the PR(s) associated with this merge
+            // commit, so the plan is visible where the change was reviewed.
+            try {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+              });
+              for (const pr of prs) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body,
+                });
+              }
+            } catch (err) {
+              core.warning(`Could not comment on associated PR: ${err.message}`);
+            }
+
+  apply:
+    name: Terraform Apply (requires approval)
+    runs-on: ubuntu-latest
+    needs: plan
+    environment: production
+
+    defaults:
+      run:
+        working-directory: infra
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef7e8 # v3.1.2
+        with:
+          terraform_version: '~1.7'
+
+      - name: Configure AWS credentials via OIDC
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_TERRAFORM_APPLY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Terraform Init
+        run: terraform init -input=false
+
+      - name: Download plan artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: infra
+
+      - name: Terraform Apply
+        id: apply
+        run: |
+          terraform apply -input=false -no-color tfplan 2>&1 | tee /tmp/apply_output.txt
+        continue-on-error: true
+
+      - name: Post apply summary
+        if: always()
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            const fs = require('fs');
+            const applyOutput = fs.readFileSync('/tmp/apply_output.txt', 'utf8');
+            const truncated = applyOutput.length > 60000
+              ? applyOutput.slice(0, 60000) + '\n\n...(truncated — see full logs)'
+              : applyOutput;
+
+            const outcome = '${{ steps.apply.outcome }}';
+            const icon = outcome === 'success' ? '✅' : '❌';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              `## ${icon} Terraform Apply — ${outcome}`,
+              '',
+              `Applied \`infra/\` changes for \`${context.sha.slice(0, 7)}\`, approved by a required reviewer on the \`production\` environment.`,
+              '',
+              `[View this run](${runUrl})`,
+              '',
+              '<details><summary>Show Apply Output</summary>',
+              '',
+              '```hcl',
+              truncated,
+              '```',
+              '',
+              '</details>',
+            ].join('\n');
+
+            await core.summary.addRaw(body).write();
+
+            try {
+              const { data: prs } = await github.rest.repos.listPullRequestsAssociatedWithCommit({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                commit_sha: context.sha,
+              });
+              for (const pr of prs) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body,
+                });
+              }
+            } catch (err) {
+              core.warning(`Could not comment on associated PR: ${err.message}`);
+            }
+
+      - name: Fail if apply failed
+        if: steps.apply.outcome == 'failure'
+        run: exit 1
