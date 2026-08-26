@@ -169,7 +169,9 @@ The `.github/workflows/terraform-plan.yml` workflow automatically runs `terrafor
 | `frontend_image`          | _(required)_      | Docker image URI for frontend        |
 | `backend_cpu`             | `512`             | CPU units (512 = 0.5 vCPU)          |
 | `backend_memory`          | `1024`            | Memory in MiB                        |
-| `backend_desired_count`   | `2`               | Number of ECS tasks                  |
+| `backend_desired_count`   | `2`               | Initial number of ECS tasks (autoscaling adjusts this post-deployment) |
+| `backend_min_count`       | `2`               | Minimum number of ECS tasks (autoscaling floor, preserves zero-downtime guarantee) |
+| `backend_max_count`       | `10`              | Maximum number of ECS tasks (autoscaling ceiling) |
 | `db_instance_class`       | `db.t4g.small`    | RDS instance type                    |
 | `db_name`                 | `future`          | Database name                        |
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
