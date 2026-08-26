@@ -113,16 +113,20 @@ The RDS master password is managed by AWS (`manage_master_user_password = true`)
 ```bash
 cd infra
 
-# Review all planned changes
+# Review all planned changes (staging)
 terraform plan \
+  -var-file=environments/staging.tfvars \
   -var="backend_image=ghcr.io/org/future/backend:1.0.0" \
   -var="frontend_image=ghcr.io/org/future/frontend:1.0.0"
 
 # Apply (requires confirmation)
 terraform apply \
+  -var-file=environments/staging.tfvars \
   -var="backend_image=ghcr.io/org/future/backend:1.0.0" \
   -var="frontend_image=ghcr.io/org/future/frontend:1.0.0"
 ```
+
+For production, swap in `-var-file=environments/production.tfvars`.
 
 ## Deploying a New Version
 
@@ -130,8 +134,19 @@ Update the Docker image tag in your CI/CD pipeline or apply directly:
 
 ```bash
 cd infra
-terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3"
+terraform apply -var-file=environments/production.tfvars -var="backend_image=ghcr.io/org/future/backend:1.2.3"
 ```
+
+## Environment Files
+
+Environment-specific sizing lives in `infra/environments/*.tfvars` and is selected with `-var-file` — no secret values are stored in either file; image URIs and credentials are always passed separately via `-var`/CI secrets.
+
+| File                                | Environment  | Key differences                                              |
+|--------------------------------------|--------------|----------------------------------------------------------------|
+| `environments/staging.tfvars`        | `staging`    | Smaller RDS/Redis instance classes, `backend_desired_count = 1` |
+| `environments/production.tfvars`     | `production` | Current production-sized defaults, made explicit               |
+
+`.github/workflows/terraform-plan.yml` selects `environments/production.tfvars` for PRs targeting `main` and `environments/staging.tfvars` otherwise.
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
 
