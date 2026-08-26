@@ -152,6 +152,36 @@ aws ecs update-service \
   --force-new-deployment
 ```
 
+## Log Archival
+
+`aws_cloudwatch_log_group.backend` retains logs for only `retention_in_days = 30`. To satisfy longer-term retention needs (incident postmortems, compliance audits, financial recordkeeping), every log event is streamed via a Kinesis Firehose subscription filter into the `aws_s3_bucket.log_archive` bucket (see `infra/log-archival.tf` and the `log_archive_bucket` output).
+
+The archive bucket has versioning and AES-256 server-side encryption enabled, blocks all public access, and applies a lifecycle policy:
+
+| Age                                             | Storage class      |
+|--------------------------------------------------|--------------------|
+| 0 – `log_archive_glacier_transition_days` (90d)   | S3 Standard         |
+| 90d – `log_archive_deep_archive_transition_days` (365d) | Glacier             |
+| 365d – `log_archive_expiration_days` (2555d/~7y)  | Glacier Deep Archive |
+| > `log_archive_expiration_days`                   | Deleted             |
+
+Objects are written under `ecs-backend-logs/year=YYYY/month=MM/day=DD/` in gzip-compressed batches (Firehose buffers up to 5 MiB or 300 seconds, whichever comes first).
+
+### Retrieving archived logs for an investigation
+
+1. List the day's objects for the incident window:
+   ```bash
+   aws s3 ls s3://$(terraform output -raw log_archive_bucket)/ecs-backend-logs/year=2026/month=08/day=26/
+   ```
+2. Download and decompress:
+   ```bash
+   aws s3 cp s3://$(terraform output -raw log_archive_bucket)/ecs-backend-logs/year=2026/month=08/day=26/ ./logs/ --recursive
+   gunzip ./logs/*.gz
+   ```
+3. Grep/inspect the decompressed JSON log records as needed.
+
+**Follow-up (not required for this issue):** set up AWS Glue/Athena tables over the S3 prefix so archived logs can be queried with SQL instead of downloaded and grepped manually.
+
 ## CI Workflow
 
 The `.github/workflows/terraform-plan.yml` workflow automatically runs `terraform plan` on every pull request that touches files in `infra/`. The plan output is posted as a PR comment for review before merging.
@@ -176,3 +206,6 @@ The `.github/workflows/terraform-plan.yml` workflow automatically runs `terrafor
 | `db_backup_retention_days`| `7`               | RDS automated backup retention       |
 | `redis_node_type`         | `cache.t4g.small` | ElastiCache node type                |
 | `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
+| `log_archive_glacier_transition_days`      | `90`   | Days before archived logs move to Glacier          |
+| `log_archive_deep_archive_transition_days` | `365`  | Days before archived logs move to Glacier Deep Archive |
+| `log_archive_expiration_days`              | `2555` | Days before archived logs are permanently deleted  |
