@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Contributing Guide
+    url: https://github.com/Ethereal-Future/FuTuRe/blob/main/CONTRIBUTING.md
+    about: Read this before opening an issue or PR — setup, testing, branch naming, and the PR review process.
+  - name: Security Vulnerability Disclosure
+    url: https://github.com/Ethereal-Future/FuTuRe/blob/main/docs/guides/security.md#reporting-vulnerabilities
+    about: Please do not open a public issue for security vulnerabilities — report them privately via a GitHub Security Advisory instead.
