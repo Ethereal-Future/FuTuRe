@@ -126,11 +126,22 @@ terraform apply \
 
 ## Deploying a New Version
 
-Update the Docker image tag in your CI/CD pipeline or apply directly:
+### Automated Staging Deployment
+All pushes to the `main` branch automatically trigger a staging deployment via the [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) workflow:
+1. Runs all tests
+2. Builds new Docker images tagged with the Git SHA
+3. Pushes images to GitHub Container Registry (GHCR)
+4. Applies Terraform to update the staging ECS cluster
+5. Syncs frontend build to S3 + invalidates CloudFront
+6. Runs smoke tests against the `/health` endpoint
+7. Automatically rolls back to the previous working version if smoke tests fail
+
+### Manual Deployment (Production/Emergency Only)
+For production deployments or emergency hotfixes, you can deploy manually:
 
 ```bash
 cd infra
-terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3"
+terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
 ```
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
@@ -141,16 +152,21 @@ ECS performs a rolling deployment with zero downtime when `deployment_minimum_he
 
 All runtime secrets (JWT, encryption keys, database credentials) are stored exclusively in AWS Secrets Manager and injected into ECS containers at task startup via the `secrets` container definition field. IAM policies restrict access to only the ECS task execution role.
 
-To rotate a secret:
+### Automatic Rotation
+All application secrets (JWT signing secret, stream encryption key, backup encryption key) are configured for **automatic rotation every 90 days** via AWS Secrets Manager and a dedicated rotation Lambda function. The rotation process:
+1. Generates a new cryptographically secure 32-byte hex secret
+2. Validates the new secret is accessible
+3. Promotes the new secret to be the current active version
+4. Automatically triggers a force-new-deployment of the backend ECS service to pick up the new secret
 
+No manual intervention is required for regular rotation. The rotation Lambda handles the entire workflow with zero downtime, leveraging ECS rolling deployments.
+
+### Manual Rotation (Emergency Only)
+To manually rotate a secret (for emergency cases only):
 ```bash
 aws secretsmanager rotate-secret --secret-id future-production/jwt-secret
-# Then force a new ECS deployment to pick up the new value:
-aws ecs update-service \
-  --cluster future-production-cluster \
-  --service future-production-backend \
-  --force-new-deployment
 ```
+The rotation Lambda will automatically trigger the required ECS deployment to pick up the new value.
 
 ## CI Workflow
 

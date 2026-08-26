@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write # Needed to push Docker images to GHCR
+  id-token: write # Required for OIDC-based AWS authentication
+
 jobs:
   test:
     name: Run Tests
@@ -56,30 +61,99 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
 
-      # Replace the steps below with your actual deployment mechanism
-      # (e.g. AWS ECS, Fly.io, Render, SSH deploy, kubectl apply, etc.)
-      - name: Deploy backend
-        run: |
-          echo "Deploy backend to staging"
-          # Example: aws ecs update-service --cluster staging --service backend --force-new-deployment
-        env:
-          APP_ENV: staging
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.STAGING_JWT_SECRET }}
-          STREAM_SECRET_ENCRYPTION_KEY: ${{ secrets.STAGING_STREAM_SECRET_ENCRYPTION_KEY }}
-          ALLOWED_ORIGINS: ${{ vars.STAGING_ALLOWED_ORIGINS }}
-          STELLAR_NETWORK: testnet
-          HORIZON_URL: https://horizon-testnet.stellar.org
+      # Configure AWS credentials for deployment
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@e3dd6a429d7300a6a4c196c26e071d42e0343502 # v4.0.2
+        with:
+          role-to-assume: ${{ secrets.AWS_STAGING_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
 
-      - name: Deploy frontend
-        run: |
-          echo "Deploy frontend build artifacts to staging"
-          # Example: aws s3 sync frontend/dist s3://staging-bucket --delete
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@9780b0c44a53751a52a4342f1561add10cb82ace # v3.3.1
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Smoke test
+      - name: Build and push backend Docker image
         run: |
-          echo "Running smoke tests against staging"
-          # Example: curl -f ${{ vars.STAGING_API_URL }}/health
+          docker build ./backend -t ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}/backend:${{ github.sha }}
+        working-directory: .
+
+      - name: Build and push frontend Docker image
+        run: |
+          docker build ./frontend -t ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+          docker push ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
+        working-directory: .
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269ef7e8 # v3.1.2
+        with:
+          terraform_version: '~1.7'
+
+      - name: Terraform Init (staging state)
+        id: init
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=future-terraform-state-staging" \
+            -backend-config="key=staging/terraform.tfstate" \
+            -backend-config="region=us-east-1" \
+            -backend-config="dynamodb_table=future-terraform-locks-staging"
+        working-directory: infra
+
+      - name: Save current ECS task definition revision (for rollback)
+        id: save_current_revision
+        run: |
+          CURRENT_REVISION=$(aws ecs describe-services --cluster future-staging-cluster --services future-staging-backend --query 'services[0].taskDefinition' --output text)
+          echo "CURRENT_TASK_DEFINITION=$CURRENT_REVISION" >> $GITHUB_ENV
+          echo "Current task definition before deployment: $CURRENT_REVISION"
+        working-directory: infra
+
+      - name: Terraform Apply (staging)
+        id: apply
+        run: |
+          terraform apply -auto-approve -input=false \
+            -var="environment=staging" \
+            -var="backend_image=ghcr.io/${{ github.repository }}/backend:${{ github.sha }}" \
+            -var="frontend_image=ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}"
+        working-directory: infra
+
+      - name: Deploy frontend to S3
+        run: |
+          aws s3 sync frontend/dist s3://${{ vars.STAGING_FRONTEND_BUCKET }} --delete
+          # Invalidate CloudFront cache to pick up new frontend
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.STAGING_CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"
+
+      - name: Smoke test (wait for deployment to stabilize)
+        id: smoke_test
+        run: |
+          ALB_DNS=$(terraform output -raw alb_dns_name)
+          echo "Waiting for ALB $ALB_DNS to become available..."
+          for i in {1..30}; do
+            if curl -f -s "https://$ALB_DNS/health" | grep -q "ok"; then
+              echo "✅ Smoke test passed! Health endpoint returned 200 OK"
+              exit 0
+            fi
+            echo "Attempt $i/30 failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "❌ Smoke test failed after 30 attempts"
+          exit 1
+        working-directory: infra
+        continue-on-error: true
+
+      - name: Rollback to previous version if smoke test fails
+        if: steps.smoke_test.outcome == 'failure'
+        run: |
+          echo "⚠️  Smoke test failed, rolling back to previous task definition: ${{ env.CURRENT_TASK_DEFINITION }}"
+          aws ecs update-service --cluster future-staging-cluster --service future-staging-backend --task-definition ${{ env.CURRENT_TASK_DEFINITION }} --force-new-deployment
+          echo "⏳ Waiting for rollback to complete..."
+          sleep 60
+          # Verify rollback health
+          ALB_DNS=$(cd infra && terraform output -raw alb_dns_name)
+          curl -f "https://$ALB_DNS/health" || echo "Rollback health check completed"
+          exit 1 # Fail the workflow to alert of the issue
 
       - name: Notify on success
         if: success()
