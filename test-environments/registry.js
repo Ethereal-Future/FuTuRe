@@ -41,18 +41,27 @@ function writeJson(file, data) {
 
 /**
  * Provision a named test environment.
- * Returns an env handle: { id, name, version, vars, provisionedAt }
+ * Returns an env handle: { id, name, version, vars, provisionedAt, snapshot }
+ * The snapshot preserves the prior process.env state for isolation.
  */
 export function provision(name) {
   const config = loadConfig(name);
   ensureDataDir();
 
   const id = `${name}-${crypto.randomBytes(4).toString('hex')}`;
+
+  // Capture the current state of env vars before applying new ones
+  const snapshot = {};
+  for (const k of Object.keys(config.vars)) {
+    snapshot[k] = process.env[k]; // Will be undefined if not previously set
+  }
+
   const env = {
     id,
     name: config.name,
     version: config.version,
     vars: { ...config.vars },
+    snapshot, // Store prior state for restoration
     isolation: config.isolation,
     cleanup: config.cleanup,
     provisionedAt: new Date().toISOString(),
@@ -81,7 +90,7 @@ export function provision(name) {
 
 /**
  * Tear down an environment by id.
- * Restores env vars and removes from active registry.
+ * Restores env vars to their prior state and removes from active registry.
  */
 export function teardown(id) {
   ensureDataDir();
@@ -89,10 +98,15 @@ export function teardown(id) {
   const env = active[id];
   if (!env) return; // already cleaned up
 
-  // Restore env vars
+  // Restore env vars to their prior state
   if (env.cleanup.includes('env')) {
     for (const k of Object.keys(env.vars)) {
-      delete process.env[k];
+      const priorValue = env.snapshot?.[k];
+      if (priorValue === undefined) {
+        delete process.env[k];
+      } else {
+        process.env[k] = priorValue;
+      }
     }
   }
 

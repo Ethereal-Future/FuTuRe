@@ -16,6 +16,9 @@ model User {
   createdAt              DateTime                @default(now())
   updatedAt              DateTime                @updatedAt
   deletedAt              DateTime?
+  amlStatus              String                  @default("CLEAR")  // CLEAR, HELD_FOR_REVIEW, BLOCKED
+  amlHoldReason          String?                 // Reason why account is held
+  amlHoldDate            DateTime?               // When the hold was placed
   settings               Setting?
   sentTxs                Transaction[]           @relation("sender")
   receivedTxs            Transaction[]           @relation("recipient")
@@ -34,6 +37,7 @@ model User {
   recoveryCodes          RecoveryCode[]
 
   @@index([deletedAt])
+  @@index([amlStatus])
 }
 
 model Transaction {
@@ -509,6 +513,17 @@ model WebhookDelivery {
   @@index([status, nextAttemptAt])
 }
 
+model IPWhitelist {
+  id        String   @id @default(uuid())
+  ipAddress String   @unique
+  cidr      String?  // CIDR notation if applicable
+  reason    String?  // Why this IP was whitelisted
+  addedBy   String?  // Admin who added this entry
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ipAddress])
+  @@index([createdAt])
 // Tracks a SEP-0031 cross-border direct payment handed off to a receiving
 // anchor. One row per transaction created via POST /transactions against an
 // anchor's DIRECT_PAYMENT_SERVER; status is refreshed by polling

@@ -60,9 +60,21 @@ variable "backend_memory" {
 }
 
 variable "backend_desired_count" {
-  description = "Desired number of backend ECS tasks."
+  description = "Initial desired number of backend ECS tasks (autoscaling will adjust this post-deployment)."
   type        = number
   default     = 2
+}
+
+variable "backend_min_count" {
+  description = "Minimum number of backend ECS tasks (autoscaling minimum capacity)."
+  type        = number
+  default     = 2
+}
+
+variable "backend_max_count" {
+  description = "Maximum number of backend ECS tasks (autoscaling maximum capacity)."
+  type        = number
+  default     = 10
 }
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
@@ -130,4 +142,5 @@ variable "log_archive_expiration_days" {
   description = "Days after object creation before archived logs are permanently deleted."
   type        = number
   default     = 2555 # ~7 years, matching typical financial recordkeeping requirements
+}
 }

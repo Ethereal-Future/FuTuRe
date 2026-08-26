@@ -56,6 +56,28 @@ pub struct Position {
     pub split_tokens: i128,
 }
 
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct RedeemOutcome {
+    pub market_id: u32,
+    pub payout: i128,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct RedeemFailure {
+    pub market_id: u32,
+    pub error: Error,
+}
+
+#[contracttype]
+#[derive(Clone, Debug)]
+pub struct BatchRedeemResult {
+    pub successes: Vec<RedeemOutcome>,
+    pub failures: Vec<RedeemFailure>,
+    pub total_payout: i128,
+}
+
 // ── Errors ───────────────────────────────────────────────────────────────────
 
 #[contracttype]
@@ -396,16 +418,36 @@ impl PredictionMarket {
     }
 
     /// Batch redeem across multiple markets
-    pub fn batch_redeem(env: Env, redeemer: Address, market_ids: Vec<u32>) -> Result<i128, Error> {
+    /// Returns per-market success/failure information instead of silently skipping failed markets.
+    pub fn batch_redeem(env: Env, redeemer: Address, market_ids: Vec<u32>) -> Result<BatchRedeemResult, Error> {
         redeemer.require_auth();
-        let mut total: i128 = 0;
+        let mut successes: Vec<RedeemOutcome> = Vec::new();
+        let mut failures: Vec<RedeemFailure> = Vec::new();
+        let mut total_payout: i128 = 0;
+
         for id in market_ids.iter() {
-            // Skip markets that fail (already redeemed, etc.)
-            if let Ok(payout) = Self::redeem(env.clone(), redeemer.clone(), id) {
-                total += payout;
+            match Self::redeem(env.clone(), redeemer.clone(), id) {
+                Ok(payout) => {
+                    total_payout += payout;
+                    successes.push_back(RedeemOutcome {
+                        market_id: id,
+                        payout,
+                    });
+                }
+                Err(error) => {
+                    failures.push_back(RedeemFailure {
+                        market_id: id,
+                        error,
+                    });
+                }
             }
         }
-        Ok(total)
+
+        Ok(BatchRedeemResult {
+            successes,
+            failures,
+            total_payout,
+        })
     }
 
     // ── LP ───────────────────────────────────────────────────────────────────
