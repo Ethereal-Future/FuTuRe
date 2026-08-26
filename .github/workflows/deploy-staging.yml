@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write # Needed to push Docker images to GHCR
+  id-token: write # Required for OIDC-based AWS authentication
+
 jobs:
   test:
     name: Run Tests
