@@ -2,8 +2,9 @@
 
 use prediction_market::{Error, PredictionMarket, PredictionMarketClient};
 use soroban_sdk::{
-    testutils::Address as _,
-    vec, Address, Env, String,
+    symbol_short,
+    testutils::{Address as _, Events as _},
+    vec, Address, Env, IntoVal, String,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -374,4 +375,79 @@ fn test_emergency_pause_blocks_mutations_unpause_succeeds() {
     // mutations succeed again
     let shares = client.buy_yes(&user, &mid, &100_000, &1);
     assert!(shares > 0);
+}
+
+// ── 10. Events ───────────────────────────────────────────────────────────────
+
+#[test]
+fn test_create_market_emits_created_event() {
+    let (env, client, admin, _treasury, oracle) = setup();
+
+    let mid = client.create_market(&admin, &question(&env), &oracle);
+
+    let events = env.events().all();
+    let (contract_id, topics, data) = events.last().unwrap();
+    assert_eq!(contract_id, client.address);
+    assert_eq!(
+        topics,
+        vec![
+            &env,
+            symbol_short!("market").into_val(&env),
+            symbol_short!("created").into_val(&env),
+        ]
+    );
+    assert_eq!(
+        data,
+        (mid, admin.clone(), oracle.clone()).into_val(&env)
+    );
+}
+
+#[test]
+fn test_buy_yes_emits_traded_event() {
+    let (env, client, admin, _treasury, oracle) = setup();
+    let user = Address::generate(&env);
+
+    let mid = client.create_market(&admin, &question(&env), &oracle);
+    client.seed_market(&admin, &mid, &1_000_000);
+    let shares = client.buy_yes(&user, &mid, &100_000, &1);
+
+    let events = env.events().all();
+    let (_, topics, data) = events.last().unwrap();
+    assert_eq!(
+        topics,
+        vec![
+            &env,
+            symbol_short!("market").into_val(&env),
+            symbol_short!("traded").into_val(&env),
+        ]
+    );
+    assert_eq!(
+        data,
+        (mid, user.clone(), true, 100_000i128, shares).into_val(&env)
+    );
+}
+
+#[test]
+fn test_finalize_emits_resolved_event() {
+    let (env, client, admin, _treasury, oracle) = setup();
+    let user = Address::generate(&env);
+
+    let mid = client.create_market(&admin, &question(&env), &oracle);
+    client.seed_market(&admin, &mid, &1_000_000);
+    client.buy_yes(&user, &mid, &100_000, &1);
+    client.close_market(&admin, &mid);
+    client.oracle_report(&oracle, &mid, &true);
+    client.finalize(&mid);
+
+    let events = env.events().all();
+    let (_, topics, data) = events.last().unwrap();
+    assert_eq!(
+        topics,
+        vec![
+            &env,
+            symbol_short!("market").into_val(&env),
+            symbol_short!("resolved").into_val(&env),
+        ]
+    );
+    assert_eq!(data, (mid, Some(true)).into_val(&env));
 }

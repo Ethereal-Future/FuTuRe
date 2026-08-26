@@ -20,6 +20,14 @@ async function fetchFeeStatsFromHorizon() {
   }
 }
 
+/**
+ * Get recent Stellar network fee history, with a synthetic hourly series derived
+ * from Horizon's fee stats percentiles. Results are cached in-memory for 60s;
+ * on fetch failure, stale cached data is returned if available.
+ * @param {number} [hours=24] - Retained for API compatibility; the returned series always covers the last 24 synthetic hourly points
+ * @returns {Promise<{history: Array<{timestamp: string, baseFee: number}>, currentFee: number, recommendedFee: number, cached: boolean, error?: string}>} Fee history and current/recommended fee
+ * @throws {Error} If Horizon fetch fails and no cached history is available
+ */
 export async function getFeeHistory(hours = 24) {
   try {
     const now = Date.now();
@@ -125,6 +133,10 @@ export async function getFeeHistory(hours = 24) {
   }
 }
 
+/**
+ * Clear the in-memory fee history cache, forcing the next {@link getFeeHistory} call to refetch.
+ * @returns {Promise<void>}
+ */
 export async function clearFeeCache() {
   feeCache = {
     history: [],
@@ -134,6 +146,10 @@ export async function clearFeeCache() {
   logger.info('feeHistory.cache.cleared');
 }
 
+/**
+ * Inspect the current state of the fee history cache.
+ * @returns {{size: number, lastFetch: number|null, isCurrent: boolean}} Cache size, last fetch time, and whether it's still within TTL
+ */
 export function getCacheStats() {
   return {
     size: feeCache.history.length,

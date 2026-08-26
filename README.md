@@ -159,6 +159,7 @@ See [docs/architecture.md](docs/architecture.md) for the full system diagram, co
 
 - [Security best practices for integrators](docs/guides/security.md) — API key storage, webhook verification, private key management, CSP, replay attacks, front-running
 - [Operational Runbook](docs/runbook.md) — Server restart, DB migration rollback, stream cancellation, IP unblock, incident response
+- [Incident Runbooks](docs/runbooks/README.md) — Horizon outage, DB failover, JWT secret rotation, stuck transaction recovery
 
 ## Contributing
 

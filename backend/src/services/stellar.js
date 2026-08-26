@@ -748,6 +748,15 @@ export async function getFeeStats() {
   });
 }
 
+/**
+ * Fetch a page of an account's transaction history from Horizon.
+ * @param {string} publicKey - Stellar public key of the account
+ * @param {object} [options]
+ * @param {number} [options.limit=10] - Max records to return
+ * @param {string} [options.cursor] - Paging token to continue from
+ * @returns {Promise<{publicKey: string, transactions: Array<{id: string, hash: string, createdAt: string, successful: boolean, ledger: number, pagingToken: string}>, nextCursor: string|null}>} Transaction page and next cursor
+ * @throws {Error} If the Horizon call fails
+ */
 export async function getTransactionHistory(publicKey, { limit = 10, cursor } = {}) {
   let call = getHorizonServer().transactions().forAccount(publicKey).limit(limit).order('desc');
   if (cursor) call = call.cursor(cursor);
@@ -830,6 +839,10 @@ const LATENCY_PING_INTERVAL_MS = 30000;
 let lastLatencyMeasurement = null;
 let latencyPingTimer = null;
 
+/**
+ * Measure a single round-trip to the Horizon root endpoint and cache the result.
+ * @returns {Promise<{latencyMs: number|null, horizonUrl: string, online: boolean, measuredAt: string}>} The measurement, also cached for {@link getLastHorizonLatency}
+ */
 export async function pingHorizonLatency() {
   const { horizonUrl } = getConfig().stellar;
   const startedAt = Date.now();
@@ -843,10 +856,21 @@ export async function pingHorizonLatency() {
   return lastLatencyMeasurement;
 }
 
+/**
+ * Get the most recent Horizon latency measurement without performing a new ping.
+ * @returns {{latencyMs: number|null, horizonUrl: string, online: boolean, measuredAt: string}|null} Last measurement, or null if none has been taken yet
+ */
 export function getLastHorizonLatency() {
   return lastLatencyMeasurement;
 }
 
+/**
+ * Start periodically pinging Horizon to keep the latency measurement fresh.
+ * A no-op if the monitor is already running. The timer is unref'd so it
+ * doesn't keep the process alive.
+ * @param {number} [intervalMs=LATENCY_PING_INTERVAL_MS] - Ping interval in ms
+ * @returns {NodeJS.Timeout} The interval timer (existing one if already running)
+ */
 export function startHorizonLatencyMonitor(intervalMs = LATENCY_PING_INTERVAL_MS) {
   if (latencyPingTimer) return latencyPingTimer;
   pingHorizonLatency();
@@ -855,6 +879,10 @@ export function startHorizonLatencyMonitor(intervalMs = LATENCY_PING_INTERVAL_MS
   return latencyPingTimer;
 }
 
+/**
+ * Stop the periodic Horizon latency ping started by {@link startHorizonLatencyMonitor}.
+ * @returns {void}
+ */
 export function stopHorizonLatencyMonitor() {
   if (latencyPingTimer) clearInterval(latencyPingTimer);
   latencyPingTimer = null;
@@ -1016,6 +1044,23 @@ export async function mergeAccount(sourceSecret, destination) {
 }
 
 /**
+ * List all open DEX offers for an account.
+ * @param {string} publicKey - Stellar public key of the account
+ * @returns {Promise<Array<object>>} Raw Horizon offer records (empty array if none or on lookup failure)
+ */
+export async function getOpenOffers(publicKey) {
+  try {
+    const offersResponse = await withHorizonRetry(() =>
+      getHorizonServer().offers().forAccount(publicKey).call(),
+    );
+    return offersResponse.records || [];
+  } catch {
+    // No offers or error loading them — treat as none rather than failing the caller.
+    return [];
+  }
+}
+
+/**
  * Simulate an account merge operation to show expected outcomes
  * @param {string} sourcePublicKey - Public key of source account
  * @param {string} destinationPublicKey - Public key of destination account
@@ -1027,15 +1072,7 @@ export async function simulateMergeAccount(sourcePublicKey, destinationPublicKey
   );
 
   // Get all offers for this account
-  let offers = [];
-  try {
-    const offersResponse = await withHorizonRetry(() =>
-      getHorizonServer().offers().forAccount(sourcePublicKey).call(),
-    );
-    offers = offersResponse.records || [];
-  } catch {
-    // No offers or error loading them
-  }
+  const offers = await getOpenOffers(sourcePublicKey);
 
   return {
     account: sourceAccount,

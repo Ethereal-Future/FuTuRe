@@ -13,6 +13,12 @@ function getAsset(code) {
   throw new Error(`Asset issuer not configured for ${code}`);
 }
 
+/**
+ * List an account's open DEX offers.
+ * @param {string} accountId - Stellar public key of the account
+ * @returns {Promise<Array<{id: string, selling: object, buying: object, amount: string, price_r: {n: number, d: number}, created_at: string}>>} Open offers
+ * @throws {Error} If `accountId` is missing or the Horizon lookup fails
+ */
 export async function getAccountOffers(accountId) {
   try {
     if (!accountId) {
@@ -49,6 +55,16 @@ export async function getAccountOffers(accountId) {
   }
 }
 
+/**
+ * Create a new DEX offer via `manageOffer` (offerId `0`).
+ * @param {string} sourceSecret - Secret key of the offering account
+ * @param {string} sellingAsset - Asset code being sold (only "XLM" is currently supported by {@link getAsset})
+ * @param {string} buyingAsset - Asset code being bought (only "XLM" is currently supported by {@link getAsset})
+ * @param {number|string} sellingAmount - Amount of `sellingAsset` to offer
+ * @param {number|string} price - Price of 1 unit of `sellingAsset` in units of `buyingAsset`
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, offerId: string, sellingAsset: string, buyingAsset: string, sellingAmount: number|string, price: number}>} Submission result
+ * @throws {Error} If required parameters are missing, an asset has no configured issuer, or Horizon submission fails
+ */
 export async function createOffer(sourceSecret, sellingAsset, buyingAsset, sellingAmount, price) {
   try {
     if (!sourceSecret || !sellingAsset || !buyingAsset || !sellingAmount || !price) {
@@ -120,6 +136,17 @@ export async function createOffer(sourceSecret, sellingAsset, buyingAsset, selli
   }
 }
 
+/**
+ * Modify an existing DEX offer via `manageOffer` with a non-zero `offerId`.
+ * @param {string} sourceSecret - Secret key of the offering account
+ * @param {string|number} offerId - Id of the offer to modify
+ * @param {string} sellingAsset - Asset code being sold
+ * @param {string} buyingAsset - Asset code being bought
+ * @param {number|string} sellingAmount - New amount of `sellingAsset` to offer
+ * @param {number|string} price - New price of 1 unit of `sellingAsset` in units of `buyingAsset`
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, offerId: string|number}>} Submission result
+ * @throws {Error} If required parameters are missing or Horizon submission fails
+ */
 export async function modifyOffer(
   sourceSecret,
   offerId,
@@ -186,6 +213,13 @@ export async function modifyOffer(
   }
 }
 
+/**
+ * Cancel an existing DEX offer by submitting `manageOffer` with a zero amount.
+ * @param {string} sourceSecret - Secret key of the offering account
+ * @param {string|number} offerId - Id of the offer to cancel
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, offerId: string|number}>} Submission result
+ * @throws {Error} If required parameters are missing or Horizon submission fails
+ */
 export async function cancelOffer(sourceSecret, offerId) {
   try {
     if (!sourceSecret || offerId === undefined) {

@@ -201,14 +201,17 @@ function handleStreamError(err, publicKey, stream) {
 }
 
 /**
- * Get list of actively monitored accounts
+ * Get list of actively monitored accounts.
+ * @returns {string[]} Public keys currently being monitored
  */
 export function getActiveMonitors() {
   return Array.from(activeMonitors.keys());
 }
 
 /**
- * Check if an account is being monitored
+ * Check if an account is being monitored.
+ * @param {string} publicKey - Stellar public key
+ * @returns {boolean} True if a monitor is active and not closed
  */
 export function isMonitoring(publicKey) {
   return activeMonitors.has(publicKey) && !activeMonitors.get(publicKey).closed;
