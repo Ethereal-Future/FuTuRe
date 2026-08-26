@@ -5,7 +5,7 @@ import bcrypt from 'bcryptjs';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
-import { signAccessToken, signRefreshToken, verifyToken } from '../auth/tokens.js';
+import { signAccessToken, signRefreshToken, verifyToken, verifyRefreshToken } from '../auth/tokens.js';
 import {
   createSession,
   getActiveSession,
@@ -343,7 +343,7 @@ router.post('/refresh', async (req, res) => {
   if (!refreshToken)
     return sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Refresh token missing or expired');
   try {
-    const payload = verifyToken(refreshToken);
+    const payload = verifyRefreshToken(refreshToken);
     if (payload.sid) {
       const session = await getActiveSession(payload.sid);
       if (!session) {
