@@ -9,6 +9,7 @@ import { callWithCircuitBreaker } from './circuitBreaker.js';
 import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
 import { recordHorizonCall } from '../monitoring/horizonAlerter.js';
 import { withSpan } from '../config/otel.js';
+import { recordFeeSample, getSevenDayAverageFee, detectFeeSurge } from './feeSurge.js';
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -821,6 +822,45 @@ export async function getNetworkStatus() {
       };
     }
   });
+}
+
+/**
+ * Get network status with fee surge detection.
+ * Compares current fee to 7-day average and determines if network is experiencing surge.
+ * @returns {Promise<{network: string, horizonUrl: string, online: boolean, feeStroops: number, feeXLM: string, sevenDayAverageFeeStroops?: number, feeSurge: boolean, feeSurgeRatio: number, status: 'ok'|'degraded'|'offline'}>}
+ */
+export async function getNetworkStatusWithFeeSurge() {
+  const status = await getNetworkStatus();
+  let feeStroops = 100;
+  let feeXLM = '0.0000100';
+  let sevenDayAverageFeeStroops = null;
+  let feeSurge = false;
+  let feeSurgeRatio = 1;
+
+  if (status.online) {
+    try {
+      const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
+      feeStroops = parseInt(stats.fee_charged?.p50 ?? stats.last_ledger_base_fee ?? '100', 10);
+      feeXLM = (feeStroops / 1e7).toFixed(7);
+      recordFeeSample(feeStroops);
+      sevenDayAverageFeeStroops = getSevenDayAverageFee();
+      const surgeInfo = detectFeeSurge(feeStroops, sevenDayAverageFeeStroops);
+      feeSurge = surgeInfo.surge;
+      feeSurgeRatio = surgeInfo.ratio;
+    } catch (error) {
+      logger.warn('stellar.feeSurgeDetection.failed', { error: error.message });
+    }
+  }
+
+  return {
+    ...status,
+    feeStroops,
+    feeXLM,
+    sevenDayAverageFeeStroops: sevenDayAverageFeeStroops ? Math.round(sevenDayAverageFeeStroops) : null,
+    feeSurge,
+    feeSurgeRatio,
+    status: !status.online ? 'offline' : feeSurge ? 'degraded' : 'ok',
+  };
 }
 
 // Horizon latency monitor: pings the Horizon root endpoint on an interval
