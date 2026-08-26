@@ -135,6 +135,17 @@ terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3"
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
 
+## Autoscaling
+
+The backend ECS service includes automatic application autoscaling that dynamically adjusts the number of running tasks based on load:
+
+- **CPU-based scaling**: Scales out when average CPU utilization exceeds 65% across all tasks
+- **Request count scaling**: Scales out when the ALB reports more than 1000 requests per target per minute
+- **Cooldown periods**: 60 seconds scale-out cooldown, 300 seconds scale-in cooldown to prevent thrashing
+- **Capacity limits**: Minimum of 2 tasks (preserves zero-downtime rolling deployment guarantee), maximum of 10 tasks (configurable via `backend_min_count` and `backend_max_count`)
+
+Container Insights must remain enabled on the ECS cluster for these metrics to be available to the autoscaling policies.
+
 ## Secrets Policy
 
 **No secret values are ever stored in Terraform configuration, `.tfvars` files, or source control.**
