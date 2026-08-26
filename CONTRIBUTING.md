@@ -662,23 +662,15 @@ npm run dev:backend
 
 4. Push your branch and open a pull request against `main`.
 
-5. Fill in the PR template. Include:
-   - What the change does and why
-   - How you tested it
-   - Any follow-up work or known limitations
+5. Fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md) — it auto-populates the description box and includes the PR checklist below.
 
-6. A maintainer will review within a few business days. Address feedback by pushing new commits — do not force-push after review has started.
+6. Based on the paths you touched, GitHub will auto-request reviewers from [`.github/CODEOWNERS`](.github/CODEOWNERS). A maintainer will review within a few business days. Address feedback by pushing new commits — do not force-push after review has started.
 
 7. Once approved, a maintainer will squash-merge your PR.
 
 ### PR checklist
 
-- [ ] Tests added or updated for new behaviour
-- [ ] `npm run test:coverage` passes
-- [ ] No new high/critical vulnerabilities (`npm audit --audit-level=high`)
-- [ ] Code formatted with `npm run format`
-- [ ] PR description explains the change clearly
-- [ ] If this PR adds, removes, or significantly changes a component, service, or data flow: update `docs/architecture.md` in the same PR
+See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for the full checklist that ships with every new pull request.
 
 ### First-day onboarding checklist
 
