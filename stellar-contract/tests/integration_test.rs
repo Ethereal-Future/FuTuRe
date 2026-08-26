@@ -293,8 +293,43 @@ fn test_batch_redeem_across_three_markets() {
         ids.push_back(mid);
     }
 
-    let total = client.batch_redeem(&user, &ids);
-    assert!(total > 0);
+    let result = client.batch_redeem(&user, &ids);
+    assert_eq!(result.successes.len(), 3);
+    assert_eq!(result.failures.len(), 0);
+    assert!(result.total_payout > 0);
+}
+
+#[test]
+fn test_batch_redeem_partial_failure() {
+    let (env, client, admin, _treasury, oracle) = setup();
+    let user = Address::generate(&env);
+
+    let mut ids = vec![&env];
+    // First market: resolve with YES (user has YES shares)
+    let mid1 = client.create_market(&admin, &question(&env), &oracle);
+    client.seed_market(&admin, &mid1, &1_000_000);
+    client.buy_yes(&user, &mid1, &100_000, &1);
+    client.close_market(&admin, &mid1);
+    client.oracle_report(&oracle, &mid1, &true);
+    client.finalize(&mid1);
+    ids.push_back(mid1);
+
+    // Second market: resolve with NO (user has YES shares, gets nothing)
+    let mid2 = client.create_market(&admin, &question(&env), &oracle);
+    client.seed_market(&admin, &mid2, &1_000_000);
+    client.buy_yes(&user, &mid2, &100_000, &1);
+    client.close_market(&admin, &mid2);
+    client.oracle_report(&oracle, &mid2, &false);
+    client.finalize(&mid2);
+    ids.push_back(mid2);
+
+    let result = client.batch_redeem(&user, &ids);
+    // Should have 1 success and 1 failure
+    assert_eq!(result.successes.len(), 1);
+    assert_eq!(result.failures.len(), 1);
+    assert!(result.total_payout > 0);
+    // Check that the failure is NothingToRedeem
+    assert_eq!(result.failures.get(0).error, Error::NothingToRedeem);
 }
 
 // ── 7. Split / Merge ──────────────────────────────────────────────────────────
