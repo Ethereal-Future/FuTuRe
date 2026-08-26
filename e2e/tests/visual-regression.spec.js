@@ -1,10 +1,12 @@
 /**
  * Visual Regression Tests
- * 
- * Tests for visual consistency across different pages and components
+ *
+ * Tests for visual consistency across different pages and components.
+ * Credentials are read from environment variables via the auth helper.
  */
 
 import { test, expect } from '@playwright/test';
+import { loginAsTestUser } from './helpers/auth.js';
 
 test.describe('Visual Regression Tests @visual', () => {
   test('should match homepage screenshot', async ({ page }) => {
@@ -16,12 +18,7 @@ test.describe('Visual Regression Tests @visual', () => {
   });
 
   test('should match dashboard screenshot', async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('[data-testid="email"]', 'test@example.com');
-    await page.fill('[data-testid="password"]', 'password123');
-    await page.click('[data-testid="login-btn"]');
-    await page.waitForURL('/dashboard');
+    await loginAsTestUser(page);
 
     await expect(page).toHaveScreenshot('dashboard.png', {
       fullPage: true,
@@ -38,12 +35,7 @@ test.describe('Visual Regression Tests @visual', () => {
   });
 
   test('should match payment page screenshot', async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('[data-testid="email"]', 'test@example.com');
-    await page.fill('[data-testid="password"]', 'password123');
-    await page.click('[data-testid="login-btn"]');
-    await page.waitForURL('/dashboard');
+    await loginAsTestUser(page);
 
     await page.goto('/payment/send');
     await expect(page).toHaveScreenshot('payment-send.png', {
@@ -53,15 +45,10 @@ test.describe('Visual Regression Tests @visual', () => {
   });
 
   test('should match payment confirmation dialog screenshot', async ({ page }) => {
-    // Login
-    await page.goto('/login');
-    await page.fill('[data-testid="email"]', 'test@example.com');
-    await page.fill('[data-testid="password"]', 'password123');
-    await page.click('[data-testid="login-btn"]');
-    await page.waitForURL('/dashboard');
+    await loginAsTestUser(page);
 
     await page.goto('/payment/send');
-    
+
     // Fill payment form
     await page.fill('[data-testid="destination"]', 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6');
     await page.fill('[data-testid="amount"]', '10');
@@ -175,13 +162,8 @@ test.describe('Responsive Visual Tests @visual', () => {
 
   test('should match mobile payment page screenshot', async ({ page }) => {
     await page.setViewportSize({ width: 375, height: 667 });
-    
-    // Login
-    await page.goto('/login');
-    await page.fill('[data-testid="email"]', 'test@example.com');
-    await page.fill('[data-testid="password"]', 'password123');
-    await page.click('[data-testid="login-btn"]');
-    await page.waitForURL('/dashboard');
+
+    await loginAsTestUser(page);
 
     await page.goto('/payment/send');
     await expect(page).toHaveScreenshot('payment-send-mobile.png', {
