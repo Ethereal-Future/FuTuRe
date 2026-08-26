@@ -83,6 +83,8 @@ jobs:
 
       - name: Build and push frontend Docker image
         run: |
+          echo "Syncing frontend build to S3..."
+          aws s3 sync frontend/dist s3://${{ secrets.STAGING_FRONTEND_BUCKET_NAME }} --delete --delete
           docker build ./frontend -t ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
           docker push ghcr.io/${{ github.repository }}/frontend:${{ github.sha }}
         working-directory: .

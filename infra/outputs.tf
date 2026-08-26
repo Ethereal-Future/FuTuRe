@@ -1,3 +1,7 @@
+output "frontend_url" {
+  description = "URL of the deployed frontend application."
+  value       = "https://${aws_cloudfront_distribution.frontend.domain_name}"
+}
 output "vpc_id" {
   description = "ID of the VPC."
   value       = aws_vpc.main.id
