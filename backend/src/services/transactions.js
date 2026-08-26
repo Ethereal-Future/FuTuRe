@@ -21,6 +21,10 @@ class TransactionService {
     this.monitoringInterval = null;
   }
 
+  /**
+   * Get (lazily creating) the Horizon server instance for the configured network.
+   * @returns {import('@stellar/stellar-sdk').Horizon.Server} Horizon server instance
+   */
   getHorizonServer() {
     if (!this.horizonServer) {
       const { horizonUrl } = getConfig().stellar;

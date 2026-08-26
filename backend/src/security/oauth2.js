@@ -1,39 +1,55 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getConfig } from '../config/env.js';
+import prisma from '../db/client.js';
+
+const REFRESH_TOKEN_TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
 
 class OAuth2Provider {
-  constructor() {
-    this.clients = new Map();
-    this.tokens = new Map();
-    this.authorizationCodes = new Map();
-  }
-
-  registerClient(clientId, clientSecret, redirectUris) {
-    this.clients.set(clientId, {
-      clientId,
-      clientSecret,
-      redirectUris,
-      createdAt: new Date()
+  /**
+   * Register a new OAuth2 client
+   * Persists to database, replacing in-memory Map (fixes #968)
+   */
+  async registerClient(clientId, clientSecret, redirectUris) {
+    return await prisma.oAuth2Client.create({
+      data: {
+        clientId,
+        clientSecret,
+        redirectUris
+      }
     });
   }
 
-  generateAuthorizationCode(clientId, userId, scope) {
+  /**
+   * Generate an authorization code for OAuth2 flow
+   * Persists to database with 10-minute expiry (fixes #968)
+   */
+  async generateAuthorizationCode(clientId, userId, scope) {
     const code = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    this.authorizationCodes.set(code, {
-      clientId,
-      userId,
-      scope,
-      expiresAt
+    await prisma.oAuth2AuthorizationCode.create({
+      data: {
+        code,
+        clientId,
+        userId,
+        scope,
+        expiresAt
+      }
     });
 
     return code;
   }
 
-  exchangeCodeForToken(code, clientId, clientSecret) {
-    const authCode = this.authorizationCodes.get(code);
+  /**
+   * Exchange authorization code for access and refresh tokens
+   * Validates code, issues tokens with database persistence (fixes #968, #967)
+   */
+  async exchangeCodeForToken(code, clientId, clientSecret) {
+    // Find and validate authorization code
+    const authCode = await prisma.oAuth2AuthorizationCode.findUnique({
+      where: { code }
+    });
 
     if (!authCode || authCode.expiresAt < new Date()) {
       throw new Error('Invalid or expired authorization code');
@@ -43,37 +59,69 @@ class OAuth2Provider {
       throw new Error('Client ID mismatch');
     }
 
-    const client = this.clients.get(clientId);
+    // Validate client credentials
+    const client = await prisma.oAuth2Client.findUnique({
+      where: { clientId }
+    });
+
     if (!client || client.clientSecret !== clientSecret) {
       throw new Error('Invalid client credentials');
     }
 
-    this.authorizationCodes.delete(code);
+    // Delete used authorization code
+    await prisma.oAuth2AuthorizationCode.delete({
+      where: { code }
+    });
 
+    // Generate access token (short-lived JWT)
     const accessToken = jwt.sign(
       { userId: authCode.userId, clientId, scope: authCode.scope },
       getConfig().security.jwtSecret,
       { expiresIn: '1h' }
     );
 
+    // Generate and persist refresh token with expiry (fixes #967)
     const refreshToken = crypto.randomBytes(32).toString('hex');
-    this.tokens.set(refreshToken, {
-      userId: authCode.userId,
-      clientId,
-      scope: authCode.scope,
-      createdAt: new Date()
+    const expiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+    await prisma.oAuth2Token.create({
+      data: {
+        refreshToken,
+        clientId,
+        userId: authCode.userId,
+        scope: authCode.scope,
+        expiresAt
+      }
     });
 
     return { accessToken, refreshToken, expiresIn: 3600 };
   }
 
-  refreshAccessToken(refreshToken, clientId) {
-    const tokenData = this.tokens.get(refreshToken);
+  /**
+   * Refresh an access token using a refresh token
+   * Validates expiry and revocation status (fixes #967)
+   */
+  async refreshAccessToken(refreshToken, clientId) {
+    // Find refresh token with expiry and revocation checks
+    const tokenData = await prisma.oAuth2Token.findUnique({
+      where: { refreshToken }
+    });
 
     if (!tokenData || tokenData.clientId !== clientId) {
       throw new Error('Invalid refresh token');
     }
 
+    // Check if refresh token is expired (fixes #967)
+    if (tokenData.expiresAt < new Date()) {
+      throw new Error('Refresh token expired');
+    }
+
+    // Check if refresh token is revoked
+    if (tokenData.revokedAt) {
+      throw new Error('Refresh token revoked');
+    }
+
+    // Issue new access token
     const accessToken = jwt.sign(
       { userId: tokenData.userId, clientId, scope: tokenData.scope },
       getConfig().security.jwtSecret,
@@ -81,6 +129,46 @@ class OAuth2Provider {
     );
 
     return { accessToken, expiresIn: 3600 };
+  }
+
+  /**
+   * Revoke a refresh token (logout)
+   */
+  async revokeRefreshToken(refreshToken) {
+    const result = await prisma.oAuth2Token.updateMany({
+      where: { 
+        refreshToken,
+        revokedAt: null
+      },
+      data: { revokedAt: new Date() }
+    });
+
+    return result.count > 0;
+  }
+
+  /**
+   * Clean up expired authorization codes and tokens
+   * Should be run periodically as a maintenance job
+   */
+  async cleanupExpired() {
+    const now = new Date();
+
+    const [deletedCodes, deletedTokens] = await Promise.all([
+      prisma.oAuth2AuthorizationCode.deleteMany({
+        where: { expiresAt: { lt: now } }
+      }),
+      prisma.oAuth2Token.deleteMany({
+        where: { 
+          expiresAt: { lt: now },
+          revokedAt: { not: null }
+        }
+      })
+    ]);
+
+    return {
+      deletedCodes: deletedCodes.count,
+      deletedTokens: deletedTokens.count
+    };
   }
 
   validateToken(token) {

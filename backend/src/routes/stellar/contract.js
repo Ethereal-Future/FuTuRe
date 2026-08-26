@@ -2,20 +2,107 @@ import express from 'express';
 import { body } from 'express-validator';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { validate } from '../../middleware/validate.js';
+import { getConfig } from '../../config/env.js';
+import logger from '../../config/logger.js';
+import { createCircuitBreaker } from '../../services/circuitBreaker.js';
 
 const router = express.Router();
 
+// Independent circuit breaker so a Soroban RPC outage doesn't trip (or get
+// masked by) the Horizon breaker in services/stellar.js. See issue #956.
+const sorobanCircuitBreaker = createCircuitBreaker('Soroban RPC');
+
+let sorobanServerUrl;
+let sorobanServer;
+
+/**
+ * Return a cached Soroban rpc.Server instance, re-creating it if the
+ * configured URL has changed. Mirrors getHorizonServer() in services/stellar.js.
+ * @returns {import('@stellar/stellar-sdk').rpc.Server}
+ */
 function getSorobanServer() {
-  const rpcUrl =
-    process.env.SOROBAN_RPC_URL ||
-    (process.env.STELLAR_NETWORK === 'mainnet'
-      ? 'https://mainnet.sorobanrpc.com'
-      : 'https://soroban-testnet.stellar.org');
-  return new StellarSDK.rpc.Server(rpcUrl);
+  const { sorobanRpcUrl } = getConfig().stellar;
+  if (!sorobanServer || sorobanRpcUrl !== sorobanServerUrl) {
+    sorobanServerUrl = sorobanRpcUrl;
+    sorobanServer = new StellarSDK.rpc.Server(sorobanRpcUrl);
+  }
+  return sorobanServer;
+}
+
+/** Timeout (ms) for Soroban RPC calls. Reads SOROBAN_TIMEOUT_MS env var, default 10 000. */
+function getSorobanTimeout() {
+  return parseInt(process.env.SOROBAN_TIMEOUT_MS ?? '10000', 10);
+}
+
+/**
+ * Run a Soroban RPC call with a timeout and circuit breaker. Throws a
+ * timeout-tagged error on timeout, or a circuit-open error when tripped.
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withSorobanTimeout(fn) {
+  const ms = getSorobanTimeout();
+  return sorobanCircuitBreaker.call(() => {
+    let timer;
+    const timeout = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        const err = new Error('Soroban RPC request timed out');
+        err.isTimeout = true;
+        reject(err);
+      }, ms);
+    });
+    return Promise.race([fn(), timeout]).finally(() => clearTimeout(timer));
+  });
+}
+
+const SOROBAN_RETRY_BACKOFFS = [500, 1000, 2000];
+
+function isTransientSorobanError(err) {
+  const status = err?.response?.status ?? err?.status;
+  if (status === 400 || status === 404) return false;
+  if (status === 429 || status === 503) return true;
+  if (err?.isTimeout) return true;
+  const code = err?.code;
+  if (
+    code === 'ECONNREFUSED' ||
+    code === 'ENOTFOUND' ||
+    code === 'ETIMEDOUT' ||
+    code === 'ECONNRESET'
+  )
+    return true;
+  return false;
+}
+
+/**
+ * Run a Soroban RPC call with timeout, circuit breaker, and exponential
+ * backoff retry. Retries on 429, 503, and network timeouts (max 3 attempts:
+ * 500ms, 1s, 2s backoff). Does NOT retry on 400 or 404. Mirrors
+ * withHorizonRetry() in services/stellar.js.
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function withSorobanRetry(fn) {
+  let lastErr;
+  for (let attempt = 0; attempt <= SOROBAN_RETRY_BACKOFFS.length; attempt++) {
+    try {
+      return await withSorobanTimeout(fn);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransientSorobanError(err) || attempt === SOROBAN_RETRY_BACKOFFS.length) {
+        throw err;
+      }
+      const delay = SOROBAN_RETRY_BACKOFFS[attempt];
+      logger.warn('soroban.rpc.retry', { attempt: attempt + 1, delay, error: err.message });
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+  throw lastErr;
 }
 
 function getNetworkPassphrase() {
-  return process.env.STELLAR_NETWORK === 'mainnet'
+  return getConfig().stellar.network === 'mainnet'
     ? StellarSDK.Networks.PUBLIC
     : StellarSDK.Networks.TESTNET;
 }
@@ -181,7 +268,9 @@ router.post(
 
     try {
       const server = getSorobanServer();
-      const sourceAccount = await server.getAccount(req.body.sourcePublicKey);
+      const sourceAccount = await withSorobanRetry(() =>
+        server.getAccount(req.body.sourcePublicKey),
+      );
       const contract = new StellarSDK.Contract(contractAddress);
       const operation = contract.call(
         req.body.functionName,
@@ -197,7 +286,7 @@ router.post(
         .build();
 
       // Simulate to get the soroban data / fee estimate, then attach it
-      const simResult = await server.simulateTransaction(transaction);
+      const simResult = await withSorobanRetry(() => server.simulateTransaction(transaction));
       if (StellarSDK.rpc.Api.isSimulationError(simResult)) {
         return res.status(422).json({
           error: 'Simulation failed — check functionName/args and try again',
@@ -286,7 +375,9 @@ router.post(
 
     try {
       const server = getSorobanServer();
-      const sourceAccount = await server.getAccount(req.body.sourcePublicKey);
+      const sourceAccount = await withSorobanRetry(() =>
+        server.getAccount(req.body.sourcePublicKey),
+      );
       const contract = new StellarSDK.Contract(contractAddress);
       const operation = contract.call(
         req.body.functionName,
@@ -301,7 +392,7 @@ router.post(
         .setTimeout(60)
         .build();
 
-      const simResult = await server.simulateTransaction(transaction);
+      const simResult = await withSorobanRetry(() => server.simulateTransaction(transaction));
 
       if (StellarSDK.rpc.Api.isSimulationError(simResult)) {
         return res.status(422).json({
@@ -396,7 +487,7 @@ router.post(
         getNetworkPassphrase(),
       );
 
-      const submitted = await server.sendTransaction(transaction);
+      const submitted = await withSorobanRetry(() => server.sendTransaction(transaction));
 
       if (submitted.status === 'ERROR') {
         return res.status(422).json({

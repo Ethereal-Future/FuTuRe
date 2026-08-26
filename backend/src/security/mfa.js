@@ -1,11 +1,33 @@
 import crypto from 'crypto';
 import speakeasy from 'speakeasy';
 import QRCode from 'qrcode';
+import prisma from '../db/client.js';
+import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
+import logger from '../config/logger.js';
 
 class MFAManager {
   constructor() {
-    this.userMFA = new Map();
-    this.backupCodes = new Map();
+    // Removed in-memory storage - now using database
+  }
+
+  getEncryptionKey() {
+    const key = process.env.CONFIG_ENCRYPTION_KEY;
+    if (!key) throw new Error('CONFIG_ENCRYPTION_KEY is not set');
+    return key;
+  }
+
+  encryptField(value) {
+    return encryptToEnvValue(value, this.getEncryptionKey());
+  }
+
+  decryptField(value) {
+    if (!value) return value;
+    try {
+      return decryptFromEnvValue(value, this.getEncryptionKey());
+    } catch (err) {
+      logger.error({ err }, 'Failed to decrypt MFA field');
+      return value; // return as-is if decryption fails
+    }
   }
 
   generateSecret(userId, appName = 'FuTuRe') {
@@ -45,26 +67,51 @@ class MFAManager {
     return decrypted;
   }
 
-  enableMFA(userId, secret) {
+  async enableMFA(userId, secret) {
     const backupCodes = Array.from({ length: 10 }, () =>
       crypto.randomBytes(4).toString('hex')
     );
 
-    this.userMFA.set(userId, {
-      secret,
-      enabled: true,
-      createdAt: new Date(),
-      lastUsed: null
+    // Encrypt and store secret in database
+    const encryptedSecret = this.encryptField(secret);
+    
+    await prisma.mFASettings.upsert({
+      where: { userId },
+      create: {
+        userId,
+        secret: encryptedSecret,
+        enabled: true,
+        createdAt: new Date(),
+      },
+      update: {
+        secret: encryptedSecret,
+        enabled: true,
+        updatedAt: new Date(),
+      },
     });
 
-    this.backupCodes.set(userId, backupCodes);
-
+    // Store backup codes in database (they will be hashed by auth route handler)
     return backupCodes;
   }
 
-  verifyTOTP(userId, token, secret) {
+  async verifyTOTP(userId, token, secret) {
+    let secretToVerify = secret;
+    
+    // If secret is not provided, fetch from database
+    if (!secretToVerify) {
+      const mfaSettings = await prisma.mFASettings.findUnique({
+        where: { userId },
+      });
+      
+      if (!mfaSettings || !mfaSettings.secret) {
+        throw new Error('MFA not enabled for this user');
+      }
+      
+      secretToVerify = this.decryptField(mfaSettings.secret);
+    }
+
     const verified = speakeasy.totp.verify({
-      secret,
+      secret: secretToVerify,
       encoding: 'base32',
       token,
       window: 2
@@ -74,36 +121,62 @@ class MFAManager {
       throw new Error('Invalid TOTP token');
     }
 
-    const mfa = this.userMFA.get(userId);
-    if (mfa) {
-      mfa.lastUsed = new Date();
-    }
+    // Update last used timestamp
+    await prisma.mFASettings.update({
+      where: { userId },
+      data: { lastUsed: new Date() },
+    });
+
     return true;
   }
 
-  verifyBackupCode(userId, code) {
-    const codes = this.backupCodes.get(userId);
-    if (!codes) {
+  async verifyBackupCode(userId, code) {
+    // Backup codes are now stored in RecoveryCode table
+    // This is handled by the auth route handler
+    const codes = await prisma.recoveryCode.findMany({
+      where: { userId, used: false },
+    });
+
+    if (!codes || codes.length === 0) {
       throw new Error('No backup codes found');
     }
 
-    const index = codes.indexOf(code);
-    if (index === -1) {
-      throw new Error('Invalid backup code');
+    // The actual verification is done in the route handler with bcrypt
+    // This method is kept for backward compatibility
+    throw new Error('Use recovery code verification endpoint');
+  }
+
+  async disableMFA(userId) {
+    await prisma.$transaction([
+      prisma.mFASettings.update({
+        where: { userId },
+        data: { enabled: false, secret: null },
+      }),
+      prisma.recoveryCode.deleteMany({
+        where: { userId },
+      }),
+    ]);
+    
+    logger.info({ userId }, 'MFA disabled for user');
+  }
+
+  async isMFAEnabled(userId) {
+    const mfaSettings = await prisma.mFASettings.findUnique({
+      where: { userId },
+    });
+    return mfaSettings ? mfaSettings.enabled : false;
+  }
+
+  async getMFASecret(userId) {
+    const mfaSettings = await prisma.mFASettings.findUnique({
+      where: { userId },
+    });
+    
+    if (!mfaSettings || !mfaSettings.secret) {
+      return null;
     }
-
-    codes.splice(index, 1);
-    return true;
-  }
-
-  disableMFA(userId) {
-    this.userMFA.delete(userId);
-    this.backupCodes.delete(userId);
-  }
-
-  isMFAEnabled(userId) {
-    const mfa = this.userMFA.get(userId);
-    return mfa ? mfa.enabled : false;
+    
+    return this.decryptField(mfaSettings.secret);
   }
 }
 

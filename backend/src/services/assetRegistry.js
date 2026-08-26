@@ -5,6 +5,9 @@ import logger from '../config/logger.js';
  * Asset Registry Service for managing Stellar assets
  */
 class AssetRegistryService {
+  /**
+   * @param {string} horizonUrl - Horizon server URL to connect to
+   */
   constructor(horizonUrl) {
     this.server = new StellarSdk.Horizon.Server(horizonUrl);
     this.assets = new Map();
@@ -13,7 +16,16 @@ class AssetRegistryService {
   }
 
   /**
-   * Register a new asset
+   * Register a new asset in the in-memory registry after validating it exists on-chain.
+   * @param {object} assetData
+   * @param {string} assetData.code - Asset code
+   * @param {string} assetData.issuer - Issuer public key
+   * @param {string} [assetData.name] - Display name (defaults to `code`)
+   * @param {string} [assetData.description]
+   * @param {string} [assetData.image]
+   * @param {string} [assetData.website]
+   * @returns {Promise<object>} The registered asset record
+   * @throws {Error} If the asset does not exist on the Stellar network
    */
   async registerAsset(assetData) {
     const { code, issuer, name, description, image, website } = assetData;
@@ -41,7 +53,10 @@ class AssetRegistryService {
   }
 
   /**
-   * Validate asset exists on Stellar network
+   * Check whether an asset code/issuer pair exists on the Stellar network.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @returns {Promise<boolean>} True if the asset is found (false on lookup error too)
    */
   async validateAsset(code, issuer) {
     try {
@@ -60,7 +75,13 @@ class AssetRegistryService {
   }
 
   /**
-   * Discover assets from Stellar network
+   * List assets from the Stellar network's public asset directory.
+   * @param {object} [filters={}]
+   * @param {string} [filters.code] - Filter by asset code
+   * @param {string} [filters.issuer] - Filter by issuer public key
+   * @param {number} [filters.limit=20] - Max records to return
+   * @returns {Promise<Array<{code: string, issuer: string, type: string, numAccounts: number, amount: string, flags: object}>>} Matching assets
+   * @throws {Error} If the Horizon query fails
    */
   async discoverAssets(filters = {}) {
     try {
@@ -91,21 +112,30 @@ class AssetRegistryService {
   }
 
   /**
-   * Get asset details
+   * Look up a registered asset's record.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @returns {object|undefined} The registered asset, or undefined if not registered
    */
   getAsset(code, issuer) {
     return this.assets.get(`${code}:${issuer}`);
   }
 
   /**
-   * Get all registered assets
+   * List all registered assets.
+   * @returns {object[]} All registered asset records
    */
   getAllAssets() {
     return Array.from(this.assets.values());
   }
 
   /**
-   * Update asset metadata
+   * Merge additional metadata into a registered asset.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @param {object} metadata - Fields to shallow-merge into the asset's existing metadata
+   * @returns {object} The updated asset record
+   * @throws {Error} If the asset is not registered
    */
   updateAssetMetadata(code, issuer, metadata) {
     const key = `${code}:${issuer}`;
@@ -123,7 +153,12 @@ class AssetRegistryService {
   }
 
   /**
-   * Verify asset (manual verification process)
+   * Mark a registered asset as manually verified (or unverified).
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @param {boolean} [verified=true] - Verification flag to set
+   * @returns {object} The updated asset record
+   * @throws {Error} If the asset is not registered
    */
   verifyAsset(code, issuer, verified = true) {
     const key = `${code}:${issuer}`;
@@ -141,7 +176,11 @@ class AssetRegistryService {
   }
 
   /**
-   * Track asset price
+   * Compute (and cache for `priceCacheTTL` ms) an asset's average price from its 10 most recent trades.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @param {string} [baseAsset='XLM'] - Quote asset, "XLM" or "CODE:ISSUER"
+   * @returns {Promise<number|null>} Average trade price, or null if no recent trades or on error
    */
   async trackAssetPrice(code, issuer, baseAsset = 'XLM') {
     const key = `${code}:${issuer}:${baseAsset}`;
@@ -188,7 +227,11 @@ class AssetRegistryService {
   }
 
   /**
-   * Get asset price
+   * Read the last cached price for an asset without triggering a fresh fetch.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @param {string} [baseAsset='XLM'] - Quote asset, "XLM" or "CODE:ISSUER"
+   * @returns {number|null} Cached price, or null if nothing is cached (regardless of TTL)
    */
   getAssetPrice(code, issuer, baseAsset = 'XLM') {
     const key = `${code}:${issuer}:${baseAsset}`;
@@ -197,7 +240,10 @@ class AssetRegistryService {
   }
 
   /**
-   * Remove asset from registry
+   * Remove an asset from the registry.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @returns {boolean} True if the asset was present and removed
    */
   removeAsset(code, issuer) {
     const key = `${code}:${issuer}`;
@@ -205,7 +251,9 @@ class AssetRegistryService {
   }
 
   /**
-   * Search assets
+   * Search registered assets by code, name, or issuer (case-insensitive substring match).
+   * @param {string} query - Search term
+   * @returns {object[]} Matching asset records
    */
   searchAssets(query) {
     const lowerQuery = query.toLowerCase();

@@ -13,6 +13,7 @@ import feeHistoryRouter from './fee-history.js';
 import federationRouter from './federation.js';
 import contractRouter from './contract.js';
 import poolOperationsRouter from './pool-operations.js';
+import sep31Router from './sep31.js';
 import { getNetworkStatusWithFeeSurge } from '../../services/stellar.js';
 import logger from '../../config/logger.js';
 
@@ -35,6 +36,7 @@ router.use('/offers', offersRouter);
 router.use('/fee-history', feeHistoryRouter);
 router.use('/federation', federationRouter);
 router.use('/contract', contractRouter);
+router.use('/sep31', sep31Router);
 
 // GET /api/stellar/network-status — fee surge indicator
 router.get('/network-status', async (req, res) => {

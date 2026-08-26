@@ -545,9 +545,7 @@ router.get('/csrf-token', csrfTokenEndpoint);
 router.post('/mfa/setup', requireAuth, async (req, res) => {
   try {
     const { secret, qrCode } = mfaManager.generateSecret(req.user.sub);
-    const backupCodes = mfaManager.enableMFA(req.user.sub, secret);
-    const encryptionKey = getConfig().security.mfaEncryptionKey || 'default-key';
-    mfaManager.encryptSecret(secret, encryptionKey);
+    const backupCodes = await mfaManager.enableMFA(req.user.sub, secret);
     res.json({
       secret,
       qrCode,
@@ -584,7 +582,7 @@ router.post('/mfa/setup', requireAuth, async (req, res) => {
  *       403:
  *         description: Invalid MFA token
  */
-router.post('/mfa/verify', requireAuth, (req, res) => {
+router.post('/mfa/verify', requireAuth, async (req, res) => {
   const { token } = req.body;
 
   if (!token) {
@@ -592,12 +590,12 @@ router.post('/mfa/verify', requireAuth, (req, res) => {
   }
 
   try {
-    const mfa = mfaManager.userMFA.get(req.user.sub);
-    if (!mfa) {
+    const mfaSecret = await mfaManager.getMFASecret(req.user.sub);
+    if (!mfaSecret) {
       return res.status(400).json({ error: 'MFA setup not initiated' });
     }
 
-    mfaManager.verifyTOTP(req.user.sub, token, mfa.secret);
+    await mfaManager.verifyTOTP(req.user.sub, token, mfaSecret);
 
     // In production, mark MFA as verified in database
     res.json({ message: 'MFA enabled successfully' });
@@ -671,7 +669,7 @@ router.get('/csrf-token', csrfTokenEndpoint);
 router.post('/mfa/setup', requireAuth, async (req, res) => {
   try {
     const { secret, qrCode } = mfaManager.generateSecret(req.user.sub);
-    const backupCodes = mfaManager.enableMFA(req.user.sub, secret);
+    const backupCodes = await mfaManager.enableMFA(req.user.sub, secret);
     res.json({
       secret,
       qrCode,
@@ -683,14 +681,14 @@ router.post('/mfa/setup', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/mfa/verify', requireAuth, (req, res) => {
+router.post('/mfa/verify', requireAuth, async (req, res) => {
   const { token } = req.body;
   if (!token) return sendError(res, 400, ErrorCodes.VALIDATION_MISSING_FIELD, 'Token required');
   try {
-    const mfa = mfaManager.userMFA.get(req.user.sub);
-    if (!mfa)
+    const mfaSecret = await mfaManager.getMFASecret(req.user.sub);
+    if (!mfaSecret)
       return sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'MFA setup not initiated');
-    mfaManager.verifyTOTP(req.user.sub, token, mfa.secret);
+    await mfaManager.verifyTOTP(req.user.sub, token, mfaSecret);
     res.json({ message: 'MFA enabled successfully' });
   } catch (error) {
     sendError(res, 403, ErrorCodes.FORBIDDEN, error.message);
