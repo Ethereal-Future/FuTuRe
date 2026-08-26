@@ -1,13 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
-// Mutation testing config for both frontend utilities and backend services
-// Avoids JSX files (App.jsx) and uses Node environment for backend services
+// Backend-focused mutation config — runs backend service tests with Node environment and ESM support
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
     include: [
-      'frontend/tests/utils.test.js',
       'backend/src/services/**/*.test.js',
       'backend/tests/**/*.test.js',
     ],
