@@ -67,6 +67,8 @@ jobs:
 
       - name: Post tfsec results as PR comment
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          HEAD_REF: ${{ github.head_ref }}
         with:
           script: |
             const fs = require('fs');
@@ -91,7 +93,7 @@ jobs:
               '',
               'Suppress a justified finding by adding it to `.tfsec.yml` at the repo root — see that file for the required format.',
               '',
-              `> Triggered by @${{ github.actor }} on \`${{ github.head_ref }}\``,
+              `> Triggered by @${{ github.actor }} on \`${process.env.HEAD_REF}\``,
             ].join('\n');
 
             const { data: comments } = await github.rest.issues.listComments({
