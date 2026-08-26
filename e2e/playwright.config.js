@@ -38,18 +38,44 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
     },
+    // Mobile Chrome (Android) — Pixel 5 profile
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
     },
+    // Mobile Safari (iOS) — iPhone 12 profile
     {
       name: 'mobile-safari',
-      use: { ...devices['iPhone 12'] },
+      use: {
+        ...devices['iPhone 12'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
+    },
+    // iPad (iOS tablet)
+    {
+      name: 'mobile-safari-ipad',
+      use: {
+        ...devices['iPad Pro'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
     },
     {
       name: 'visual-regression',
       use: { ...devices['Desktop Chrome'] },
       grep: /@visual/,
+      snapshotPathTemplate: '{testDir}/visual-baselines/{testFileDir}/{testFileName}-{platform}{ext}',
+      expect: {
+        toHaveScreenshot: {
+          threshold: 0.2,
+          maxDiffPixels: 100,
+        },
+      },
     },
   ],
 

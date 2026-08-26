@@ -41,12 +41,106 @@ jobs:
         id: validate
         run: terraform validate -no-color
 
+      - name: Install tfsec
+        run: |
+          curl -sL https://github.com/aquasecurity/tfsec/releases/download/v1.28.14/tfsec-linux-amd64 -o /usr/local/bin/tfsec
+          echo "a32d0799bbefababaa4fcd814da9f4d251cd932789590b99d1d5fcb89ace6f68  /usr/local/bin/tfsec" | sha256sum -c -
+          chmod +x /usr/local/bin/tfsec
+
+      - name: tfsec static analysis (report)
+        id: tfsec
+        run: |
+          tfsec . \
+            --config-file ../.tfsec.yml \
+            --no-color \
+            2>&1 | tee /tmp/tfsec_output.txt
+        continue-on-error: true
+
+      - name: tfsec static analysis (HIGH/CRITICAL gate)
+        id: tfsec-gate
+        run: |
+          tfsec . \
+            --config-file ../.tfsec.yml \
+            --minimum-severity HIGH \
+            --no-color
+        continue-on-error: true
+
+      - name: Post tfsec results as PR comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+        with:
+          script: |
+            const fs = require('fs');
+            const scanOutput = fs.readFileSync('/tmp/tfsec_output.txt', 'utf8');
+            const truncated = scanOutput.length > 60000
+              ? scanOutput.slice(0, 60000) + '\n\n...(truncated — see full logs)'
+              : scanOutput;
+
+            const gateOutcome = '${{ steps.tfsec-gate.outcome }}';
+            const icon = gateOutcome === 'success' ? '✅' : '❌';
+
+            const body = [
+              `## ${icon} Terraform Static Analysis (tfsec) — ${gateOutcome === 'success' ? 'no HIGH/CRITICAL findings' : 'HIGH/CRITICAL findings detected'}`,
+              '',
+              '<details><summary>Show tfsec Report</summary>',
+              '',
+              '```',
+              truncated,
+              '```',
+              '',
+              '</details>',
+              '',
+              'Suppress a justified finding by adding it to `.tfsec.yml` at the repo root — see that file for the required format.',
+              '',
+              `> Triggered by @${{ github.actor }} on \`${process.env.HEAD_REF}\``,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            const existing = comments.find(c =>
+              c.user.login === 'github-actions[bot]' && c.body.includes('Terraform Static Analysis (tfsec)')
+            );
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
+
+      - name: Fail if tfsec found HIGH/CRITICAL issues
+        if: steps.tfsec-gate.outcome == 'failure'
+        run: exit 1
+      - name: Select environment tfvars
+        id: env
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "var_file=environments/production.tfvars" >> "$GITHUB_OUTPUT"
+          else
+            echo "var_file=environments/staging.tfvars" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform Plan
         id: plan
         run: |
           terraform plan \
             -no-color \
             -input=false \
+            -var-file="${{ steps.env.outputs.var_file }}" \
             -var="backend_image=ghcr.io/${{ github.repository }}/backend:plan-stub" \
             -var="frontend_image=ghcr.io/${{ github.repository }}/frontend:plan-stub" \
             2>&1 | tee /tmp/plan_output.txt

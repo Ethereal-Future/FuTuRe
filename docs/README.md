@@ -26,3 +26,17 @@ This directory contains guides and reference documentation for the FuTuRe platfo
 ## Architecture Decision Records
 
 Architecture decisions are recorded in [`docs/adr/`](adr/).
+
+## Historical Implementation Notes
+
+Point-in-time write-ups of past implementation work, kept for reference. These are not maintained going forward and may describe code that has since changed — see [`docs/history/`](history/) for the full list:
+
+| Document                                                                                       | Description                                                    |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------- |
+| [Backend Auth Implementation Analysis](history/BACKEND_AUTH_IMPLEMENTATION_ANALYSIS.md)         | Status audit of the username/password backend auth implementation |
+| [Contract & Snapshot Test Summary](history/CONTRACT_SNAPSHOT_SUMMARY.md)                        | Issue #481 — consumer/provider contract test additions          |
+| [Security Hardening Notes](history/IMPLEMENTATION_NOTES.md)                                    | Issues #439–442 — startup secret validation and related hardening |
+| [XLM Info Tooltip Summary](history/IMPLEMENTATION_SUMMARY.md)                                  | Accessible tooltip component for XLM balance labels              |
+| [Implementation Summary: Issues #447–450](history/IMPLEMENTATION_SUMMARY_447-450.md)             | Security and backend fixes batch                                  |
+| [Implementation Summary: Issues #559–562](history/IMPLEMENTATION_SUMMARY_559-562.md)             | Stellar account label persistence batch                          |
+| [React Query Migration](history/REACT_QUERY_IMPLEMENTATION_COMPLETE.md)                        | Migration of frontend server state to `@tanstack/react-query`    |

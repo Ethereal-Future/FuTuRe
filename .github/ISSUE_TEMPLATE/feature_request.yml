@@ -1,0 +1,50 @@
+name: Feature Request
+description: Propose a new feature or enhancement, following the project's Background/Problem/Proposed Solution structure
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Proposals in this repo generally follow a Background → Problem → Proposed Solution shape. Filling in these fields makes it easy to expand your issue into a full write-up later.
+
+  - type: textarea
+    id: background
+    attributes:
+      label: Background
+      description: Context a reader needs before the problem makes sense — what exists today, and where.
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is wrong, missing, or painful about the current behavior?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: Your suggested approach. Implementation steps and acceptance criteria are welcome but not required at this stage.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Any other approaches you considered and why you didn't go with them.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Checklist
+      options:
+        - label: I have searched existing issues to make sure this is not a duplicate
+          required: true

@@ -35,8 +35,25 @@ jobs:
       - name: Run mutation tests
         run: npm run test:mutation
 
+      - name: Configure git for history update
+        run: |
+          git config --local user.email "ci@etherealfuture.dev"
+          git config --local user.name "FuTuRe CI"
+
       - name: Track score & detect regressions
         run: npm run test:mutation:track
+
+      - name: Commit mutation history if updated
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        run: |
+          if git diff --quiet mutation-reports/history.json; then
+            echo "No changes to history.json"
+          else
+            git add mutation-reports/history.json
+            git commit -m "ci(mutation): update history.json with latest score"
+            git push
+          fi
+        continue-on-error: true
 
       - name: Upload mutation report
         if: always()

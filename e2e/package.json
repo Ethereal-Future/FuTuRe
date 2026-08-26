@@ -10,6 +10,7 @@
     "test:report": "playwright show-report",
     "test:visual": "playwright test --grep @visual",
     "test:workflow": "playwright test --grep @workflow",
+    "test:pagination": "playwright test --grep @pagination",
     "test:security": "playwright test --grep @security"
   },
   "devDependencies": {

@@ -1,0 +1,50 @@
+# .tfsec.yml — tfsec suppression file for infra/*.tf (issue #1000)
+#
+# Each entry below MUST include a justification comment explaining:
+#   1. Why the finding is suppressed (a real architectural reason, not "noise").
+#   2. The date the decision was made.
+#   3. A tracking issue for revisiting it, where applicable.
+#
+# Findings NOT listed here are expected to be fixed, not suppressed. Only
+# HIGH/CRITICAL findings block CI (see .github/workflows/terraform-plan.yml);
+# MEDIUM/LOW findings are still reported in the PR comment for visibility but
+# do not fail the build.
+#
+# To add a suppression: add the rule's long ID (see `tfsec --format json` or
+# https://aquasecurity.github.io/tfsec/latest/checks/) under `exclude` below,
+# with a dated justification comment directly above it.
+
+exclude:
+  # aws_security_group.alb ingress on 80/443 from 0.0.0.0/0 (infra/vpc.tf).
+  # FuTuRe's ALB is intentionally internet-facing — it's the public entry
+  # point for the remittance API. Traffic is redirected to HTTPS at the
+  # listener. Suppressed 2026-08-26.
+  - aws-ec2-no-public-ingress-sgr
+
+  # aws_security_group.alb / aws_security_group.ecs_tasks egress to
+  # 0.0.0.0/0 (infra/vpc.tf). Both the ALB and ECS tasks need general
+  # outbound internet access (Stellar Horizon API, AWS service endpoints,
+  # package registries) via the NAT gateways in infra/vpc.tf; there is no
+  # fixed set of destination CIDRs to scope this to. Suppressed 2026-08-26.
+  - aws-ec2-no-public-egress-sgr
+
+  # aws_lb.main is internet-facing by design — see aws-ec2-no-public-ingress-sgr
+  # above. Suppressed 2026-08-26.
+  - aws-elb-alb-not-public
+
+  # aws_elasticache_replication_group.redis (infra/elasticache.tf) does not
+  # yet enable transit_encryption_enabled. The ECS task definition
+  # (infra/ecs.tf) does not currently wire a REDIS_URL/TLS configuration
+  # into the backend container, so flipping this on here would have no
+  # effect without a corresponding application-level change (ioredis TLS via
+  # a rediss:// URL). Tracked as a follow-up; at-rest encryption (a
+  # transparent, client-side-no-op change) is already enabled. Suppressed
+  # 2026-08-26.
+  - aws-elasticache-enable-in-transit-encryption
+
+  # aws_db_instance.postgres (infra/rds.tf) has Performance Insights enabled
+  # without an explicit customer-managed KMS key. AWS encrypts Performance
+  # Insights data with an AWS-managed key by default, so data is already
+  # encrypted at rest; provisioning and managing a dedicated CMK for this is
+  # tracked as a separate hardening item. Suppressed 2026-08-26.
+  - aws-rds-enable-performance-insights-encryption

@@ -116,11 +116,32 @@ function verifyWebhookSignature(rawBody, signatureHeader, secret) {
 
 ---
 
+## Multi-Factor Authentication (MFA)
+
+High-value operations (e.g. large payments) can require TOTP-based two-factor authentication via `requireMFA` / `optionalMFA` middleware (`backend/src/middleware/mfa.js`).
+
+- TOTP secrets are encrypted at rest (AES-256-GCM) before storage — never persist a raw TOTP secret.
+- Verification uses 30-second time windows with a ±2 window tolerance to absorb client clock drift.
+- Backup codes are single-use; treat them with the same handling as passwords (hash, never log).
+- Set up via `POST /api/auth/mfa/setup` and verify via `POST /api/auth/mfa/verify`.
+
+---
+
+## OAuth2 / Social Login
+
+The platform supports Google OAuth2 (`backend/src/security/oauth2.js`) using the standard authorization code flow: redirect to consent via `GET /api/auth/oauth/google`, exchange the code on `GET /api/auth/oauth/google/callback`, then issue platform JWTs.
+
+- Always validate the OAuth `state` parameter to prevent CSRF on the login flow.
+- Authorization codes are single-use and short-lived (10 minutes) — do not cache or retry them.
+- The client secret (`GOOGLE_CLIENT_SECRET`) must never be exposed to the frontend; token exchange happens server-side only.
+
+---
+
 ## Private Key Management
 
 The platform generates Stellar keypairs on behalf of users. Integrators that handle keys directly must follow these rules.
 
-- **Never log or store raw secret keys.** Use the encrypted-secret format (`ENC(<base64>)`) provided by `backend/src/config/secrets.js`.
+- **Never log or store raw secret keys.** Use the encrypted-secret format (`ENC(<base64>)`) provided by `backend/src/config/secrets.js`. Log output is passed through `backend/src/utils/sanitizeLogData.js`, which recursively redacts any field matching `/secret|private|password|token|key/i` before it reaches Winston — but this is a safety net, not a substitute for keeping secrets out of logged objects in the first place.
 - Keep the `CONFIG_ENCRYPTION_KEY` / `STREAM_SECRET_ENCRYPTION_KEY` out of application code; inject them at runtime.
 - Prefer non-custodial flows where the private key never leaves the user's browser. If you must hold keys server-side, encrypt them at rest with AES-256-GCM and a per-user derived key.
 - Never use real Stellar mainnet keys in development or CI environments. The testnet is reset periodically; treat any testnet key as disposable.
