@@ -7,7 +7,47 @@ on:
     branches: [main, master]
 
 jobs:
-  e2e-payment-flow:
+  e2e-workflow-tests:
+    name: E2E Workflow Tests (Desktop - Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install e2e dependencies
+        run: npm install
+        working-directory: ./e2e
+
+      - name: Install Playwright browsers (Chromium)
+        run: npx playwright install --with-deps chromium
+        working-directory: ./e2e
+
+      - name: Run workflow-tagged tests on Chromium
+        run: npx playwright test --grep "@workflow" --project=chromium
+        working-directory: ./e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-chromium
+          path: e2e/test-reports/
+          retention-days: 14
+
+  e2e-pagination-tests:
+    name: E2E Pagination Tests (Chromium)
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -27,12 +67,12 @@ jobs:
         run: npm install
         working-directory: ./e2e
 
-      - name: Install Playwright browsers
+      - name: Install Playwright browsers (Chromium)
         run: npx playwright install --with-deps chromium
         working-directory: ./e2e
 
-      - name: Run Stellar testnet payment flow tests
-        run: npx playwright test --grep "@workflow" --project=chromium
+      - name: Run pagination tests on Chromium
+        run: npx playwright test --grep "@pagination" --project=chromium
         working-directory: ./e2e
         env:
           CI: true
@@ -41,6 +81,100 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: playwright-report
+          name: playwright-report-pagination
           path: e2e/test-reports/
           retention-days: 14
+
+  e2e-cross-browser:
+    name: E2E Cross-Browser Tests (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      matrix:
+        browser: [firefox, webkit, mobile-chrome, mobile-safari]
+      fail-fast: false
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install e2e dependencies
+        run: npm install
+        working-directory: ./e2e
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+        working-directory: ./e2e
+
+      - name: Run workflow tests on ${{ matrix.browser }}
+        run: npx playwright test --grep "@workflow" --project=${{ matrix.browser }}
+        working-directory: ./e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: e2e/test-reports/
+          retention-days: 14
+
+  e2e-visual-regression:
+    name: Visual Regression Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Use Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.3.0
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install root dependencies
+        run: npm install
+
+      - name: Install e2e dependencies
+        run: npm install
+        working-directory: ./e2e
+
+      - name: Install Playwright browsers (Chromium for visual tests)
+        run: npx playwright install --with-deps chromium
+        working-directory: ./e2e
+
+      - name: Run visual regression tests
+        run: npx playwright test --project=visual-regression
+        working-directory: ./e2e
+        env:
+          CI: true
+
+      - name: Upload visual baseline screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-baselines
+          path: e2e/test-reports/
+          retention-days: 30
+
+      - name: Comment PR on visual diff failure
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Visual regression detected.** Download the `visual-baselines` artifact to review changes. Approve the new baseline if the change is intentional.'
+            })
