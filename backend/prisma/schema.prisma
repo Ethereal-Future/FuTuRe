@@ -387,3 +387,26 @@ model WebhookDelivery {
   @@index([accountId, createdAt])
   @@index([status, nextAttemptAt])
 }
+
+// Tracks a SEP-0031 cross-border direct payment handed off to a receiving
+// anchor. One row per transaction created via POST /transactions against an
+// anchor's DIRECT_PAYMENT_SERVER; status is refreshed by polling
+// GET /transactions/:id. See issue #955.
+model Sep31Transaction {
+  id                String   @id @default(uuid())
+  anchorUrl         String
+  externalId        String
+  status            String   @default("pending_sender")
+  amount            String
+  assetCode         String?
+  senderPublicKey   String?
+  receiverPublicKey String?
+  stellarAccountId  String?
+  stellarMemo       String?
+  stellarMemoType   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([anchorUrl, externalId])
+  @@index([status])
+}
