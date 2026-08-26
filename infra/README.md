@@ -23,7 +23,7 @@ Postgres   Redis
 | Network        | VPC + subnets       | 3 AZs, public + private tiers             |
 | Compute        | ECS Fargate         | No EC2 to manage; scales per task         |
 | Database       | RDS PostgreSQL 16   | Multi-AZ in production, gp3 encrypted     |
-| Cache          | ElastiCache Redis 7 | Single node (cluster mode off by default) |
+| Cache          | ElastiCache Redis 7 | Replication group, Multi-AZ automatic failover |
 | Load Balancer  | ALB                 | HTTP → HTTPS redirect; `/health` checks   |
 | Secrets        | Secrets Manager     | No secrets in Terraform state or source   |
 
@@ -135,6 +135,40 @@ terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3"
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
 
+## Redis Multi-AZ Cutover Runbook
+
+`infra/elasticache.tf` provisions Redis as an `aws_elasticache_replication_group`
+with `automatic_failover_enabled = true` and `multi_az_enabled = true`. This
+resource type replaced the earlier single-node `aws_elasticache_cluster`, which
+does not support Multi-AZ failover. Redis backs balance/exchange-rate caching
+and rate limiting, so plan the cutover as a maintenance-window operation:
+
+1. **Review the plan carefully.** Terraform cannot upgrade an
+   `aws_elasticache_cluster` in place to an `aws_elasticache_replication_group`
+   — `terraform plan` will show the old cluster being destroyed and a new
+   replication group being created. Confirm this is expected before applying.
+2. **Schedule a maintenance window.** The cutover causes a Redis data-plane
+   outage (cache clear + reconnect); the application must tolerate a cold
+   cache (rate-limit counters reset, cached balances/rates re-fetch). Announce
+   the window and expect a brief spike in origin/backend load as caches
+   repopulate.
+3. **Apply.** Run `terraform apply` (via `terraform-apply.yml` or manually per
+   above). The old cluster is destroyed and the new replication group created;
+   `redis_primary_endpoint` and `redis_reader_endpoint` (see Outputs below)
+   will have new values.
+4. **Update the backend's `REDIS_URL`** (or equivalent secret/config) to point
+   at the new `redis_primary_endpoint`, then force a new ECS deployment:
+   ```bash
+   aws ecs update-service \
+     --cluster future-production-cluster \
+     --service future-production-backend \
+     --force-new-deployment
+   ```
+5. **Verify failover.** In staging, trigger a manual failover
+   (`aws elasticache test-failover --replication-group-id future-staging-redis
+   --node-group-id <shard-id>`) and confirm the application reconnects with
+   minimal downtime before relying on this in production.
+
 ## Secrets Policy
 
 **No secret values are ever stored in Terraform configuration, `.tfvars` files, or source control.**
@@ -175,4 +209,4 @@ The `.github/workflows/terraform-plan.yml` workflow automatically runs `terrafor
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
 | `db_backup_retention_days`| `7`               | RDS automated backup retention       |
 | `redis_node_type`         | `cache.t4g.small` | ElastiCache node type                |
-| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
+| `redis_num_cache_nodes`   | `2`               | Cache clusters (primary + replicas) in the Redis replication group; must be >= 2 for Multi-AZ failover |
