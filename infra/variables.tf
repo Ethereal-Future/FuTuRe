@@ -42,9 +42,10 @@ variable "backend_image" {
   type        = string
 }
 
-variable "frontend_image" {
-  description = "Full Docker image URI for the frontend service."
+variable "frontend_bucket_name" {
+  description = "Name for the S3 bucket hosting the frontend static assets."
   type        = string
+  default     = "future-app-frontend"
 }
 
 variable "backend_cpu" {
