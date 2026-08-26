@@ -190,6 +190,21 @@ aws ecs update-service \
 
 The `.github/workflows/terraform-plan.yml` workflow automatically runs `terraform plan` on every pull request that touches files in `infra/`. The plan output is posted as a PR comment for review before merging.
 
+### Static Analysis (tfsec)
+
+The same workflow also runs [tfsec](https://aquasecurity.github.io/tfsec/) against `infra/` on every PR. Findings are posted as a PR comment, and the job **fails on any HIGH or CRITICAL finding** — MEDIUM/LOW findings are reported but do not block the merge.
+
+To add a suppression for a finding you've determined is a justified, by-design exception (not a bug to fix):
+
+1. Identify the rule's long ID from the tfsec output or PR comment (e.g. `aws-ec2-no-public-ingress-sgr`).
+2. Add it to the `exclude` list in `.tfsec.yml` at the repo root, with a comment directly above it explaining:
+   - **why** the finding doesn't apply or is an accepted risk,
+   - the **date** of the decision, and
+   - a **tracking issue**, if the underlying risk should eventually be addressed.
+3. Get the suppression approved in code review — a suppression is a security decision, not just a CI workaround.
+
+Prefer fixing the underlying misconfiguration over suppressing it whenever the fix is safe and low-risk (e.g. enabling encryption, dropping invalid headers). Only suppress findings that reflect an intentional architectural choice (e.g. a public-facing load balancer) or that require a larger, separately-tracked change.
+
 ## Variable Reference
 
 | Variable                  | Default           | Description                          |

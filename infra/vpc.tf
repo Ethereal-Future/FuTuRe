@@ -17,11 +17,14 @@ resource "aws_vpc" "main" {
 # ── Subnets ───────────────────────────────────────────────────────────────────
 
 resource "aws_subnet" "public" {
-  count                   = length(var.availability_zones)
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = local.public_cidrs[count.index]
-  availability_zone       = var.availability_zones[count.index]
-  map_public_ip_on_launch = true
+  count             = length(var.availability_zones)
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = local.public_cidrs[count.index]
+  availability_zone = var.availability_zones[count.index]
+  # No EC2 instances are launched directly into this subnet — the ALB gets its
+  # public IPs from AWS regardless of this setting, and NAT gateways use
+  # explicit EIPs — so auto-assigning public IPs here is unnecessary exposure.
+  map_public_ip_on_launch = false
 
   tags = { Name = "${local.name_prefix}-public-${count.index + 1}" }
 }
