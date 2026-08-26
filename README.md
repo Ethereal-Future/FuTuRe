@@ -142,6 +142,8 @@ The app calls Friendbot automatically when you click **Create Account** in the U
 
 Set `STELLAR_NETWORK=testnet` (the default) in `backend/.env` for local development. Change to `mainnet` only for production deployments.
 
+Hitting a Horizon error while testing payments (`tx_bad_seq`, `op_underfunded`, `op_no_trust`, etc.)? See [docs/guides/stellar-errors.md](docs/guides/stellar-errors.md) for what each one means and how to fix it.
+
 ## Next Steps
 
 - Add stablecoin support (USDC)
@@ -158,12 +160,17 @@ See [docs/architecture.md](docs/architecture.md) for the full system diagram, co
 ## Guides
 
 - [Security best practices for integrators](docs/guides/security.md) — API key storage, webhook verification, private key management, CSP, replay attacks, front-running
+- [Stellar / Horizon error reference](docs/guides/stellar-errors.md) — common error codes (sequence numbers, minimum reserve, trustlines) and how to fix them
+- [Dependency upgrade guide](docs/guides/dependency-upgrades.md) — checklists for upgrading `@stellar/stellar-sdk`, Prisma, and React/Vite
 - [Operational Runbook](docs/runbook.md) — Server restart, DB migration rollback, stream cancellation, IP unblock, incident response
 - [Incident Runbooks](docs/runbooks/README.md) — Horizon outage, DB failover, JWT secret rotation, stuck transaction recovery
+- [scripts/README.md](scripts/README.md) — what each script in `scripts/` does and when to run it
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for local setup, running tests, branch naming, PR process, code style, and commit message conventions.
+
+Found a security vulnerability? See [SECURITY.md](SECURITY.md) for how to report it privately.
 
 ## Architecture Decision Records
 
