@@ -1,5 +1,4 @@
 import helmet from 'helmet';
-import csrf from 'csurf';
 import crypto from 'crypto';
 import { getConfig } from '../config/env.js';
 import logger from '../config/logger.js';
@@ -117,44 +116,6 @@ export function helmetMiddleware() {
   });
 }
 
-/**
- * CSRF protection middleware
- */
-export function csrfMiddleware() {
-  const config = getConfig();
-  const isProduction = config.meta.appEnv === 'production';
-
-  return csrf({
-    cookie: {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: 'strict',
-    },
-  });
-}
-
-/**
- * CSRF error handler
- */
-export function csrfErrorHandler(err, req, res, next) {
-  if (err.code === 'EBADCSRFTOKEN') {
-    securityLogger.warn('CSRF token validation failed', {
-      ip: req.ip,
-      path: req.path,
-      method: req.method,
-      userAgent: req.headers['user-agent'],
-    });
-
-    return res.status(403).json({
-      success: false,
-      error: {
-        code: 'CSRF_TOKEN_INVALID',
-        message: 'Invalid or missing CSRF token',
-      },
-    });
-  }
-  next(err);
-}
 
 /**
  * Request size limits middleware
@@ -344,7 +305,7 @@ export function securityAuditLogger() {
  * Combined security middleware
  */
 export function securityMiddleware() {
-  const middlewares = [
+  return [
     cspNonceMiddleware(), // must run before helmetMiddleware to populate res.locals.cspNonce
     helmetMiddleware(),
     securityHeaders(),
@@ -352,22 +313,11 @@ export function securityMiddleware() {
     ipFilterMiddleware(),
     securityAuditLogger(),
   ];
-
-  // Add CSRF protection for non-API routes
-  const config = getConfig();
-  if (config.meta.appEnv !== 'test') {
-    middlewares.push(csrfMiddleware());
-    middlewares.push(csrfErrorHandler);
-  }
-
-  return middlewares;
 }
 
 export default {
   cspNonceMiddleware,
   helmetMiddleware,
-  csrfMiddleware,
-  csrfErrorHandler,
   requestSizeLimits,
   ipFilterMiddleware,
   getSecureCookieConfig,

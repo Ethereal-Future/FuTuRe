@@ -2,6 +2,11 @@ import axios from 'axios';
 import { getConfig } from '../config/env.js';
 import logger from '../config/logger.js';
 
+/**
+ * Payment Alerting Service.
+ * Tracks recent payment failures and Horizon health check results, and fires
+ * throttled email/Slack alerts when failure-rate or health thresholds are crossed.
+ */
 class PaymentAlertingService {
   constructor() {
     this.failureWindow = 5 * 60 * 1000; // 5-minute window
@@ -13,6 +18,13 @@ class PaymentAlertingService {
     this.lastAlertTime = {};
   }
 
+  /**
+   * Record a payment failure and trigger a HIGH_FAILURE_RATE alert if the rolling
+   * failure rate exceeds `failureThreshold`.
+   * @param {Error|string} error - The failure to record
+   * @param {object} [metadata={}] - Additional context to attach to the recorded failure
+   * @returns {void}
+   */
   recordPaymentFailure(error, metadata = {}) {
     this.recentFailures.push({
       timestamp: Date.now(),
@@ -35,12 +47,22 @@ class PaymentAlertingService {
     }
   }
 
+  /**
+   * Compute the failure rate over the current rolling window (failure count / 100).
+   * @returns {number} Failure rate as a fraction (e.g. 0.05 for 5%)
+   */
   getFailureRate() {
     const cutoffTime = Date.now() - this.failureWindow;
     const recentFailures = this.recentFailures.filter(f => f.timestamp > cutoffTime);
     return recentFailures.length > 0 ? recentFailures.length / 100 : 0;
   }
 
+  /**
+   * Ping a Horizon server's health endpoint and trigger a HORIZON_HEALTH_DEGRADED
+   * alert after `horizonFailureThreshold` consecutive failures.
+   * @param {string} horizonUrl - Base URL of the Horizon server to check
+   * @returns {Promise<boolean>} True if the health check succeeded (HTTP 200)
+   */
   async checkHorizonHealth(horizonUrl) {
     try {
       const response = await axios.get(`${horizonUrl}/health`, { timeout: 5000 });
@@ -85,6 +107,12 @@ class PaymentAlertingService {
     }
   }
 
+  /**
+   * Dispatch an alert of the given type, subject to a per-type cooldown to prevent spam.
+   * @param {string} alertType - Alert type key (e.g. "HIGH_FAILURE_RATE", "HORIZON_HEALTH_DEGRADED")
+   * @param {object} details - Alert-specific details to include in the notification
+   * @returns {void}
+   */
   triggerAlert(alertType, details) {
     const alertKey = `${alertType}`;
     const lastAlertTime = this.lastAlertTime[alertKey] || 0;
@@ -107,6 +135,11 @@ class PaymentAlertingService {
     this.sendAlert(alert);
   }
 
+  /**
+   * Fan an alert out to all configured channels (email, Slack).
+   * @param {{type: string, severity: string, timestamp: string, details: object}} alert - Alert to send
+   * @returns {Promise<void>}
+   */
   async sendAlert(alert) {
     const config = getConfig();
     const promises = [];
@@ -126,6 +159,12 @@ class PaymentAlertingService {
     }
   }
 
+  /**
+   * Send an alert via email. Currently a logging stub — wire up a real email
+   * provider before relying on this in production.
+   * @param {{type: string, timestamp: string, details: object}} alert - Alert to send
+   * @returns {Promise<void>} Never throws; failures are logged
+   */
   async sendEmailAlert(alert) {
     try {
       const config = getConfig();
@@ -145,6 +184,11 @@ class PaymentAlertingService {
     }
   }
 
+  /**
+   * Send an alert to the configured Slack webhook.
+   * @param {{type: string, timestamp: string, details: object}} alert - Alert to send
+   * @returns {Promise<void>} Never throws; failures are logged
+   */
   async sendSlackAlert(alert) {
     try {
       const config = getConfig();
@@ -176,11 +220,19 @@ class PaymentAlertingService {
     }
   }
 
+  /**
+   * Clear recorded payment failures and Horizon health check history.
+   * @returns {void}
+   */
   resetFailures() {
     this.recentFailures = [];
     this.horizonHealthChecks = [];
   }
 
+  /**
+   * Get a snapshot of current failure-rate and Horizon health statistics.
+   * @returns {{recentFailureRate: string, recentFailureCount: number, horizonConsecutiveFailures: number}} Alert stats
+   */
   getAlertStats() {
     return {
       recentFailureRate: (this.getFailureRate() * 100).toFixed(2),

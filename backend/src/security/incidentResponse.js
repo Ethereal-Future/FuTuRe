@@ -1,13 +1,7 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const INCIDENT_DIR = path.join(__dirname, '../../data/incidents');
+import prisma from '../db/client.js';
 
 class IncidentResponse {
   constructor() {
-    this.incidents = new Map();
     this.responsePlaybooks = new Map();
     this.setupDefaultPlaybooks();
   }
@@ -58,117 +52,209 @@ class IncidentResponse {
     });
   }
 
-  async initialize() {
-    await fs.mkdir(INCIDENT_DIR, { recursive: true });
-  }
-
+  /**
+   * Create a new security incident
+   * Persists to database, replacing in-memory Map and JSON files (fixes #966)
+   */
   async createIncident(type, severity, description, affectedSystems = []) {
-    await this.initialize();
-
     const incidentId = `INC-${Date.now()}`;
     const playbook = this.responsePlaybooks.get(type);
 
-    const incident = {
-      id: incidentId,
-      type,
-      severity,
-      description,
-      affectedSystems,
-      status: 'OPEN',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      playbook: playbook?.actions || [],
-      completedActions: [],
-      notes: []
-    };
-
-    this.incidents.set(incidentId, incident);
-
-    const incidentFile = path.join(INCIDENT_DIR, `${incidentId}.json`);
-    await fs.writeFile(incidentFile, JSON.stringify(incident, null, 2));
-
-    return incident;
-  }
-
-  async updateIncident(incidentId, updates) {
-    await this.initialize();
-
-    const incident = this.incidents.get(incidentId);
-    if (!incident) {
-      throw new Error('Incident not found');
-    }
-
-    Object.assign(incident, updates, { updatedAt: new Date().toISOString() });
-    this.incidents.set(incidentId, incident);
-
-    const incidentFile = path.join(INCIDENT_DIR, `${incidentId}.json`);
-    await fs.writeFile(incidentFile, JSON.stringify(incident, null, 2));
-
-    return incident;
-  }
-
-  async completeAction(incidentId, action) {
-    const incident = this.incidents.get(incidentId);
-    if (!incident) {
-      throw new Error('Incident not found');
-    }
-
-    if (!incident.completedActions.includes(action)) {
-      incident.completedActions.push(action);
-    }
-
-    if (incident.completedActions.length === incident.playbook.length) {
-      incident.status = 'RESOLVED';
-    }
-
-    return this.updateIncident(incidentId, { completedActions: incident.completedActions, status: incident.status });
-  }
-
-  async addNote(incidentId, note) {
-    const incident = this.incidents.get(incidentId);
-    if (!incident) {
-      throw new Error('Incident not found');
-    }
-
-    incident.notes.push({
-      timestamp: new Date().toISOString(),
-      content: note
+    const incident = await prisma.securityIncident.create({
+      data: {
+        incidentId,
+        type,
+        severity,
+        description,
+        affectedSystems,
+        playbook: playbook?.actions || [],
+        status: 'OPEN'
+      },
+      include: {
+        actions: true,
+        notes: true
+      }
     });
 
-    return this.updateIncident(incidentId, { notes: incident.notes });
+    return this._formatIncident(incident);
   }
 
-  async getIncident(incidentId) {
-    const incidentFile = path.join(INCIDENT_DIR, `${incidentId}.json`);
-    try {
-      const content = await fs.readFile(incidentFile, 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    }
-  }
-
-  async getOpenIncidents() {
-    await this.initialize();
-
-    try {
-      const files = await fs.readdir(INCIDENT_DIR);
-      const incidents = [];
-
-      for (const file of files) {
-        const content = await fs.readFile(path.join(INCIDENT_DIR, file), 'utf-8');
-        const incident = JSON.parse(content);
-        if (incident.status === 'OPEN') {
-          incidents.push(incident);
-        }
+  /**
+   * Update an existing incident
+   * Reads from and writes to database (fixes #966)
+   */
+  async updateIncident(incidentId, updates) {
+    const incident = await prisma.securityIncident.findUnique({
+      where: { incidentId },
+      include: {
+        actions: true,
+        notes: true
       }
+    });
 
-      return incidents.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    if (!incident) {
+      throw new Error('Incident not found');
+    }
+
+    const updated = await prisma.securityIncident.update({
+      where: { incidentId },
+      data: {
+        ...updates,
+        updatedAt: new Date()
+      },
+      include: {
+        actions: true,
+        notes: true
+      }
+    });
+
+    return this._formatIncident(updated);
+  }
+
+  /**
+   * Mark an action as complete for an incident
+   */
+  async completeAction(incidentId, action) {
+    const incident = await prisma.securityIncident.findUnique({
+      where: { incidentId },
+      include: {
+        actions: true
+      }
+    });
+
+    if (!incident) {
+      throw new Error('Incident not found');
+    }
+
+    // Check if action already completed
+    const existingAction = incident.actions.find(a => a.action === action);
+    if (!existingAction) {
+      await prisma.incidentAction.create({
+        data: {
+          incidentId: incident.id,
+          action
+        }
+      });
+    }
+
+    // Check if all playbook actions are completed
+    const completedActions = await prisma.incidentAction.findMany({
+      where: { incidentId: incident.id }
+    });
+
+    const allActionsCompleted = incident.playbook.length > 0 && 
+      completedActions.length === incident.playbook.length;
+
+    if (allActionsCompleted && incident.status === 'OPEN') {
+      await prisma.securityIncident.update({
+        where: { incidentId },
+        data: { status: 'RESOLVED' }
+      });
+    }
+
+    return this.getIncident(incidentId);
+  }
+
+  /**
+   * Add a note to an incident
+   */
+  async addNote(incidentId, content) {
+    const incident = await prisma.securityIncident.findUnique({
+      where: { incidentId }
+    });
+
+    if (!incident) {
+      throw new Error('Incident not found');
+    }
+
+    await prisma.incidentNote.create({
+      data: {
+        incidentId: incident.id,
+        content
+      }
+    });
+
+    return this.getIncident(incidentId);
+  }
+
+  /**
+   * Get a specific incident by ID
+   * Reads from database (fixes #966)
+   */
+  async getIncident(incidentId) {
+    const incident = await prisma.securityIncident.findUnique({
+      where: { incidentId },
+      include: {
+        actions: true,
+        notes: true
+      }
+    });
+
+    if (!incident) {
+      return null;
+    }
+
+    return this._formatIncident(incident);
+  }
+
+  /**
+   * Get all open incidents
+   * Reads from database (fixes #966)
+   */
+  async getOpenIncidents() {
+    try {
+      const incidents = await prisma.securityIncident.findMany({
+        where: { status: 'OPEN' },
+        include: {
+          actions: true,
+          notes: true
+        },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      return incidents.map(incident => this._formatIncident(incident));
     } catch (error) {
       console.error('Failed to get incidents:', error);
       return [];
     }
+  }
+
+  /**
+   * Get incidents by status
+   */
+  async getIncidentsByStatus(status) {
+    const incidents = await prisma.securityIncident.findMany({
+      where: { status },
+      include: {
+        actions: true,
+        notes: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    return incidents.map(incident => this._formatIncident(incident));
+  }
+
+  /**
+   * Format incident for backward compatibility with previous API
+   */
+  _formatIncident(incident) {
+    return {
+      id: incident.incidentId,
+      type: incident.type,
+      severity: incident.severity,
+      description: incident.description,
+      affectedSystems: incident.affectedSystems,
+      status: incident.status,
+      createdAt: incident.createdAt.toISOString(),
+      updatedAt: incident.updatedAt.toISOString(),
+      playbook: incident.playbook,
+      completedActions: incident.actions?.map(a => a.action) || [],
+      notes: incident.notes?.map(n => ({
+        timestamp: n.timestamp.toISOString(),
+        content: n.content
+      })) || []
+    };
   }
 }
 

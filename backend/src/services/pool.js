@@ -6,6 +6,16 @@ const BASE_FEE = '100'; // in stroops (0.01 XLM)
 const MINIMUM_DEPOSIT = '1'; // minimum deposit in native units
 const MINIMUM_WITHDRAW = '1'; // minimum shares to withdraw
 
+/**
+ * Estimate the fee and shares received for depositing into a Stellar liquidity pool,
+ * without submitting a transaction.
+ * @param {string} poolId - Liquidity pool id
+ * @param {number|string} amountA - Amount of the pool's first asset to deposit
+ * @param {number|string} amountB - Amount of the pool's second asset to deposit
+ * @param {number|string} slippageTolerance - Allowed slippage as a percentage (e.g. 1 for 1%)
+ * @returns {Promise<{baseFee: string, networkFee: string, sharesReceived: string, ratioShiftPct: number, minimumSharesWithSlippage: string}>} Deposit estimate
+ * @throws {Error} If required parameters are missing or the pool cannot be found
+ */
 export async function estimateDepositFees(poolId, amountA, amountB, slippageTolerance) {
   try {
     if (!poolId || !amountA || !amountB) {
@@ -57,6 +67,15 @@ export async function estimateDepositFees(poolId, amountA, amountB, slippageTole
   }
 }
 
+/**
+ * Estimate the fee and asset amounts received for withdrawing shares from a
+ * Stellar liquidity pool, without submitting a transaction.
+ * @param {string} poolId - Liquidity pool id
+ * @param {number|string} shares - Number of pool shares to redeem
+ * @param {number|string} slippageTolerance - Allowed slippage as a percentage (e.g. 1 for 1%)
+ * @returns {Promise<{baseFee: string, networkFee: string, amountA: string, amountB: string, ratioShiftPct: number, minimumAmountAWithSlippage: string, minimumAmountBWithSlippage: string}>} Withdrawal estimate
+ * @throws {Error} If required parameters are missing or the pool cannot be found
+ */
 export async function estimateWithdrawFees(poolId, shares, slippageTolerance) {
   try {
     if (!poolId || !shares) {
@@ -103,6 +122,16 @@ export async function estimateWithdrawFees(poolId, shares, slippageTolerance) {
   }
 }
 
+/**
+ * Submit a `liquidityPoolDeposit` operation to add liquidity to a Stellar liquidity pool.
+ * @param {string} sourceSecret - Secret key of the depositing account
+ * @param {string} poolId - Liquidity pool id
+ * @param {number|string} amountA - Max amount of the pool's first asset to deposit
+ * @param {number|string} amountB - Max amount of the pool's second asset to deposit
+ * @param {number|string} slippageTolerance - Allowed slippage as a percentage (e.g. 1 for 1%)
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, sharesReceived: string}>} Submission result
+ * @throws {Error} If required parameters are missing or Horizon submission fails
+ */
 export async function executeDeposit(sourceSecret, poolId, amountA, amountB, slippageTolerance) {
   try {
     if (!sourceSecret || !poolId || !amountA || !amountB) {
@@ -158,6 +187,15 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
   }
 }
 
+/**
+ * Submit a `liquidityPoolWithdraw` operation to remove liquidity from a Stellar liquidity pool.
+ * @param {string} sourceSecret - Secret key of the withdrawing account
+ * @param {string} poolId - Liquidity pool id
+ * @param {number|string} shares - Number of pool shares to redeem
+ * @param {number|string} slippageTolerance - Allowed slippage as a percentage (e.g. 1 for 1%)
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, amountA: string, amountB: string}>} Submission result
+ * @throws {Error} If required parameters are missing or Horizon submission fails
+ */
 export async function executeWithdraw(sourceSecret, poolId, shares, slippageTolerance) {
   try {
     if (!sourceSecret || !poolId || !shares) {

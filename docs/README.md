@@ -20,6 +20,7 @@ This directory contains guides and reference documentation for the FuTuRe platfo
 | Document                                        | Description                                                                                                  |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | [Runbook](runbook.md)                           | Day-to-day operational procedures — server restart, DB migration rollback, incident response, backup restore |
+| [Incident Runbooks](runbooks/README.md)         | Step-by-step responses for Horizon outages, DB failover, JWT secret rotation, and stuck transaction recovery |
 | [TypeScript Migration](typescript-migration.md) | Plan and conventions for the incremental JS → TS migration                                                   |
 
 ## Architecture Decision Records

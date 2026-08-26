@@ -9,6 +9,7 @@ import { callWithCircuitBreaker } from './circuitBreaker.js';
 import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
 import { recordHorizonCall } from '../monitoring/horizonAlerter.js';
 import { withSpan } from '../config/otel.js';
+import { recordFeeSample, getSevenDayAverageFee, detectFeeSurge } from './feeSurge.js';
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -748,6 +749,15 @@ export async function getFeeStats() {
   });
 }
 
+/**
+ * Fetch a page of an account's transaction history from Horizon.
+ * @param {string} publicKey - Stellar public key of the account
+ * @param {object} [options]
+ * @param {number} [options.limit=10] - Max records to return
+ * @param {string} [options.cursor] - Paging token to continue from
+ * @returns {Promise<{publicKey: string, transactions: Array<{id: string, hash: string, createdAt: string, successful: boolean, ledger: number, pagingToken: string}>, nextCursor: string|null}>} Transaction page and next cursor
+ * @throws {Error} If the Horizon call fails
+ */
 export async function getTransactionHistory(publicKey, { limit = 10, cursor } = {}) {
   let call = getHorizonServer().transactions().forAccount(publicKey).limit(limit).order('desc');
   if (cursor) call = call.cursor(cursor);
@@ -823,6 +833,45 @@ export async function getNetworkStatus() {
   });
 }
 
+/**
+ * Get network status with fee surge detection.
+ * Compares current fee to 7-day average and determines if network is experiencing surge.
+ * @returns {Promise<{network: string, horizonUrl: string, online: boolean, feeStroops: number, feeXLM: string, sevenDayAverageFeeStroops?: number, feeSurge: boolean, feeSurgeRatio: number, status: 'ok'|'degraded'|'offline'}>}
+ */
+export async function getNetworkStatusWithFeeSurge() {
+  const status = await getNetworkStatus();
+  let feeStroops = 100;
+  let feeXLM = '0.0000100';
+  let sevenDayAverageFeeStroops = null;
+  let feeSurge = false;
+  let feeSurgeRatio = 1;
+
+  if (status.online) {
+    try {
+      const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
+      feeStroops = parseInt(stats.fee_charged?.p50 ?? stats.last_ledger_base_fee ?? '100', 10);
+      feeXLM = (feeStroops / 1e7).toFixed(7);
+      recordFeeSample(feeStroops);
+      sevenDayAverageFeeStroops = getSevenDayAverageFee();
+      const surgeInfo = detectFeeSurge(feeStroops, sevenDayAverageFeeStroops);
+      feeSurge = surgeInfo.surge;
+      feeSurgeRatio = surgeInfo.ratio;
+    } catch (error) {
+      logger.warn('stellar.feeSurgeDetection.failed', { error: error.message });
+    }
+  }
+
+  return {
+    ...status,
+    feeStroops,
+    feeXLM,
+    sevenDayAverageFeeStroops: sevenDayAverageFeeStroops ? Math.round(sevenDayAverageFeeStroops) : null,
+    feeSurge,
+    feeSurgeRatio,
+    status: !status.online ? 'offline' : feeSurge ? 'degraded' : 'ok',
+  };
+}
+
 // Horizon latency monitor: pings the Horizon root endpoint on an interval
 // and caches the round-trip time so /network/status and /health/latency can
 // return the last measurement without adding a request on the hot path.
@@ -830,6 +879,10 @@ const LATENCY_PING_INTERVAL_MS = 30000;
 let lastLatencyMeasurement = null;
 let latencyPingTimer = null;
 
+/**
+ * Measure a single round-trip to the Horizon root endpoint and cache the result.
+ * @returns {Promise<{latencyMs: number|null, horizonUrl: string, online: boolean, measuredAt: string}>} The measurement, also cached for {@link getLastHorizonLatency}
+ */
 export async function pingHorizonLatency() {
   const { horizonUrl } = getConfig().stellar;
   const startedAt = Date.now();
@@ -843,10 +896,21 @@ export async function pingHorizonLatency() {
   return lastLatencyMeasurement;
 }
 
+/**
+ * Get the most recent Horizon latency measurement without performing a new ping.
+ * @returns {{latencyMs: number|null, horizonUrl: string, online: boolean, measuredAt: string}|null} Last measurement, or null if none has been taken yet
+ */
 export function getLastHorizonLatency() {
   return lastLatencyMeasurement;
 }
 
+/**
+ * Start periodically pinging Horizon to keep the latency measurement fresh.
+ * A no-op if the monitor is already running. The timer is unref'd so it
+ * doesn't keep the process alive.
+ * @param {number} [intervalMs=LATENCY_PING_INTERVAL_MS] - Ping interval in ms
+ * @returns {NodeJS.Timeout} The interval timer (existing one if already running)
+ */
 export function startHorizonLatencyMonitor(intervalMs = LATENCY_PING_INTERVAL_MS) {
   if (latencyPingTimer) return latencyPingTimer;
   pingHorizonLatency();
@@ -855,6 +919,10 @@ export function startHorizonLatencyMonitor(intervalMs = LATENCY_PING_INTERVAL_MS
   return latencyPingTimer;
 }
 
+/**
+ * Stop the periodic Horizon latency ping started by {@link startHorizonLatencyMonitor}.
+ * @returns {void}
+ */
 export function stopHorizonLatencyMonitor() {
   if (latencyPingTimer) clearInterval(latencyPingTimer);
   latencyPingTimer = null;
@@ -1016,6 +1084,23 @@ export async function mergeAccount(sourceSecret, destination) {
 }
 
 /**
+ * List all open DEX offers for an account.
+ * @param {string} publicKey - Stellar public key of the account
+ * @returns {Promise<Array<object>>} Raw Horizon offer records (empty array if none or on lookup failure)
+ */
+export async function getOpenOffers(publicKey) {
+  try {
+    const offersResponse = await withHorizonRetry(() =>
+      getHorizonServer().offers().forAccount(publicKey).call(),
+    );
+    return offersResponse.records || [];
+  } catch {
+    // No offers or error loading them — treat as none rather than failing the caller.
+    return [];
+  }
+}
+
+/**
  * Simulate an account merge operation to show expected outcomes
  * @param {string} sourcePublicKey - Public key of source account
  * @param {string} destinationPublicKey - Public key of destination account
@@ -1027,15 +1112,7 @@ export async function simulateMergeAccount(sourcePublicKey, destinationPublicKey
   );
 
   // Get all offers for this account
-  let offers = [];
-  try {
-    const offersResponse = await withHorizonRetry(() =>
-      getHorizonServer().offers().forAccount(sourcePublicKey).call(),
-    );
-    offers = offersResponse.records || [];
-  } catch {
-    // No offers or error loading them
-  }
+  const offers = await getOpenOffers(sourcePublicKey);
 
   return {
     account: sourceAccount,

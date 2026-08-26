@@ -2,8 +2,8 @@ import express from 'express';
 import { body, query } from 'express-validator';
 import { validate, rules } from '../../middleware/validate.js';
 import {
+  buildStellarToml,
   claimFederationAddress,
-  getFederationDomain,
   resolveFederationAddress,
 } from '../../services/federation.js';
 
@@ -42,16 +42,7 @@ router.put(
 );
 
 router.get('/stellar.toml', (_req, res) => {
-  const baseUrl = process.env.SERVER_BASE_URL || 'http://localhost:3001';
-  res.type('text/plain').send([
-    `FEDERATION_SERVER="${baseUrl}/api/v1/stellar/federation"`,
-    `SIGNING_KEY="${process.env.STELLAR_SIGNING_KEY || ''}"`,
-    `NETWORK_PASSPHRASE="${process.env.STELLAR_NETWORK === 'mainnet' ? 'Public Global Stellar Network ; September 2015' : 'Test SDF Network ; September 2015'}"`,
-    `TRANSFER_SERVER="${baseUrl}/api/v1/stellar"`,
-    `ACCOUNTS=[]`,
-    `VERSION="2.0.0"`,
-    `# Federation domain: ${getFederationDomain()}`,
-  ].join('\n'));
+  res.type('text/plain').send(buildStellarToml());
 });
 
 export default router;

@@ -341,6 +341,127 @@ model AdminAuditLog {
   @@index([createdAt])
 }
 
+// OAuth2 client registrations – replaces the in-memory Map in
+// backend/src/security/oauth2.js. Stores registered OAuth2 clients
+// (first-party and partner integrations).
+model OAuth2Client {
+  id           String   @id @default(uuid())
+  clientId     String   @unique
+  clientSecret String
+  redirectUris String[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  authorizationCodes OAuth2AuthorizationCode[]
+  tokens             OAuth2Token[]
+
+  @@index([clientId])
+}
+
+// OAuth2 authorization codes – replaces the in-memory Map in
+// backend/src/security/oauth2.js. Short-lived codes (10 minutes)
+// that are exchanged for access/refresh tokens.
+model OAuth2AuthorizationCode {
+  id        String        @id @default(uuid())
+  code      String        @unique
+  clientId  String
+  client    OAuth2Client  @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId    String
+  scope     String
+  expiresAt DateTime
+  createdAt DateTime      @default(now())
+
+  @@index([code])
+  @@index([clientId])
+  @@index([expiresAt])
+}
+
+// OAuth2 access and refresh tokens – replaces the in-memory Map in
+// backend/src/security/oauth2.js. Refresh tokens now have an expiry
+// (90 days default) to comply with security best practices.
+model OAuth2Token {
+  id           String       @id @default(uuid())
+  refreshToken String       @unique
+  clientId     String
+  client       OAuth2Client @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId       String
+  scope        String
+  createdAt    DateTime     @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+
+  @@index([refreshToken])
+  @@index([clientId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum IncidentType {
+  UNAUTHORIZED_ACCESS
+  DATA_BREACH
+  MALWARE_DETECTED
+  DDoS_ATTACK
+}
+
+enum IncidentStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Security incidents – replaces the in-memory Map + JSON files in
+// backend/src/security/incidentResponse.js. Provides durable storage
+// for security incident tracking and response.
+model SecurityIncident {
+  id              String           @id @default(uuid())
+  incidentId      String           @unique // e.g., INC-1234567890
+  type            IncidentType
+  severity        IncidentSeverity
+  status          IncidentStatus   @default(OPEN)
+  description     String
+  affectedSystems String[]
+  playbook        String[]         // List of actions from response playbook
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  actions IncidentAction[]
+  notes   IncidentNote[]
+
+  @@index([incidentId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// Completed actions for security incidents
+model IncidentAction {
+  id         String           @id @default(uuid())
+  incidentId String
+  incident   SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  action     String
+  completedAt DateTime        @default(now())
+
+  @@index([incidentId])
+}
+
+// Notes and updates for security incidents
+model IncidentNote {
+  id         String           @id @default(uuid())
+  incidentId String
+  incident   SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  content    String
+  timestamp  DateTime         @default(now())
+
+  @@index([incidentId])
+}
+
 // Persisted webhook registrations – replaces the in-memory Map in
 // backend/src/webhooks/store.js.  A soft-delete column (deletedAt) is used so
 // that the row remains available for foreign-key joins against WebhookDelivery
@@ -403,4 +524,25 @@ model IPWhitelist {
 
   @@index([ipAddress])
   @@index([createdAt])
+// Tracks a SEP-0031 cross-border direct payment handed off to a receiving
+// anchor. One row per transaction created via POST /transactions against an
+// anchor's DIRECT_PAYMENT_SERVER; status is refreshed by polling
+// GET /transactions/:id. See issue #955.
+model Sep31Transaction {
+  id                String   @id @default(uuid())
+  anchorUrl         String
+  externalId        String
+  status            String   @default("pending_sender")
+  amount            String
+  assetCode         String?
+  senderPublicKey   String?
+  receiverPublicKey String?
+  stellarAccountId  String?
+  stellarMemo       String?
+  stellarMemoType   String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([anchorUrl, externalId])
+  @@index([status])
 }

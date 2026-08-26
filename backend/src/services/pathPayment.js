@@ -41,6 +41,12 @@ function toAsset(code, issuer) {
 /**
  * Find paths between two assets using Horizon's strict-send path-finding.
  * Returns paths sorted by best destination amount (descending).
+ * @param {object} opts
+ * @param {{code: string, issuer?: string}} opts.sourceAsset - Asset to send (issuer resolved via config if omitted)
+ * @param {number|string} opts.sourceAmount - Amount of `sourceAsset` to send
+ * @param {{code: string, issuer?: string}} opts.destinationAsset - Asset the recipient should receive
+ * @param {string} [opts.destinationAccount] - Currently unused; reserved for destination-scoped path lookups
+ * @returns {Promise<Array<{sourceAsset: string, sourceAmount: string, destinationAsset: string, destinationAmount: string, path: string[]}>>} Candidate paths, best destination amount first
  */
 export async function findPaths({ sourceAsset, sourceAmount, destinationAsset, destinationAccount }) {
   const src = toAsset(sourceAsset.code, sourceAsset.issuer);
@@ -67,6 +73,11 @@ export async function findPaths({ sourceAsset, sourceAmount, destinationAsset, d
 
 /**
  * Find paths using strict-receive (fix destination amount).
+ * @param {object} opts
+ * @param {{code: string, issuer?: string}} opts.sourceAsset - Asset to send (issuer resolved via config if omitted)
+ * @param {{code: string, issuer?: string}} opts.destinationAsset - Asset the recipient should receive
+ * @param {number|string} opts.destinationAmount - Fixed amount of `destinationAsset` the recipient should receive
+ * @returns {Promise<Array<{sourceAsset: string, sourceAmount: string, destinationAsset: string, destinationAmount: string, path: string[]}>>} Candidate paths, sorted by lowest required source amount first
  */
 export async function findPathsStrictReceive({ sourceAsset, destinationAsset, destinationAmount }) {
   const src = toAsset(sourceAsset.code, sourceAsset.issuer);
@@ -91,8 +102,10 @@ export async function findPathsStrictReceive({ sourceAsset, destinationAsset, de
 // ── Slippage ──────────────────────────────────────────────────────────────────
 
 /**
- * Apply slippage tolerance to a destination amount.
- * slippageBps: basis points (e.g. 50 = 0.5%)
+ * Reduce a destination amount by a slippage tolerance.
+ * @param {number|string} amount - Destination amount before slippage
+ * @param {number} [slippageBps=50] - Slippage tolerance in basis points (e.g. 50 = 0.5%)
+ * @returns {string} Amount after applying slippage, fixed to 7 decimal places
  */
 export function applySlippage(amount, slippageBps = 50) {
   const factor = 1 - slippageBps / 10000;
@@ -104,6 +117,16 @@ export function applySlippage(amount, slippageBps = 50) {
 /**
  * Build and submit a strict-send path payment.
  * Sends exactly `sendAmount` of `sendAsset`, receives at least `minDestAmount` of `destAsset`.
+ * @param {object} opts
+ * @param {string} opts.sourceSecret - Secret key of the sending account
+ * @param {string} opts.destination - Stellar public key of the recipient
+ * @param {{code: string, issuer?: string}} opts.sendAsset - Asset to send
+ * @param {number|string} opts.sendAmount - Amount of `sendAsset` to send
+ * @param {{code: string, issuer?: string}} opts.destAsset - Asset the recipient should receive
+ * @param {Array<string|{code: string, issuer?: string}>} [opts.path=[]] - Explicit conversion path; when omitted, the best path from {@link findPaths} is used
+ * @param {number} [opts.slippageBps=50] - Slippage tolerance in basis points applied to the expected destination amount
+ * @returns {Promise<{hash: string, ledger: number, success: boolean, destMin: string}>} Submission result
+ * @throws {Error} If no path is found between the assets, or Horizon submission fails (with a user-friendly `message` and `.code`)
  */
 export async function sendPathPayment({
   sourceSecret,
@@ -207,6 +230,12 @@ export async function sendPathPayment({
 /**
  * Compare strict-send vs strict-receive paths and return the optimal route.
  * Optimizes for best effective rate (most destination per source unit).
+ * @param {object} opts
+ * @param {{code: string, issuer?: string}} opts.sendAsset - Asset to send
+ * @param {number|string} opts.sendAmount - Amount of `sendAsset` to send, used for the strict-send comparison
+ * @param {{code: string, issuer?: string}} opts.destAsset - Asset the recipient should receive
+ * @param {number|string} [opts.destAmount] - Fixed destination amount; when provided, strict-receive paths are also compared
+ * @returns {Promise<{recommended: 'strictSend'|'strictReceive', strictSend: object|null, strictReceive: object|null, effectiveRates: {strictSend: number, strictReceive: number}}>} The better route and both candidates
  */
 export async function optimizePath({ sendAsset, sendAmount, destAsset, destAmount }) {
   const [sendPaths, receivePaths] = await Promise.allSettled([
@@ -235,6 +264,14 @@ export async function optimizePath({ sendAsset, sendAmount, destAsset, destAmoun
 
 const _analytics = { totalPathPayments: 0, totalVolume: {}, failedAttempts: 0 };
 
+/**
+ * Record a path payment attempt into the in-memory analytics counters.
+ * @param {object} opts
+ * @param {string} opts.sendAsset - Asset code that was sent
+ * @param {number|string} opts.sendAmount - Amount sent (only accumulated into volume on success)
+ * @param {boolean} opts.success - Whether the path payment succeeded
+ * @returns {void}
+ */
 export function recordPathPaymentAnalytic({ sendAsset, sendAmount, success }) {
   if (success) {
     _analytics.totalPathPayments++;
@@ -244,6 +281,10 @@ export function recordPathPaymentAnalytic({ sendAsset, sendAmount, success }) {
   }
 }
 
+/**
+ * Get a snapshot of in-memory path payment analytics.
+ * @returns {{totalPathPayments: number, totalVolume: Object<string, number>, failedAttempts: number, timestamp: string}} Analytics snapshot
+ */
 export function getPathPaymentAnalytics() {
   return { ..._analytics, timestamp: new Date().toISOString() };
 }
