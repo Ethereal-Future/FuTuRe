@@ -3,12 +3,19 @@ import {
   oauth2,
   mfa,
   auditLogger,
-  threatDetector,
   securityScanner,
   incidentResponse,
   penetrationTester,
   complianceReporter
 } from '../security/index.js';
+import {
+  isIPBlocked,
+  blockIP,
+  unblockIP,
+  getSuspiciousPatterns,
+  clearOldPatterns,
+  detectAnomalousActivity,
+} from '../security/accountLockout.js';
 
 const router = express.Router();
 
@@ -127,17 +134,54 @@ router.get('/audit/security-events', async (req, res) => {
 router.post('/threats/check', (req, res) => {
   try {
     const { userId, activity } = req.body;
-    const threats = threatDetector.detectAnomalousActivity(userId, activity);
+    const threats = detectAnomalousActivity(userId, activity);
     res.json({ threats });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get('/threats/blocked-ips', (req, res) => {
+router.get('/threats/blocked-ips', async (req, res) => {
   try {
-    const patterns = threatDetector.getSuspiciousPatterns();
+    const limit = parseInt(req.query.limit) || 100;
+    const patterns = await getSuspiciousPatterns(limit);
     res.json({ patterns });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/threats/block-ip', async (req, res) => {
+  try {
+    const { ipAddress, reason } = req.body;
+    if (!ipAddress) {
+      return res.status(400).json({ error: 'IP address required' });
+    }
+    await blockIP(ipAddress, reason);
+    res.json({ message: 'IP blocked successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/threats/unblock-ip', async (req, res) => {
+  try {
+    const { ipAddress } = req.body;
+    if (!ipAddress) {
+      return res.status(400).json({ error: 'IP address required' });
+    }
+    await unblockIP(ipAddress);
+    res.json({ message: 'IP unblocked successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/threats/clear-old-patterns', async (req, res) => {
+  try {
+    const hours = parseInt(req.body.hours) || 24;
+    const cleared = await clearOldPatterns(hours);
+    res.json({ message: `Cleared ${cleared} old patterns` });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
