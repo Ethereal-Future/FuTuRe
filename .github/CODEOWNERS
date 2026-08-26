@@ -1,0 +1,42 @@
+# CODEOWNERS
+#
+# Owners below were derived from git commit history per directory
+# (`git log --format='%ae' -- <path> | sort | uniq -c | sort -rn`),
+# using each contributor's commit email rather than a guessed GitHub
+# handle. GitHub resolves an email address to whichever account has it
+# verified: https://docs.github.com/articles/about-code-owners
+#
+# Most-specific path wins, so more specific rules are listed last per
+# GitHub's matching rules.
+#
+# Enabling "Require review from Code Owners" in main's branch
+# protection settings is a follow-up step for a repo admin — this
+# file alone does not enforce owner review.
+
+# Default owner for anything not matched below
+*                           chibueze8141@gmail.com
+
+# Frontend
+/frontend/                  chibueze8141@gmail.com tosinemma002@gmail.com lateeftosin99@gmail.com
+
+# Backend
+/backend/                   chibueze8141@gmail.com famvilianity@gmail.com goldemaverick@gmail.com
+
+# Contract test suite (Pact consumer/provider contracts)
+/contracts/                 tosinemma002@gmail.com chucksentertainment@gmail.com chibueze8141@gmail.com
+
+# Soroban smart contracts
+/stellar-contract/          mohammedyusi6@gmail.com isaacsarchive93@gmail.com frienzy514@gmail.com
+
+# Security tooling (secrets/ZAP scanners)
+/security/                  triplejgotthatstrap@gmail.com lettalkdata@gmail.com
+
+# Architecture decision records
+/docs/adr/                  richardiyamura@gmail.com
+
+# CI/CD workflows
+/.github/workflows/         chibueze8141@gmail.com goodnessjohn156@gmail.com tosinemma002@gmail.com
+
+# Auth is the most security-sensitive backend subsystem — most
+# specific path, so it must stay last to win over /backend/ above.
+/backend/src/auth/          kimgaj04@gmail.com isaacsarchive93@gmail.com goldemaverick@gmail.com

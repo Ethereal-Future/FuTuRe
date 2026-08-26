@@ -1,76 +1,25 @@
 /**
- * Visual Regression Testing Utilities
- * Capture and compare visual snapshots
+ * @deprecated Use dom-snapshot-tester.js instead
+ * This module performs DOM/content snapshotting via hashing, not pixel-level visual regression.
+ * For actual visual regression testing, see e2e/tests/visual-regression.spec.js
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { redactSensitiveData } from './privacy.js';
+import { DomSnapshotTester, createDomSnapshotTest } from './dom-snapshot-tester.js';
 
-const SNAPSHOTS_DIR = './__snapshots__';
-
-export class VisualRegressionTester {
+export class VisualRegressionTester extends DomSnapshotTester {
   constructor(testName) {
-    this.testName = testName;
-    this.snapshotPath = join(SNAPSHOTS_DIR, `${testName}.snapshot.json`);
-    this.ensureSnapshotDir();
-  }
-
-  ensureSnapshotDir() {
-    if (!existsSync(SNAPSHOTS_DIR)) {
-      mkdirSync(SNAPSHOTS_DIR, { recursive: true });
-    }
-  }
-
-  captureSnapshot(data) {
-    const sanitized = redactSensitiveData(data);
-    return {
-      timestamp: new Date().toISOString(),
-      hash: this.hashData(sanitized),
-      data: sanitized,
-    };
-  }
-
-  hashData(data) {
-    const str = JSON.stringify(data);
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      const char = str.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
-    }
-    return Math.abs(hash).toString(16);
-  }
-
-  saveSnapshot(data) {
-    const snapshot = this.captureSnapshot(data);
-    writeFileSync(this.snapshotPath, JSON.stringify(snapshot, null, 2));
-    return snapshot;
-  }
-
-  loadSnapshot() {
-    if (!existsSync(this.snapshotPath)) {
-      return null;
-    }
-    return JSON.parse(readFileSync(this.snapshotPath, 'utf-8'));
-  }
-
-  compareSnapshot(data) {
-    const current = this.captureSnapshot(data);
-    const previous = this.loadSnapshot();
-
-    if (!previous) {
-      return { match: false, reason: 'No previous snapshot found' };
-    }
-
-    return {
-      match: current.hash === previous.hash,
-      current: current.hash,
-      previous: previous.hash,
-    };
+    super(testName);
+    console.warn(
+      'VisualRegressionTester is deprecated. Use DomSnapshotTester from dom-snapshot-tester.js instead.'
+    );
   }
 }
 
 export const createVisualRegressionTest = (testName) => {
+  console.warn(
+    'createVisualRegressionTest is deprecated. Use createDomSnapshotTest from dom-snapshot-tester.js instead.'
+  );
   return new VisualRegressionTester(testName);
 };
+
+export { DomSnapshotTester, createDomSnapshotTest };

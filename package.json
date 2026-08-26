@@ -24,7 +24,7 @@
     "test:coverage": "vitest run --coverage",
     "test:update-snapshots": "vitest run --update-snapshots",
     "test:ui": "vitest --ui",
-    "test:parallel": "vitest run --workers 4",
+    "test:parallel": "vitest run --maxWorkers 4",
     "test:mobile": "cd mobile-tests && node run-tests.js",
     "test:mutation": "stryker run",
     "test:mutation:track": "node mutation-reports/tracker.js",

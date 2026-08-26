@@ -55,6 +55,12 @@ describe('provision', () => {
     expect(a.id).not.toBe(b.id);
     expect(Object.keys(getActive())).toHaveLength(2);
   });
+
+  it('captures snapshot of prior env state before modification', () => {
+    const priorEnv = process.env.NODE_ENV;
+    const env = provision('unit');
+    expect(env.snapshot).toHaveProperty('NODE_ENV', priorEnv);
+  });
 });
 
 // ── Teardown ──────────────────────────────────────────────────────────────────
@@ -66,10 +72,20 @@ describe('teardown', () => {
     expect(getActive()[env.id]).toBeUndefined();
   });
 
-  it('restores env vars', () => {
+  it('restores env vars to prior state', () => {
+    const priorLogLevel = process.env.LOG_LEVEL;
     const env = provision('unit');
+    expect(process.env.LOG_LEVEL).toBe('silent');
     teardown(env.id);
-    expect(process.env.LOG_LEVEL).toBeUndefined();
+    expect(process.env.LOG_LEVEL).toBe(priorLogLevel);
+  });
+
+  it('restores previously-set env vars after teardown', () => {
+    process.env.LOG_LEVEL = 'warn';
+    const env = provision('unit');
+    expect(process.env.LOG_LEVEL).toBe('silent');
+    teardown(env.id);
+    expect(process.env.LOG_LEVEL).toBe('warn');
   });
 
   it('is idempotent — calling twice does not throw', () => {
@@ -85,6 +101,15 @@ describe('teardownAll', () => {
     provision('integration');
     teardownAll();
     expect(Object.keys(getActive())).toHaveLength(0);
+  });
+
+  it('restores all env vars after tearing down multiple environments', () => {
+    process.env.LOG_LEVEL = 'warn';
+    provision('unit');
+    provision('integration');
+    expect(process.env.LOG_LEVEL).toBe('silent');
+    teardownAll();
+    expect(process.env.LOG_LEVEL).toBe('warn');
   });
 });
 

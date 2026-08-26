@@ -8,6 +8,13 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./testing/vitest.privacy.setup.js', './frontend/src/setupTests.js'],
     include: ['**/*.{test,spec}.{js,jsx}'],
+    pool: 'threads',
+    poolOptions: {
+      threads: {
+        minWorkers: 2,
+        maxWorkers: Math.min(4, require('os').cpus().length),
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'json-summary', 'html', 'lcov'],
