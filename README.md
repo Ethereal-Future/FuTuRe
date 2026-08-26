@@ -175,6 +175,7 @@ Key technology choices are documented as ADRs in [`docs/adr/`](docs/adr/0000-ind
 | [ADR-0002](docs/adr/0002-prisma-orm.md)         | Prisma as the ORM                             |
 | [ADR-0003](docs/adr/0003-caching-strategy.md)   | Multi-level caching (in-memory L1 + Redis L2) |
 | [ADR-0004](docs/adr/0004-auth-approach.md)      | JWT auth with refresh token rotation          |
+| [ADR-0005](docs/adr/0005-monorepo-structure.md) | npm workspaces monorepo structure             |
 
 ## Resources
 
