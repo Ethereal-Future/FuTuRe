@@ -1,9 +1,10 @@
+# syntax=docker/dockerfile:1
 # Stage 1: install all deps and generate Prisma client
 FROM node:20-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 
 COPY prisma ./prisma
 RUN npx prisma generate
@@ -16,7 +17,7 @@ WORKDIR /app
 
 # Install only production deps
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
 
 # Copy Prisma schema + generated client from build stage
 COPY prisma ./prisma

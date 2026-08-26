@@ -123,3 +123,24 @@ variable "redis_num_cache_nodes" {
   type        = number
   default     = 1
 }
+
+# ── Log Archival ──────────────────────────────────────────────────────────────
+
+variable "log_archive_glacier_transition_days" {
+  description = "Days after object creation before archived logs transition to Glacier."
+  type        = number
+  default     = 90
+}
+
+variable "log_archive_deep_archive_transition_days" {
+  description = "Days after object creation before archived logs transition to Glacier Deep Archive."
+  type        = number
+  default     = 365
+}
+
+variable "log_archive_expiration_days" {
+  description = "Days after object creation before archived logs are permanently deleted."
+  type        = number
+  default     = 2555 # ~7 years, matching typical financial recordkeeping requirements
+}
+}

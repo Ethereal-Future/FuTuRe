@@ -113,16 +113,20 @@ The RDS master password is managed by AWS (`manage_master_user_password = true`)
 ```bash
 cd infra
 
-# Review all planned changes
+# Review all planned changes (staging)
 terraform plan \
+  -var-file=environments/staging.tfvars \
   -var="backend_image=ghcr.io/org/future/backend:1.0.0" \
   -var="frontend_image=ghcr.io/org/future/frontend:1.0.0"
 
 # Apply (requires confirmation)
 terraform apply \
+  -var-file=environments/staging.tfvars \
   -var="backend_image=ghcr.io/org/future/backend:1.0.0" \
   -var="frontend_image=ghcr.io/org/future/frontend:1.0.0"
 ```
+
+For production, swap in `-var-file=environments/production.tfvars`.
 
 ## Deploying a New Version
 
@@ -141,8 +145,20 @@ For production deployments or emergency hotfixes, you can deploy manually:
 
 ```bash
 cd infra
+terraform apply -var-file=environments/production.tfvars -var="backend_image=ghcr.io/org/future/backend:1.2.3"
 terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
 ```
+
+## Environment Files
+
+Environment-specific sizing lives in `infra/environments/*.tfvars` and is selected with `-var-file` — no secret values are stored in either file; image URIs and credentials are always passed separately via `-var`/CI secrets.
+
+| File                                | Environment  | Key differences                                              |
+|--------------------------------------|--------------|----------------------------------------------------------------|
+| `environments/staging.tfvars`        | `staging`    | Smaller RDS/Redis instance classes, `backend_desired_count = 1` |
+| `environments/production.tfvars`     | `production` | Current production-sized defaults, made explicit               |
+
+`.github/workflows/terraform-plan.yml` selects `environments/production.tfvars` for PRs targeting `main` and `environments/staging.tfvars` otherwise.
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
 
@@ -179,6 +195,55 @@ aws secretsmanager rotate-secret --secret-id future-production/jwt-secret
 ```
 The rotation Lambda will automatically trigger the required ECS deployment to pick up the new value.
 
+## Log Archival
+
+`aws_cloudwatch_log_group.backend` retains logs for only `retention_in_days = 30`. To satisfy longer-term retention needs (incident postmortems, compliance audits, financial recordkeeping), every log event is streamed via a Kinesis Firehose subscription filter into the `aws_s3_bucket.log_archive` bucket (see `infra/log-archival.tf` and the `log_archive_bucket` output).
+
+The archive bucket has versioning and AES-256 server-side encryption enabled, blocks all public access, and applies a lifecycle policy:
+
+| Age                                             | Storage class      |
+|--------------------------------------------------|--------------------|
+| 0 – `log_archive_glacier_transition_days` (90d)   | S3 Standard         |
+| 90d – `log_archive_deep_archive_transition_days` (365d) | Glacier             |
+| 365d – `log_archive_expiration_days` (2555d/~7y)  | Glacier Deep Archive |
+| > `log_archive_expiration_days`                   | Deleted             |
+
+Objects are written under `ecs-backend-logs/year=YYYY/month=MM/day=DD/` in gzip-compressed batches (Firehose buffers up to 5 MiB or 300 seconds, whichever comes first).
+
+### Retrieving archived logs for an investigation
+
+1. List the day's objects for the incident window:
+   ```bash
+   aws s3 ls s3://$(terraform output -raw log_archive_bucket)/ecs-backend-logs/year=2026/month=08/day=26/
+   ```
+2. Download and decompress:
+   ```bash
+   aws s3 cp s3://$(terraform output -raw log_archive_bucket)/ecs-backend-logs/year=2026/month=08/day=26/ ./logs/ --recursive
+   gunzip ./logs/*.gz
+   ```
+3. Grep/inspect the decompressed JSON log records as needed.
+
+**Follow-up (not required for this issue):** set up AWS Glue/Athena tables over the S3 prefix so archived logs can be queried with SQL instead of downloaded and grepped manually.
+
+## Image Provenance — SBOMs and Signing
+
+Every run of `.github/workflows/docker-scan.yml` generates a CycloneDX SBOM for both the backend and frontend images (uploaded as `sbom-backend-<sha>`/`sbom-frontend-<sha>` workflow artifacts) and, for trusted (non-fork) events, pushes a `scan-<sha>` tagged copy of each image to GHCR and signs it keylessly with [cosign](https://github.com/sigstore/cosign) via GitHub OIDC — no long-lived signing keys are stored as secrets.
+
+Before running `terraform apply` with a given image, verify its signature and inspect its SBOM:
+
+```bash
+# Verify the image was signed by this repo's CI (replace with the image digest you intend to deploy)
+cosign verify \
+  --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-scan.yml@.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/${GITHUB_REPOSITORY}/backend@sha256:<digest>
+
+# Download the corresponding SBOM artifact from the workflow run and inspect components
+cat sbom-backend.cyclonedx.json | jq '.components[] | {name, version}'
+```
+
+**Follow-up (not required for this issue):** enforce signature verification at ECS deploy time (e.g. via a policy engine or an admission check ahead of `terraform apply`) so unsigned images cannot be deployed at all. Today, signing and SBOM generation are advisory — an operator must run `cosign verify` manually before deploying.
+
 ## CI Workflow
 
 The `.github/workflows/terraform-plan.yml` workflow automatically runs `terraform plan` on every pull request that touches files in `infra/`. The plan output is posted as a PR comment for review before merging.
@@ -204,4 +269,8 @@ The `.github/workflows/terraform-plan.yml` workflow automatically runs `terrafor
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
 | `db_backup_retention_days`| `7`               | RDS automated backup retention       |
 | `redis_node_type`         | `cache.t4g.small` | ElastiCache node type                |
+| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
+| `log_archive_glacier_transition_days`      | `90`   | Days before archived logs move to Glacier          |
+| `log_archive_deep_archive_transition_days` | `365`  | Days before archived logs move to Glacier Deep Archive |
+| `log_archive_expiration_days`              | `2555` | Days before archived logs are permanently deleted  |
 | `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |

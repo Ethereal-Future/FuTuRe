@@ -39,3 +39,8 @@ output "jwt_secret_arn" {
   description = "ARN of the JWT secret in Secrets Manager."
   value       = aws_secretsmanager_secret.jwt_secret.arn
 }
+
+output "log_archive_bucket" {
+  description = "Name of the S3 bucket archiving ECS backend logs long-term."
+  value       = aws_s3_bucket.log_archive.bucket
+}

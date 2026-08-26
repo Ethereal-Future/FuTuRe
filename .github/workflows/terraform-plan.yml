@@ -41,12 +41,22 @@ jobs:
         id: validate
         run: terraform validate -no-color
 
+      - name: Select environment tfvars
+        id: env
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "var_file=environments/production.tfvars" >> "$GITHUB_OUTPUT"
+          else
+            echo "var_file=environments/staging.tfvars" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform Plan
         id: plan
         run: |
           terraform plan \
             -no-color \
             -input=false \
+            -var-file="${{ steps.env.outputs.var_file }}" \
             -var="backend_image=ghcr.io/${{ github.repository }}/backend:plan-stub" \
             -var="frontend_image=ghcr.io/${{ github.repository }}/frontend:plan-stub" \
             2>&1 | tee /tmp/plan_output.txt
