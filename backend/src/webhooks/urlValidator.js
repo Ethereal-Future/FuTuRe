@@ -80,7 +80,7 @@ export async function validateWebhookUrl(url, { appEnv, lookup = dns.promises.lo
   }
 
   const resolvedAppEnv = appEnv ?? getConfig().meta.appEnv;
-  const requireHttps = resolvedAppEnv === 'production' || resolvedAppEnv === 'staging';
+  const requireHttps = resolvedAppEnv !== 'development' && resolvedAppEnv !== 'test';
   if (requireHttps && parsed.protocol !== 'https:') {
     return { valid: false, error: 'url must use https://' };
   }

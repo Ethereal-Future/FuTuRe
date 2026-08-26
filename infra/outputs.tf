@@ -50,6 +50,11 @@ output "jwt_secret_arn" {
   value       = aws_secretsmanager_secret.jwt_secret.arn
 }
 
+output "redis_auth_token_arn" {
+  description = "ARN of the Redis AUTH token in Secrets Manager."
+  value       = aws_secretsmanager_secret.redis_auth_token.arn
+}
+
 output "log_archive_bucket" {
   description = "Name of the S3 bucket archiving ECS backend logs long-term."
   value       = aws_s3_bucket.log_archive.bucket

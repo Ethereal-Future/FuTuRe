@@ -52,6 +52,7 @@ resource "aws_iam_role_policy" "ecs_secrets" {
         aws_secretsmanager_secret.jwt_secret.arn,
         aws_secretsmanager_secret.stream_encryption_key.arn,
         aws_secretsmanager_secret.backup_enc_key.arn,
+        aws_secretsmanager_secret.redis_auth_token.arn,
         aws_db_instance.postgres.master_user_secret[0].secret_arn,
       ]
     }]
@@ -105,6 +106,9 @@ resource "aws_ecs_task_definition" "backend" {
       { name = "PORT",            value = "3001" },
       { name = "STELLAR_NETWORK", value = "mainnet" },
       { name = "HORIZON_URL",     value = "https://horizon.stellar.org" },
+      { name = "REDIS_HOST",      value = aws_elasticache_replication_group.redis.primary_endpoint_address },
+      { name = "REDIS_PORT",      value = tostring(aws_elasticache_replication_group.redis.port) },
+      { name = "REDIS_TLS",       value = "true" },
     ]
 
     secrets = [
@@ -119,6 +123,10 @@ resource "aws_ecs_task_definition" "backend" {
       {
         name      = "BACKUP_ENC_KEY"
         valueFrom = aws_secretsmanager_secret.backup_enc_key.arn
+      },
+      {
+        name      = "REDIS_AUTH_TOKEN"
+        valueFrom = aws_secretsmanager_secret.redis_auth_token.arn
       },
       {
         name      = "DATABASE_URL"

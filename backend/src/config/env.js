@@ -57,6 +57,18 @@ function scheduleReload() {
   reloadTimer.unref?.();
 }
 
+export const LOCAL_APP_ENVS = new Set(['development', 'test']);
+export const RECOGNIZED_APP_ENVS = ['development', 'test', 'staging', 'production'];
+export const DEFAULT_JWT_SECRET_LITERAL = 'secret';
+
+function isLocalAppEnv(appEnv) {
+  return LOCAL_APP_ENVS.has(appEnv);
+}
+
+function requiresDeployedSecrets(appEnv) {
+  return !isLocalAppEnv(appEnv);
+}
+
 function normalizeAppEnv(value) {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!raw) return 'development';
@@ -318,21 +330,25 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
   const allowedOrigins =
     allowedOriginsFromEnv.length > 0 ? allowedOriginsFromEnv : allowedOriginsDefault;
 
-  const validAppEnvs = ['development', 'test', 'staging', 'production'];
-  if (!validAppEnvs.includes(resolvedAppEnv)) {
-    throw new Error(`APP_ENV must be one of: ${validAppEnvs.join(', ')}`);
-  }
+  // Unrecognized APP_ENV values (preprod, demo, typos) are allowed to boot
+  // but are treated as deployed: fail-closed on secrets rather than falling
+  // back to development defaults. Recognized values: development, test,
+  // staging, production.
 
-  if ((resolvedAppEnv === 'production' || resolvedAppEnv === 'staging') && allowedOriginsFromEnv.length === 0) {
+  if (requiresDeployedSecrets(resolvedAppEnv) && allowedOriginsFromEnv.length === 0) {
     throw new Error('ALLOWED_ORIGINS is required in production and staging');
   }
 
   const jwtSecretRaw =
-    typeof env.JWT_SECRET === 'string' ? env.JWT_SECRET : (resolvedAppEnv === 'production' || resolvedAppEnv === 'staging') ? '' : 'secret';
+    typeof env.JWT_SECRET === 'string'
+      ? env.JWT_SECRET
+      : isLocalAppEnv(resolvedAppEnv)
+        ? DEFAULT_JWT_SECRET_LITERAL
+        : '';
   const jwtSecret = maybeDecryptEnvValue(jwtSecretRaw, encryptionKey, { envVarName: 'JWT_SECRET' });
-  if (resolvedAppEnv === 'production' || resolvedAppEnv === 'staging') {
+  if (requiresDeployedSecrets(resolvedAppEnv)) {
     const secret = requiredString(jwtSecret, { envVarName: 'JWT_SECRET' });
-    if (secret === 'secret') {
+    if (secret === DEFAULT_JWT_SECRET_LITERAL) {
       throw new Error('JWT_SECRET must not be the default value in production or staging');
     }
   }

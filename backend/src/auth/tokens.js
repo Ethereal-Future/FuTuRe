@@ -6,7 +6,11 @@ const ACCESS_TOKEN_AUDIENCE = 'future-api';
 const REFRESH_TOKEN_AUDIENCE = 'future-refresh';
 
 function getSecret() {
-  return getConfig().auth?.jwtSecret ?? process.env.JWT_SECRET ?? 'dev-secret-change-in-production';
+  const secret = getConfig()?.security?.jwtSecret;
+  if (typeof secret !== 'string' || secret.length === 0) {
+    throw new Error('JWT_SECRET is not configured');
+  }
+  return secret;
 }
 
 export function signAccessToken(payload) {
