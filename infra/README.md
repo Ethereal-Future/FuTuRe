@@ -8,10 +8,15 @@ Terraform configuration for deploying the FuTuRe Stellar Remittance Platform to 
 Internet
    │
    ▼
+[CloudFront]
+   │
+   ├─► [S3 Bucket] (Static Frontend)
+   │
+   ▼
 [ALB] (public subnets, 3 AZs)
    │
    ▼
-[ECS Fargate] (private subnets)
+[ECS Fargate] (private subnets, Backend API)
    │        │
    ▼        ▼
 [RDS]   [ElastiCache]
@@ -20,11 +25,13 @@ Postgres   Redis
 
 | Resource       | Service             | Notes                                     |
 |----------------|---------------------|-------------------------------------------|
+| CDN            | CloudFront          | Serves static frontend from S3            |
+| Frontend       | S3 Bucket           | Stores static frontend assets             |
 | Network        | VPC + subnets       | 3 AZs, public + private tiers             |
-| Compute        | ECS Fargate         | No EC2 to manage; scales per task         |
+| Compute        | ECS Fargate         | Backend API; no EC2 to manage             |
 | Database       | RDS PostgreSQL 16   | Multi-AZ in production, gp3 encrypted     |
 | Cache          | ElastiCache Redis 7 | Single node (cluster mode off by default) |
-| Load Balancer  | ALB                 | HTTP → HTTPS redirect; `/health` checks   |
+| Load Balancer  | ALB                 | Forwards API traffic to ECS               |
 | Secrets        | Secrets Manager     | No secrets in Terraform state or source   |
 
 ## Prerequisites
