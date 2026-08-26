@@ -46,6 +46,7 @@ import clinicsRoutes from './routes/clinics.js';
 import adminRoutes from './routes/admin.js';
 import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
+import { initializeCache as initIPWhitelistCache } from './security/ipWhitelist.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { performanceMiddleware } from './monitoring/middleware.js';
@@ -153,6 +154,7 @@ await runMigrations();
 await connectDB();
 await eventMonitor.initialize();
 await auditLogger.initialize();
+await initIPWhitelistCache();
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
