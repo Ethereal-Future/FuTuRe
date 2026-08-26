@@ -23,6 +23,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
   redis:
     image: redis:7-alpine
@@ -34,6 +42,14 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
 
   backend:
     build:
@@ -51,6 +67,16 @@ services:
       # Mount source and prisma for instant hot-reload — no image rebuild needed
       - ./backend/src:/app/src
       - ./backend/prisma:/app/prisma
+    deploy:
+      resources:
+        limits:
+          # Mirrors infra/variables.tf backend_cpu/backend_memory defaults
+          # (512 CPU units = 0.5 vCPU, 1024 MiB) for local/production parity.
+          cpus: "0.5"
+          memory: 1024M
+        reservations:
+          cpus: "0.25"
+          memory: 512M
     environment:
       APP_ENV: development
       NODE_ENV: development
@@ -93,6 +119,14 @@ services:
       VITE_API_URL: http://localhost:3001
       # Vite listens on all interfaces inside the container
       HOST: "0.0.0.0"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
 
 volumes:
   db_data_dev:

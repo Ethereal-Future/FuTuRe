@@ -52,6 +52,13 @@ docker compose up db -d
 
 Or point `DATABASE_URL` at an existing local PostgreSQL 16 instance.
 
+> **Resource limits:** `docker-compose.yml` and `docker-compose.dev.yml` set
+> `deploy.resources.limits` on every service (the `backend` limits intentionally
+> mirror the production ECS Fargate task sizing in `infra/variables.tf`). If
+> containers are being OOM-killed or throttled on your machine, raise the
+> relevant `limits.cpus`/`limits.memory` values in your local checkout — see
+> the rationale comment at the top of `docker-compose.yml`.
+
 ### 4. Run database migrations
 
 ```bash
