@@ -8,10 +8,15 @@ Terraform configuration for deploying the FuTuRe Stellar Remittance Platform to 
 Internet
    │
    ▼
+[CloudFront]
+   │
+   ├─► [S3 Bucket] (Static Frontend)
+   │
+   ▼
 [ALB] (public subnets, 3 AZs)
    │
    ▼
-[ECS Fargate] (private subnets)
+[ECS Fargate] (private subnets, Backend API)
    │        │
    ▼        ▼
 [RDS]   [ElastiCache]
@@ -20,9 +25,13 @@ Postgres   Redis
 
 | Resource       | Service             | Notes                                     |
 |----------------|---------------------|-------------------------------------------|
+| CDN            | CloudFront          | Serves static frontend from S3            |
+| Frontend       | S3 Bucket           | Stores static frontend assets             |
 | Network        | VPC + subnets       | 3 AZs, public + private tiers             |
-| Compute        | ECS Fargate         | No EC2 to manage; scales per task         |
+| Compute        | ECS Fargate         | Backend API; no EC2 to manage             |
 | Database       | RDS PostgreSQL 16   | Multi-AZ in production, gp3 encrypted     |
+| Cache          | ElastiCache Redis 7 | Single node (cluster mode off by default) |
+| Load Balancer  | ALB                 | Forwards API traffic to ECS               |
 | Cache          | ElastiCache Redis 7 | Replication group, Multi-AZ automatic failover |
 | Load Balancer  | ALB                 | HTTP → HTTPS redirect; `/health` checks   |
 | Secrets        | Secrets Manager     | No secrets in Terraform state or source   |
@@ -333,6 +342,7 @@ Prefer fixing the underlying misconfiguration over suppressing it whenever the f
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
 | `db_backup_retention_days`| `7`               | RDS automated backup retention       |
 | `redis_node_type`         | `cache.t4g.small` | ElastiCache node type                |
+| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
 | `redis_num_cache_nodes`   | `2`               | Cache clusters (primary + replicas) in the Redis replication group; must be >= 2 for Multi-AZ failover |
 | `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
 | `log_archive_glacier_transition_days`      | `90`   | Days before archived logs move to Glacier          |
