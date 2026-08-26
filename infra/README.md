@@ -146,6 +146,17 @@ terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="fron
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
 
+## Autoscaling
+
+The backend ECS service includes automatic application autoscaling that dynamically adjusts the number of running tasks based on load:
+
+- **CPU-based scaling**: Scales out when average CPU utilization exceeds 65% across all tasks
+- **Request count scaling**: Scales out when the ALB reports more than 1000 requests per target per minute
+- **Cooldown periods**: 60 seconds scale-out cooldown, 300 seconds scale-in cooldown to prevent thrashing
+- **Capacity limits**: Minimum of 2 tasks (preserves zero-downtime rolling deployment guarantee), maximum of 10 tasks (configurable via `backend_min_count` and `backend_max_count`)
+
+Container Insights must remain enabled on the ECS cluster for these metrics to be available to the autoscaling policies.
+
 ## Secrets Policy
 
 **No secret values are ever stored in Terraform configuration, `.tfvars` files, or source control.**
@@ -185,7 +196,9 @@ The `.github/workflows/terraform-plan.yml` workflow automatically runs `terrafor
 | `frontend_image`          | _(required)_      | Docker image URI for frontend        |
 | `backend_cpu`             | `512`             | CPU units (512 = 0.5 vCPU)          |
 | `backend_memory`          | `1024`            | Memory in MiB                        |
-| `backend_desired_count`   | `2`               | Number of ECS tasks                  |
+| `backend_desired_count`   | `2`               | Initial number of ECS tasks (autoscaling adjusts this post-deployment) |
+| `backend_min_count`       | `2`               | Minimum number of ECS tasks (autoscaling floor, preserves zero-downtime guarantee) |
+| `backend_max_count`       | `10`              | Maximum number of ECS tasks (autoscaling ceiling) |
 | `db_instance_class`       | `db.t4g.small`    | RDS instance type                    |
 | `db_name`                 | `future`          | Database name                        |
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
