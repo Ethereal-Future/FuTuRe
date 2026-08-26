@@ -126,11 +126,22 @@ terraform apply \
 
 ## Deploying a New Version
 
-Update the Docker image tag in your CI/CD pipeline or apply directly:
+### Automated Staging Deployment
+All pushes to the `main` branch automatically trigger a staging deployment via the [`.github/workflows/deploy-staging.yml`](../.github/workflows/deploy-staging.yml) workflow:
+1. Runs all tests
+2. Builds new Docker images tagged with the Git SHA
+3. Pushes images to GitHub Container Registry (GHCR)
+4. Applies Terraform to update the staging ECS cluster
+5. Syncs frontend build to S3 + invalidates CloudFront
+6. Runs smoke tests against the `/health` endpoint
+7. Automatically rolls back to the previous working version if smoke tests fail
+
+### Manual Deployment (Production/Emergency Only)
+For production deployments or emergency hotfixes, you can deploy manually:
 
 ```bash
 cd infra
-terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3"
+terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
 ```
 
 ECS performs a rolling deployment with zero downtime when `deployment_minimum_healthy_percent = 100`.
