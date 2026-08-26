@@ -29,9 +29,15 @@ output "rds_endpoint" {
   sensitive   = true
 }
 
-output "redis_endpoint" {
-  description = "Connection endpoint for the ElastiCache Redis cluster."
-  value       = "${aws_elasticache_cluster.redis.cache_nodes[0].address}:${aws_elasticache_cluster.redis.port}"
+output "redis_primary_endpoint" {
+  description = "Primary (read/write) endpoint for the ElastiCache Redis replication group."
+  value       = "${aws_elasticache_replication_group.redis.primary_endpoint_address}:${aws_elasticache_replication_group.redis.port}"
+  sensitive   = true
+}
+
+output "redis_reader_endpoint" {
+  description = "Reader endpoint for the ElastiCache Redis replication group (load-balances across replicas)."
+  value       = "${aws_elasticache_replication_group.redis.reader_endpoint_address}:${aws_elasticache_replication_group.redis.port}"
   sensitive   = true
 }
 

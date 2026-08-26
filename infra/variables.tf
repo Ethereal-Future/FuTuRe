@@ -119,9 +119,9 @@ variable "redis_node_type" {
 }
 
 variable "redis_num_cache_nodes" {
-  description = "Number of cache nodes in the cluster."
+  description = "Number of cache clusters (primary + replicas) in the Redis replication group. Must be >= 2 for Multi-AZ automatic failover."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 # ── Log Archival ──────────────────────────────────────────────────────────────
