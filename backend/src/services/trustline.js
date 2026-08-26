@@ -11,6 +11,13 @@ import logger from '../config/logger.js';
 
 const MAX_STELLAR_LIMIT = '922337203685.4775807'; // Max native limit for Stellar
 
+/**
+ * @deprecated Use {@link module:stellar.getTrustlines} plus `stellar.getHorizonServer().loadAccount()` instead.
+ * List an account's balances (including XLM) along with each trustline's limit.
+ * @param {string} accountId - Stellar public key of the account
+ * @returns {Promise<Array<{assetCode: string, issuer: string|null, balance: number, limit: number|null, buyingLiabilities: number, sellingLiabilities: number}>>} Balances sorted with XLM first, then alphabetically by asset code
+ * @throws {Error} If `accountId` is missing or the account cannot be loaded from Horizon
+ */
 export async function getBalancesWithLimits(accountId) {
   try {
     if (!accountId) {
@@ -60,6 +67,16 @@ export async function getBalancesWithLimits(accountId) {
   }
 }
 
+/**
+ * @deprecated Use {@link module:stellar.updateTrustlineLimit} instead.
+ * Submit a `changeTrust` operation to update an existing trustline's limit.
+ * @param {string} sourceSecret - Secret key of the account owning the trustline
+ * @param {string} assetCode - Asset code of the trustline to update
+ * @param {string} issuer - Issuer public key of the asset
+ * @param {string|number} newLimit - New trust limit; must be non-negative and within the Stellar max
+ * @returns {Promise<{success: boolean, hash: string, ledger: number, assetCode: string, issuer: string, newLimit: number}>} Submission result
+ * @throws {Error} If required parameters are missing, `newLimit` is out of range, or Horizon submission fails
+ */
 export async function modifyTrustlineLimit(sourceSecret, assetCode, issuer, newLimit) {
   try {
     if (!sourceSecret || !assetCode || !issuer || newLimit === undefined) {

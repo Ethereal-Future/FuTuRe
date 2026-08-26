@@ -1,6 +1,7 @@
 #![no_std]
 use soroban_sdk::{
-    contract, contractimpl, contracttype, symbol_short, vec, Address, Env, Map, Symbol, Vec,
+    contract, contractimpl, contracttype, symbol_short, vec, Address, Env, IntoVal, Map, Symbol,
+    Val, Vec,
 };
 
 // ── Storage keys ────────────────────────────────────────────────────────────
@@ -94,6 +95,7 @@ impl PredictionMarket {
         env.storage().instance().set(&TREASURY, &treasury);
         env.storage().instance().set(&PAUSED, &false);
         env.storage().instance().set(&MKT_CNT, &0u32);
+        Self::emit_admin(&env, symbol_short!("init"), (admin, treasury));
         Ok(())
     }
 
@@ -101,6 +103,7 @@ impl PredictionMarket {
         caller.require_auth();
         Self::require_admin(&env, &caller)?;
         env.storage().instance().set(&PAUSED, &true);
+        Self::emit_admin(&env, symbol_short!("paused"), caller);
         Ok(())
     }
 
@@ -108,6 +111,7 @@ impl PredictionMarket {
         caller.require_auth();
         Self::require_admin(&env, &caller)?;
         env.storage().instance().set(&PAUSED, &false);
+        Self::emit_admin(&env, symbol_short!("unpaused"), caller);
         Ok(())
     }
 
@@ -135,11 +139,16 @@ impl PredictionMarket {
             outcome: None,
             dispute_bond: 0,
             disputer: None,
-            oracle: Some(oracle),
+            oracle: Some(oracle.clone()),
             total_lp_shares: 0,
         };
         Self::save_market(&env, id, &market);
         env.storage().instance().set(&MKT_CNT, &(id + 1));
+        Self::emit(
+            &env,
+            symbol_short!("created"),
+            (id, creator, oracle),
+        );
         Ok(id)
     }
 
@@ -151,6 +160,7 @@ impl PredictionMarket {
         market.yes_pool += amount;
         market.no_pool += amount;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("seeded"), (market_id, caller, amount));
         Ok(())
     }
 
@@ -162,6 +172,7 @@ impl PredictionMarket {
         Self::require_admin_or_creator(&env, &caller, &market.creator)?;
         market.status = MarketStatus::Closed;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("closed"), (market_id, caller));
         Ok(())
     }
 
@@ -182,6 +193,7 @@ impl PredictionMarket {
         market.outcome = Some(outcome);
         // Status stays Closed; finalize moves it to Resolved after dispute window
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("reported"), (market_id, caller, outcome));
         Ok(())
     }
 
@@ -199,9 +211,10 @@ impl PredictionMarket {
             return Err(Error::InvalidOutcome);
         }
         market.status = MarketStatus::Disputed;
-        market.disputer = Some(disputer);
+        market.disputer = Some(disputer.clone());
         market.dispute_bond = bond;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("disputed"), (market_id, disputer, bond));
         Ok(())
     }
 
@@ -219,6 +232,7 @@ impl PredictionMarket {
         market.outcome = Some(new_outcome);
         market.status = MarketStatus::EmergencyResolved;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("upheld"), (market_id, caller, new_outcome));
         Ok(())
     }
 
@@ -236,12 +250,14 @@ impl PredictionMarket {
         let treasury: Address = env.storage().instance().get(&TREASURY).unwrap();
         let key = Self::treasury_key(&env);
         let current: i128 = env.storage().persistent().get(&key).unwrap_or(0);
-        env.storage().persistent().set(&key, &(current + market.dispute_bond));
+        let slashed = market.dispute_bond;
+        env.storage().persistent().set(&key, &(current + slashed));
         market.dispute_bond = 0;
         market.disputer = None;
         // Revert to Closed so finalize can proceed
         market.status = MarketStatus::Closed;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("rejected"), (market_id, caller, slashed));
         let _ = treasury;
         Ok(())
     }
@@ -258,6 +274,7 @@ impl PredictionMarket {
         }
         market.status = MarketStatus::Resolved;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("resolved"), (market_id, market.outcome));
         Ok(())
     }
 
@@ -271,6 +288,7 @@ impl PredictionMarket {
         }
         market.status = MarketStatus::Cancelled;
         Self::save_market(&env, market_id, &market);
+        Self::emit(&env, symbol_short!("cancelled"), (market_id, caller));
         Ok(())
     }
 
@@ -297,6 +315,11 @@ impl PredictionMarket {
         let mut pos = Self::load_position(&env, market_id, &buyer);
         pos.yes_shares += shares;
         Self::save_position(&env, market_id, &buyer, &pos);
+        Self::emit(
+            &env,
+            symbol_short!("traded"),
+            (market_id, buyer, true, amount, shares),
+        );
         Ok(shares)
     }
 
@@ -321,6 +344,11 @@ impl PredictionMarket {
         let mut pos = Self::load_position(&env, market_id, &buyer);
         pos.no_shares += shares;
         Self::save_position(&env, market_id, &buyer, &pos);
+        Self::emit(
+            &env,
+            symbol_short!("traded"),
+            (market_id, buyer, false, amount, shares),
+        );
         Ok(shares)
     }
 
@@ -363,6 +391,7 @@ impl PredictionMarket {
             pos.no_shares = 0;
         }
         Self::save_position(&env, market_id, &redeemer, &pos);
+        Self::emit(&env, symbol_short!("redeemed"), (market_id, redeemer, payout));
         Ok(payout)
     }
 
@@ -412,6 +441,11 @@ impl PredictionMarket {
         let mut pos = Self::load_position(&env, market_id, &provider);
         pos.lp_shares += lp_shares;
         Self::save_position(&env, market_id, &provider, &pos);
+        Self::emit_liquidity(
+            &env,
+            symbol_short!("added"),
+            (market_id, provider, amount, lp_shares),
+        );
         Ok(lp_shares)
     }
 
@@ -444,6 +478,11 @@ impl PredictionMarket {
         pos.lp_shares -= lp_shares;
         Self::save_market(&env, market_id, &market);
         Self::save_position(&env, market_id, &provider, &pos);
+        Self::emit_liquidity(
+            &env,
+            symbol_short!("removed"),
+            (market_id, provider, lp_shares, payout),
+        );
         Ok(payout)
     }
 
@@ -466,6 +505,7 @@ impl PredictionMarket {
         let fee_share = (pos.lp_shares * market.lp_fees) / total_lp;
         market.lp_fees -= fee_share;
         Self::save_market(&env, market_id, &market);
+        Self::emit_liquidity(&env, symbol_short!("claimed"), (market_id, provider, fee_share));
         Ok(fee_share)
     }
 
@@ -486,6 +526,7 @@ impl PredictionMarket {
         pos.no_shares += amount;
         pos.split_tokens += amount;
         Self::save_position(&env, market_id, &caller, &pos);
+        Self::emit(&env, symbol_short!("split"), (market_id, caller, amount));
         Ok(())
     }
 
@@ -507,6 +548,7 @@ impl PredictionMarket {
         pos.no_shares -= amount;
         pos.split_tokens -= amount.min(pos.split_tokens);
         Self::save_position(&env, market_id, &caller, &pos);
+        Self::emit(&env, symbol_short!("merged"), (market_id, caller, amount));
         Ok(())
     }
 
@@ -523,6 +565,29 @@ impl PredictionMarket {
     pub fn get_treasury_balance(env: Env) -> i128 {
         let key = Self::treasury_key(&env);
         env.storage().persistent().get(&key).unwrap_or(0)
+    }
+
+    // ── Events ───────────────────────────────────────────────────────────────
+    //
+    // Every state-mutating function above publishes an on-chain event via one
+    // of these helpers so off-chain indexers can subscribe to contract
+    // activity instead of re-scanning storage. Topics follow a
+    // `(category, action)` scheme; see `stellar-contract/README.md` for the
+    // full topic/payload table.
+
+    /// Publish an event under the `("market", action)` topic.
+    fn emit(env: &Env, action: Symbol, data: impl IntoVal<Env, Val>) {
+        env.events().publish((symbol_short!("market"), action), data);
+    }
+
+    /// Publish an event under the `("liquidity", action)` topic.
+    fn emit_liquidity(env: &Env, action: Symbol, data: impl IntoVal<Env, Val>) {
+        env.events().publish((symbol_short!("liquidity"), action), data);
+    }
+
+    /// Publish an event under the `("admin", action)` topic.
+    fn emit_admin(env: &Env, action: Symbol, data: impl IntoVal<Env, Val>) {
+        env.events().publish((symbol_short!("admin"), action), data);
     }
 
     // ── Internal helpers ─────────────────────────────────────────────────────
@@ -623,6 +688,7 @@ impl PredictionMarket {
         pos.yes_shares = 0;
         pos.no_shares = 0;
         Self::save_position(env, market_id, redeemer, &pos);
+        Self::emit(env, symbol_short!("refunded"), (market_id, redeemer.clone(), refund));
         let _ = market;
         Ok(refund)
     }

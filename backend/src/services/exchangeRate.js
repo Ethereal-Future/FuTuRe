@@ -115,7 +115,13 @@ async function fetchFromStellarDex(from, to) {
 // Public API
 // ---------------------------------------------------------------------------
 
-/** Get rate from→to, using cache → CoinGecko → Stellar DEX. */
+/**
+ * Get the exchange rate from one asset/currency to another.
+ * Resolution order: in-memory cache → CoinGecko → Stellar DEX orderbook.
+ * @param {string} from - Source asset code (e.g. "XLM", "USDC")
+ * @param {string} to - Target asset/fiat code (e.g. "USD")
+ * @returns {Promise<number|null>} Exchange rate, or null if no source could produce one
+ */
 export async function getRate(from, to) {
   if (from === to) return 1;
 
@@ -133,14 +139,25 @@ export async function getRate(from, to) {
   return rate;
 }
 
-/** Convert an amount from one asset to another. */
+/**
+ * Convert an amount from one asset/currency to another using {@link getRate}.
+ * @param {number} amount - Amount denominated in `from`
+ * @param {string} from - Source asset code
+ * @param {string} to - Target asset/fiat code
+ * @returns {Promise<number|null>} Converted amount rounded to 7 decimal places, or null if no rate is available
+ */
 export async function convert(amount, from, to) {
   const rate = await getRate(from, to);
   if (rate == null) return null;
   return parseFloat((amount * rate).toFixed(7));
 }
 
-/** Fetch all supported pair rates at once via a single batched CoinGecko request. */
+/**
+ * Fetch rates for every supported asset pair, using a single batched CoinGecko
+ * request (all assets priced in USD) to derive cross rates, falling back to
+ * {@link getRate} per-pair for anything not covered by the batch.
+ * @returns {Promise<Array<{from: string, to: string, rate: number|null}>>} One entry per ordered asset pair
+ */
 export async function getAllRates() {
   // Collect assets that have a CoinGecko ID and aren't fully cached yet
   const needed = SUPPORTED_ASSETS.filter((a) => COINGECKO_IDS[a]);

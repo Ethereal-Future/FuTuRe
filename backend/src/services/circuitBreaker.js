@@ -57,7 +57,12 @@ function recordFailure() {
   }
 }
 
-/** Execute fn through the circuit breaker. */
+/**
+ * Execute `fn` through the circuit breaker.
+ * @param {() => Promise<any>} fn - Async operation to guard (typically a Horizon call)
+ * @returns {Promise<any>} The resolved value of `fn`
+ * @throws {Error} With `circuitOpen: true` if the circuit is OPEN (fn is not invoked); otherwise whatever `fn` throws
+ */
 export async function callWithCircuitBreaker(fn) {
   if (state === STATE.OPEN) {
     const err = new Error('Horizon circuit breaker is open — service unavailable');
@@ -82,7 +87,10 @@ export async function callWithCircuitBreaker(fn) {
   }
 }
 
-/** Return a snapshot of circuit state for health/monitoring. */
+/**
+ * Return a snapshot of circuit state for health/monitoring.
+ * @returns {{state: 'CLOSED'|'OPEN'|'HALF_OPEN', failures: number, openedAt: string|null}} Current circuit state
+ */
 export function getCircuitState() {
   return {
     state,
@@ -91,7 +99,10 @@ export function getCircuitState() {
   };
 }
 
-/** Reset circuit (useful in tests). */
+/**
+ * Reset the circuit to its initial CLOSED state (useful in tests).
+ * @returns {void}
+ */
 export function resetCircuit() {
   clearTimeout(probeTimer);
   state = STATE.CLOSED;

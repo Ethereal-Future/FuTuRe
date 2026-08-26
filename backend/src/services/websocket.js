@@ -89,6 +89,12 @@ function removeClient(ws) {
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Attach a WebSocket server to an existing HTTP(S) server and wire up
+ * authentication, subscription routing, heartbeat, and Prometheus metrics.
+ * @param {import('http').Server} server - The HTTP(S) server to attach the WebSocket upgrade handler to
+ * @returns {void}
+ */
 export function initWebSocket(server) {
   wss = new WebSocketServer({ server });
 
@@ -229,7 +235,11 @@ function handleUnsubscribe(ws, msg) {
 
 /**
  * Broadcast a payload to all subscribers of a publicKey.
- * If no subscribers are connected, the message is queued for later delivery.
+ * If no subscribers are connected, the message is queued for later delivery
+ * (up to MAX_QUEUE_SIZE, oldest dropped first) and flushed on the next subscribe.
+ * @param {string} publicKey - Stellar public key (or "rates") whose subscribers should receive the payload
+ * @param {object} payload - JSON-serializable message body; delivered wrapped in an HMAC-signed envelope
+ * @returns {void}
  */
 export function broadcastToAccount(publicKey, payload) {
   const clients = subscriptions.get(publicKey);
@@ -246,7 +256,10 @@ export function broadcastToAccount(publicKey, payload) {
   });
 }
 
-/** Returns live WebSocket analytics for monitoring dashboards. */
+/**
+ * Get live WebSocket analytics for monitoring dashboards and the Prometheus scrape endpoint.
+ * @returns {{totalConnections: number, activeConnections: number, messagesDelivered: number, messagesQueued: number, authFailures: number, errors: number, subscribedAccounts: number, queuedAccounts: number, totalQueued: number}} Current counters and queue sizes
+ */
 export function getWsStats() {
   return {
     ...stats,

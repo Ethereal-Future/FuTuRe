@@ -199,9 +199,22 @@ class NetworkMetrics {
 }
 
 /**
- * Stellar Network Abstraction
+ * Stellar Network Abstraction.
+ *
+ * Wraps a pooled Horizon connection with retry-with-backoff, short-lived
+ * response caching, and rolling latency/success metrics. Prefer the
+ * functions in `stellar.js` for most call sites; this class exists for
+ * callers that need pooled connections and aggregate network metrics
+ * (see `getStellarNetwork` below for the shared singleton).
  */
 export class StellarNetwork {
+  /**
+   * @param {object} [options]
+   * @param {number} [options.maxConnections=5] - Max pooled Horizon connections per URL
+   * @param {number} [options.cacheTtlMs=30000] - Default cache TTL for `withCache`
+   * @param {object} [options.retryConfig] - Overrides for the default retry config (maxRetries, baseDelay, maxDelay, backoffMultiplier, retryableErrors)
+   * @param {number} [options.statusCheckInterval=60000] - Interval in ms for `startStatusMonitoring`
+   */
   constructor(options = {}) {
     this.config = getConfig().stellar;
     this.network = this.config.network;
@@ -222,21 +235,30 @@ export class StellarNetwork {
   }
 
   /**
-   * Get Horizon server instance
+   * Acquire a pooled Horizon server instance for the current network.
+   * Callers must pass it back to {@link releaseServer} when done.
+   * @returns {import('@stellar/stellar-sdk').Horizon.Server} A pooled Horizon server instance
+   * @throws {Error} If the connection pool is exhausted for this URL
    */
   getServer() {
     return this.connectionPool.getConnection(this.horizonUrl);
   }
 
   /**
-   * Release Horizon server instance
+   * Return a Horizon server instance obtained via {@link getServer} to the pool.
+   * @param {import('@stellar/stellar-sdk').Horizon.Server} server - Server instance to release
+   * @returns {void}
    */
   releaseServer(server) {
     this.connectionPool.releaseConnection(this.horizonUrl, server);
   }
 
   /**
-   * Execute operation with retry logic
+   * Execute an async operation with exponential-backoff retry and metrics recording.
+   * @param {() => Promise<any>} operation - Operation to execute
+   * @param {string} [operationName='operation'] - Label used in logs/error messages
+   * @returns {Promise<any>} The operation's resolved value
+   * @throws {Error} A wrapped Stellar error if all retry attempts are exhausted or the error isn't retryable
    */
   async withRetry(operation, operationName = 'operation') {
     let lastError;
@@ -294,7 +316,11 @@ export class StellarNetwork {
   }
 
   /**
-   * Execute cached operation
+   * Execute an operation, caching its result under `key` for `ttlMs`.
+   * @param {string} key - Cache key
+   * @param {() => Promise<any>} operation - Operation to execute on a cache miss
+   * @param {number} [ttlMs=this.cache.ttlMs] - Time-to-live for the cached result, in ms
+   * @returns {Promise<any>} The cached or freshly computed value
    */
   async withCache(key, operation, ttlMs = this.cache.ttlMs) {
     const cached = this.cache.get(key);
@@ -310,7 +336,10 @@ export class StellarNetwork {
   }
 
   /**
-   * Switch network (testnet/mainnet)
+   * Switch the active Stellar network and clear cache/metrics accordingly.
+   * @param {'testnet'|'mainnet'} network - Network to switch to
+   * @returns {Promise<{network: string, horizonUrl: string}>} The new network and Horizon URL
+   * @throws {Error} If `network` is not "testnet" or "mainnet"
    */
   async switchNetwork(network) {
     if (network !== 'testnet' && network !== 'mainnet') {
@@ -341,7 +370,8 @@ export class StellarNetwork {
   }
 
   /**
-   * Get network status
+   * Fetch current Horizon network status (never throws; reports offline on failure).
+   * @returns {Promise<object>} Status including online flag, Horizon/protocol/core versions, and latest ledger, or `{online: false, error}` on failure
    */
   async getNetworkStatus() {
     try {
@@ -377,7 +407,10 @@ export class StellarNetwork {
   }
 
   /**
-   * Start network status monitoring
+   * Start polling network status on `this.statusCheckInterval`, invoking `callback` with each result.
+   * Replaces any previously started monitor.
+   * @param {(status: object) => void} [callback] - Called with the result of each {@link getNetworkStatus} poll
+   * @returns {void}
    */
   startStatusMonitoring(callback) {
     if (this.statusMonitor) {
@@ -397,7 +430,8 @@ export class StellarNetwork {
   }
 
   /**
-   * Stop network status monitoring
+   * Stop the status monitor started by {@link startStatusMonitoring}, if any.
+   * @returns {void}
    */
   stopStatusMonitoring() {
     if (this.statusMonitor) {
@@ -408,28 +442,32 @@ export class StellarNetwork {
   }
 
   /**
-   * Get connection pool stats
+   * Get pooled-connection usage stats, keyed by Horizon URL.
+   * @returns {object} Per-URL `{total, inUse, available}` counts
    */
   getConnectionStats() {
     return this.connectionPool.getStats();
   }
 
   /**
-   * Get cache stats
+   * Get response-cache stats.
+   * @returns {{size: number, entries: string[]}} Cache size and current keys
    */
   getCacheStats() {
     return this.cache.getStats();
   }
 
   /**
-   * Get network metrics
+   * Get rolling request/latency/error metrics.
+   * @returns {object} Request counts, success rate, and p50/p95/p99 latency
    */
   getMetrics() {
     return this.metrics.getMetrics();
   }
 
   /**
-   * Get all stats
+   * Get a combined snapshot of network, connection, cache, and metrics state.
+   * @returns {{network: string, horizonUrl: string, connections: object, cache: object, metrics: object}} Aggregate stats
    */
   getStats() {
     return {
@@ -442,7 +480,8 @@ export class StellarNetwork {
   }
 
   /**
-   * Clear cache
+   * Clear all cached responses.
+   * @returns {void}
    */
   clearCache() {
     this.cache.clear();
@@ -450,7 +489,8 @@ export class StellarNetwork {
   }
 
   /**
-   * Reset metrics
+   * Reset rolling request/latency/error metrics to zero.
+   * @returns {void}
    */
   resetMetrics() {
     this.metrics.reset();
@@ -458,7 +498,10 @@ export class StellarNetwork {
   }
 
   /**
-   * Load account
+   * Load a Stellar account, cached for 10 seconds.
+   * @param {string} publicKey - Stellar public key
+   * @returns {Promise<import('@stellar/stellar-sdk').Horizon.AccountResponse>} The account record
+   * @throws {Error} If the account cannot be loaded after retries
    */
   async loadAccount(publicKey) {
     const cacheKey = `account:${publicKey}`;
@@ -478,7 +521,10 @@ export class StellarNetwork {
   }
 
   /**
-   * Submit transaction
+   * Submit a signed transaction to Horizon and clear the response cache afterward.
+   * @param {import('@stellar/stellar-sdk').Transaction} transaction - Signed transaction to submit
+   * @returns {Promise<object>} The Horizon submission result
+   * @throws {Error} If submission fails after retries
    */
   async submitTransaction(transaction) {
     const server = this.getServer();
@@ -498,7 +544,9 @@ export class StellarNetwork {
   }
 
   /**
-   * Get fee stats
+   * Fetch Horizon fee stats, cached for 30 seconds.
+   * @returns {Promise<object>} Horizon `feeStats()` response
+   * @throws {Error} If the fetch fails after retries
    */
   async getFeeStats() {
     const cacheKey = 'feeStats';
@@ -518,7 +566,8 @@ export class StellarNetwork {
   }
 
   /**
-   * Get current fee in stroops from Horizon fee stats
+   * Get the current recommended base fee in stroops, from Horizon fee stats.
+   * @returns {Promise<number>} Fee in stroops (p50 fee charged, falling back to the last ledger's base fee, default 100)
    */
   async getCurrentFeeStroops() {
     const stats = await this.getFeeStats();
@@ -526,7 +575,9 @@ export class StellarNetwork {
   }
 
   /**
-   * Get network status with fee surge detection (compares current fee to 7-day average)
+   * Get network status augmented with fee surge detection, comparing the current
+   * fee to the rolling 7-day average recorded via `feeSurge.js`.
+   * @returns {Promise<object>} {@link getNetworkStatus} result plus `feeStroops`, `feeXLM`, `sevenDayAverageFeeStroops`, `feeSurge`, `feeSurgeRatio`, and an overall `status` of "offline"|"degraded"|"ok"
    */
   async getNetworkStatusWithFeeSurge() {
     const status = await this.getNetworkStatus();
@@ -564,7 +615,13 @@ export class StellarNetwork {
   }
 
   /**
-   * Get orderbook
+   * Fetch a DEX orderbook for an asset pair, cached for 5 seconds.
+   * @param {import('@stellar/stellar-sdk').Asset} selling - Asset being sold
+   * @param {import('@stellar/stellar-sdk').Asset} buying - Asset being bought
+   * @param {object} [options]
+   * @param {number} [options.limit=10] - Max number of bid/ask levels to return
+   * @returns {Promise<object>} Horizon orderbook response
+   * @throws {Error} If the fetch fails after retries
    */
   async getOrderbook(selling, buying, options = {}) {
     const cacheKey = `orderbook:${selling}:${buying}:${JSON.stringify(options)}`;
@@ -591,7 +648,14 @@ export class StellarNetwork {
   }
 
   /**
-   * Get transactions for account
+   * Fetch an account's transaction history (not cached).
+   * @param {string} publicKey - Stellar public key
+   * @param {object} [options]
+   * @param {'asc'|'desc'} [options.order='desc'] - Sort order
+   * @param {number} [options.limit=10] - Page size
+   * @param {string} [options.cursor] - Pagination cursor
+   * @returns {Promise<object>} Horizon transactions page response
+   * @throws {Error} If the fetch fails after retries
    */
   async getTransactions(publicKey, options = {}) {
     const server = this.getServer();
@@ -619,7 +683,9 @@ export class StellarNetwork {
 let stellarNetworkInstance = null;
 
 /**
- * Get Stellar network instance
+ * Get the shared {@link StellarNetwork} singleton, creating it on first call.
+ * @param {object} [options] - Options forwarded to the `StellarNetwork` constructor on first call only
+ * @returns {StellarNetwork} The shared instance
  */
 export function getStellarNetwork(options = {}) {
   if (!stellarNetworkInstance) {
@@ -629,7 +695,8 @@ export function getStellarNetwork(options = {}) {
 }
 
 /**
- * Reset Stellar network instance (for testing)
+ * Stop monitoring and clear the shared {@link StellarNetwork} singleton (for tests).
+ * @returns {void}
  */
 export function resetStellarNetwork() {
   if (stellarNetworkInstance) {
