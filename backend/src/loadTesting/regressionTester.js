@@ -4,7 +4,7 @@ class RegressionTester {
       avgResponseTime: 1.1, // 10% increase
       p95ResponseTime: 1.15, // 15% increase
       errorRate: 1.05, // 5% increase
-      throughput: 0.9 // 10% decrease
+      throughput: 0.9 // 10% decrease; current and baseline must both be req/s
     };
   }
 

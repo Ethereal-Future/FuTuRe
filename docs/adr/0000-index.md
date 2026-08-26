@@ -12,6 +12,7 @@ ADRs follow the [MADR](https://adr.github.io/madr/) (Markdown Architectural Deci
 | [ADR-0002](0002-prisma-orm.md) | Use Prisma as the ORM | Accepted |
 | [ADR-0003](0003-caching-strategy.md) | Multi-level caching: in-memory L1 + Redis L2 | Accepted |
 | [ADR-0004](0004-auth-approach.md) | JWT-based authentication with refresh token rotation | Accepted |
+| [ADR-0005](0005-event-schema-migrations.md) | Fail-closed event schema migrations | Accepted |
 
 ## Creating a new ADR
 

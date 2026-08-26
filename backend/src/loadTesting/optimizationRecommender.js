@@ -33,6 +33,7 @@ class OptimizationRecommender {
     }
 
     // Throughput recommendations
+    // Threshold is requests per second (req/s), matching LoadTestRunner / PerformanceBaseline.
     if (results.throughput < 100) {
       recommendations.push({
         category: 'Throughput',

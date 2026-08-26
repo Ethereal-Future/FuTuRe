@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { throughputRps } from './throughput.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const RESULTS_DIR = path.join(__dirname, '../../data/load-tests/results');
@@ -86,6 +87,9 @@ class LoadTestRunner {
     }
   }
 
+  /**
+   * @returns {object} summary whose `throughput` field is requests per second (req/s)
+   */
   getResults() {
     const responseTimes = this.results.map(r => r.responseTime).sort((a, b) => a - b);
     const total = this.results.length;
@@ -101,8 +105,9 @@ class LoadTestRunner {
       p50ResponseTime: responseTimes[Math.floor(total * 0.50)],
       p95ResponseTime: responseTimes[Math.floor(total * 0.95)],
       p99ResponseTime: responseTimes[Math.floor(total * 0.99)],
-      throughput: total / ((this.endTime - this.startTime) / 1000),
-      duration: (this.endTime - this.startTime) / 1000
+      /** Throughput in requests per second (req/s). */
+      throughput: throughputRps(total, this.endTime - this.startTime),
+      duration: (this.endTime - this.startTime) / 1000,
     };
   }
 
