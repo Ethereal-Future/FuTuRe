@@ -5,7 +5,12 @@ import bcrypt from 'bcryptjs';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
-import { signAccessToken, signRefreshToken, verifyToken, verifyRefreshToken } from '../auth/tokens.js';
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyToken,
+  verifyRefreshToken,
+} from '../auth/tokens.js';
 import {
   createSession,
   getActiveSession,
@@ -32,6 +37,8 @@ import mfaManager from '../security/mfa.js';
 import oauth2Provider from '../security/oauth2.js';
 import { getConfig } from '../config/env.js';
 import { sendEmail } from '../notifications/channels/email.js';
+import kycCollector from '../compliance/kycCollector.js';
+import auditLogger from '../security/auditLogger.js';
 
 const router = express.Router();
 
@@ -878,8 +885,12 @@ router.get('/data-export', requireAuth, async (req, res) => {
       },
     });
     if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
-
     const exportData = { ...user };
+    if (user.kycRecord) {
+      // KYC documentNumber and address are encrypted at rest; GDPR exports must
+      // contain the values the data subject can actually access.
+      exportData.kycRecord = await kycCollector.getKYCRecord(userId);
+    }
     delete exportData.passwordHash;
 
     res.setHeader('Content-Disposition', 'attachment; filename="data-export.json"');
@@ -1014,9 +1025,30 @@ router.delete('/account', requireAuth, async (req, res) => {
         where: { OR: [{ senderId: userId }, { recipientId: userId }] },
         data: { memo: null },
       });
-    });
 
-    logger.info({ userId }, 'GDPR account deletion: data anonymised');
+      // AML alerts and security audit logs are retained for regulatory and
+      // incident-response obligations, but free-text and network-identifying
+      // fields are scrubbed as part of the same erasure transaction.
+      await tx.aMLAlert.updateMany({
+        where: { userId },
+        data: { description: '[REDACTED: ACCOUNT DELETED]' },
+      });
+      await tx.auditLog.updateMany({
+        where: { userId },
+        data: {
+          details: JSON.stringify({ reason: 'ACCOUNT_DELETED', retainedFor: 'COMPLIANCE' }),
+          ipAddress: null,
+          userAgent: null,
+          resourceId: null,
+        },
+      });
+    });
+    await auditLogger.logAccountDeletion(userId, null, {
+      retainedRecords: ['AMLAlert', 'AuditLog'],
+      retentionReason: 'REGULATORY_COMPLIANCE_AND_SECURITY_RESPONSE',
+      piiScrubbed: true,
+    });
+    logger.info({ userId }, 'GDPR account deletion: data anonymised and retained records scrubbed');
 
     res.json({
       message: 'Account scheduled for deletion. Personal data has been anonymised.',
@@ -1428,7 +1460,8 @@ router.post(
             },
           });
 
-          const baseUrl = getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
+          const baseUrl =
+            getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
           await sendEmail(email, {
             subject: 'Reset your password',
             body: `Reset your password: ${baseUrl}/reset-password?token=${token}\nExpires in 15 minutes.`,

@@ -1,10 +1,16 @@
 import { getClient } from '../db/client.js';
 
 class SecurityAuditLogger {
-  async initialize() {
-  }
+  async initialize() {}
 
-  async logEvent(actionType, userId, details, severity = 'INFO', ipAddress = null, userAgent = null) {
+  async logEvent(
+    actionType,
+    userId,
+    details,
+    severity = 'INFO',
+    ipAddress = null,
+    userAgent = null,
+  ) {
     try {
       const client = getClient();
       return await client.auditLog.create({
@@ -32,18 +38,12 @@ class SecurityAuditLogger {
       { ipAddress, userAgent },
       success ? 'INFO' : 'WARNING',
       ipAddress,
-      userAgent
+      userAgent,
     );
   }
 
   async logMFAEvent(userId, action, ipAddress) {
-    return this.logEvent(
-      'MFA_EVENT',
-      userId,
-      { action, ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('MFA_EVENT', userId, { action, ipAddress }, 'INFO', ipAddress);
   }
 
   async logSecurityEvent(eventType, userId, details) {
@@ -51,13 +51,7 @@ class SecurityAuditLogger {
   }
 
   async logDataAccess(userId, resource, action, ipAddress) {
-    return this.logEvent(
-      'DATA_ACCESS',
-      userId,
-      { resource, action, ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('DATA_ACCESS', userId, { resource, action, ipAddress }, 'INFO', ipAddress);
   }
 
   async logPayment(userId, resourceId, ipAddress) {
@@ -66,7 +60,7 @@ class SecurityAuditLogger {
       userId,
       { resourceType: 'transaction', resourceId, ipAddress },
       'INFO',
-      ipAddress
+      ipAddress,
     );
   }
 
@@ -76,27 +70,25 @@ class SecurityAuditLogger {
       userId,
       { resourceType: 'kyc', resourceId: userId, ipAddress },
       'INFO',
-      ipAddress
+      ipAddress,
     );
   }
 
   async logPasswordChange(userId, ipAddress) {
-    return this.logEvent(
-      'PASSWORD_CHANGE',
-      userId,
-      { ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('PASSWORD_CHANGE', userId, { ipAddress }, 'INFO', ipAddress);
   }
 
-  async logAccountDeletion(userId, ipAddress) {
+  async logAccountDeletion(userId, ipAddress = null, retention = {}) {
     return this.logEvent(
       'ACCOUNT_DELETION',
       userId,
-      { resourceType: 'user', resourceId: userId, ipAddress },
+      {
+        resourceType: 'user',
+        resourceId: userId,
+        ...retention,
+      },
       'WARNING',
-      ipAddress
+      ipAddress,
     );
   }
 
@@ -106,7 +98,7 @@ class SecurityAuditLogger {
       adminId,
       { resourceType, resourceId, ipAddress },
       'WARNING',
-      ipAddress
+      ipAddress,
     );
   }
 
