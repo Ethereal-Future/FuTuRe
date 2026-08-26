@@ -197,6 +197,25 @@ Objects are written under `ecs-backend-logs/year=YYYY/month=MM/day=DD/` in gzip-
 
 **Follow-up (not required for this issue):** set up AWS Glue/Athena tables over the S3 prefix so archived logs can be queried with SQL instead of downloaded and grepped manually.
 
+## Image Provenance — SBOMs and Signing
+
+Every run of `.github/workflows/docker-scan.yml` generates a CycloneDX SBOM for both the backend and frontend images (uploaded as `sbom-backend-<sha>`/`sbom-frontend-<sha>` workflow artifacts) and, for trusted (non-fork) events, pushes a `scan-<sha>` tagged copy of each image to GHCR and signs it keylessly with [cosign](https://github.com/sigstore/cosign) via GitHub OIDC — no long-lived signing keys are stored as secrets.
+
+Before running `terraform apply` with a given image, verify its signature and inspect its SBOM:
+
+```bash
+# Verify the image was signed by this repo's CI (replace with the image digest you intend to deploy)
+cosign verify \
+  --certificate-identity-regexp "^https://github.com/${GITHUB_REPOSITORY}/.github/workflows/docker-scan.yml@.*" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  ghcr.io/${GITHUB_REPOSITORY}/backend@sha256:<digest>
+
+# Download the corresponding SBOM artifact from the workflow run and inspect components
+cat sbom-backend.cyclonedx.json | jq '.components[] | {name, version}'
+```
+
+**Follow-up (not required for this issue):** enforce signature verification at ECS deploy time (e.g. via a policy engine or an admission check ahead of `terraform apply`) so unsigned images cannot be deployed at all. Today, signing and SBOM generation are advisory — an operator must run `cosign verify` manually before deploying.
+
 ## CI Workflow
 
 The `.github/workflows/terraform-plan.yml` workflow automatically runs `terraform plan` on every pull request that touches files in `infra/`. The plan output is posted as a PR comment for review before merging.
