@@ -289,19 +289,6 @@ export function securityHeaders() {
   };
 }
 
-/**
- * Rate limiting headers
- */
-export function rateLimitHeaders() {
-  return (req, res, next) => {
-    // Add rate limit headers
-    res.setHeader('X-RateLimit-Limit', '100');
-    res.setHeader('X-RateLimit-Remaining', '99');
-    res.setHeader('X-RateLimit-Reset', Math.floor(Date.now() / 1000) + 60);
-
-    next();
-  };
-}
 
 /**
  * Security audit logging middleware
@@ -385,7 +372,6 @@ export default {
   ipFilterMiddleware,
   getSecureCookieConfig,
   securityHeaders,
-  rateLimitHeaders,
   securityAuditLogger,
   securityMiddleware,
 };
