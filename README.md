@@ -97,6 +97,29 @@ docker compose up --build
 | browser               | frontend | `http://localhost:3000` |
 | browser               | backend  | `http://localhost:3001` |
 
+## Dev Container / GitHub Codespaces
+
+The repository includes a ready-to-use [`.devcontainer/`](.devcontainer/) configuration — no local Node, PostgreSQL, or Redis install required. Open the repo in a GitHub Codespace, or locally in VS Code with the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers) and choose **Reopen in Container**.
+
+This is a separate setup from the root [`docker-compose.yml`](docker-compose.yml) described above: `.devcontainer/docker-compose.yml` builds the environment *you develop inside* (your editor runs in the `devcontainer` service, with the repo mounted as its workspace), whereas the root `docker-compose.yml` runs the app's own services (`backend`, `frontend`, `postgres`, `redis`) as containers you'd otherwise start from a normal host. Use the dev container when you want a fully provisioned environment with zero local installs; use the root `docker-compose.yml` if you already have Node installed locally and just want the app's dependent services.
+
+What happens automatically:
+
+- **On container creation** (`postCreateCommand`, see [`.devcontainer/post-create.sh`](.devcontainer/post-create.sh)): installs dependencies for the root workspace, `backend/`, and `frontend/`, then copies `backend/.env.example` → `backend/.env` and `frontend/.env.example` → `frontend/.env` if they don't already exist.
+- **On container start** (`postStartCommand`): runs `npx prisma migrate deploy` against the containerized Postgres.
+
+Forwarded ports:
+
+| Port   | Service              |
+| ------ | --------------------- |
+| `3000` | Frontend (Vite)      |
+| `3001` | Backend (Express)    |
+| `6006` | Storybook            |
+| `5432` | PostgreSQL           |
+| `6379` | Redis                |
+
+The container also comes with ESLint, Prettier, TypeScript, Prisma, and GitLens extensions pre-installed (see `customizations.vscode.extensions` in [`devcontainer.json`](.devcontainer/devcontainer.json) for the full list). Once it's running, start the dev servers the same way as any other setup: `npm run dev`.
+
 ## Usage
 
 1. Click "Create Account" to generate a new Stellar keypair
@@ -157,6 +180,8 @@ See [docs/architecture.md](docs/architecture.md) for the full system diagram, co
 
 ## Guides
 
+- [Documentation index](docs/README.md) — full map of every guide, ADR, and reference doc in this repo — start here
+- [Troubleshooting](docs/guides/troubleshooting.md) — fixes for common local dev failures: port conflicts, Prisma migration/drift errors, Friendbot rate-limiting, npm workspace resets, env misconfiguration
 - [Security best practices for integrators](docs/guides/security.md) — API key storage, webhook verification, private key management, CSP, replay attacks, front-running
 - [Operational Runbook](docs/runbook.md) — Server restart, DB migration rollback, stream cancellation, IP unblock, incident response
 - [Incident Runbooks](docs/runbooks/README.md) — Horizon outage, DB failover, JWT secret rotation, stuck transaction recovery
@@ -178,5 +203,6 @@ Key technology choices are documented as ADRs in [`docs/adr/`](docs/adr/0000-ind
 
 ## Resources
 
+- [Glossary](docs/GLOSSARY.md) — Stellar and remittance/compliance terms used in this codebase
 - [Stellar Documentation](https://developers.stellar.org)
 - [Stellar SDK](https://github.com/stellar/js-stellar-sdk)

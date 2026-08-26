@@ -14,9 +14,13 @@ Optional but recommended:
 - Docker + Docker Compose (simplifies database setup)
 - [k6](https://k6.io/docs/get-started/installation/) for load tests
 
+New to Stellar, or to remittance/compliance terminology like KYC, AML, or SAR? See the [Glossary](docs/GLOSSARY.md) before diving in.
+
 ---
 
 ## Local Setup
+
+> **Prefer zero local installs?** The repo ships a [Dev Container / GitHub Codespaces](README.md#dev-container--github-codespaces) setup that provisions Node, PostgreSQL, and Redis for you — see the README for details. The steps below are for a fully manual local setup.
 
 ### 1. Clone and install
 
@@ -47,7 +51,7 @@ Using Docker (recommended):
 
 ```bash
 # from the repo root
-docker compose up db -d
+docker compose up postgres -d
 ```
 
 Or point `DATABASE_URL` at an existing local PostgreSQL 16 instance.
@@ -83,6 +87,8 @@ This starts both servers concurrently:
 
 The backend uses `--watch` for hot-reload. The frontend uses Vite HMR.
 
+If any of the steps above fail — port conflicts, Prisma migration errors, npm workspace issues after a branch switch, or unclear `.env` errors — see the [Troubleshooting guide](docs/guides/troubleshooting.md).
+
 ---
 
 ## Running Tests
@@ -101,7 +107,7 @@ npm run test --workspace=backend
 
 ### Database integration tests
 
-Requires a running PostgreSQL instance (use `docker compose up db -d`):
+Requires a running PostgreSQL instance (use `docker compose up postgres -d`):
 
 ```bash
 npm run test:db --workspace=backend
@@ -229,7 +235,7 @@ npm install           # from the repo root
 #### 3. Start PostgreSQL
 
 ```bash
-docker compose up db -d
+docker compose up postgres -d
 ```
 
 This is required for DB integration tests (`test:db`) and for any test that uses Prisma against a real database.
@@ -679,13 +685,15 @@ npm run dev:backend
 
 See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for the full checklist that ships with every new pull request.
 
+If your PR adds a new file under `docs/`, `backend/`, or `frontend/`, register it in [`docs/README.md`](docs/README.md) so it's discoverable from the documentation index.
+
 ### First-day onboarding checklist
 
 If you are new to this project, complete these tasks before writing any code:
 
 - [ ] Install Node.js 20 and verify with `node --version`
 - [ ] Clone the repo and run `npm install`
-- [ ] Start PostgreSQL with `docker compose up db -d`
+- [ ] Start PostgreSQL with `docker compose up postgres -d`
 - [ ] Copy `backend/.env.example` to `backend/.env` and fill in required values
 - [ ] Run `npm run test:coverage` and confirm all tests pass
 - [ ] If contributing to frontend: run `cd e2e && npx playwright install` to download browser binaries
