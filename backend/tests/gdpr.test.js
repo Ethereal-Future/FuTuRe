@@ -19,6 +19,14 @@ vi.mock('../src/db/client.js', () => ({
       update: vi.fn(),
     },
     kYCRecord: {
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
+    aMLAlert: {
+      updateMany: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
       updateMany: vi.fn(),
     },
     transaction: {
@@ -26,6 +34,10 @@ vi.mock('../src/db/client.js', () => ({
     },
     $transaction: vi.fn(),
   },
+}));
+
+vi.mock('../src/compliance/kycCollector.js', () => ({
+  default: { getKYCRecord: vi.fn() },
 }));
 
 vi.mock('../src/security/accountLockout.js', () => ({
@@ -61,6 +73,7 @@ vi.mock('../src/security/oauth2.js', () => ({
 
 import prisma from '../src/db/client.js';
 import { signAccessToken } from '../src/auth/tokens.js';
+import kycCollector from '../src/compliance/kycCollector.js';
 
 process.env.JWT_SECRET = 'test-secret-gdpr';
 process.env.NODE_ENV = 'test';
@@ -112,6 +125,27 @@ describe('GET /api/auth/data-export', () => {
     expect(res.body.exportedAt).toBeDefined();
   });
 
+  it('decrypts encrypted KYC fields in the export', async () => {
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      ...MOCK_USER,
+      kycRecord: { documentNumber: 'encrypted-document', address: 'encrypted-address' },
+    });
+    vi.mocked(kycCollector.getKYCRecord).mockResolvedValue({
+      ...MOCK_USER.kycRecord,
+      documentNumber: 'P123456',
+      address: '1 Example Street',
+    });
+
+    const res = await request(app)
+      .get('/api/auth/data-export')
+      .set('Authorization', `Bearer ${ACCESS_TOKEN}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.kycRecord.documentNumber).toBe('P123456');
+    expect(res.body.data.kycRecord.address).toBe('1 Example Street');
+    expect(vi.mocked(kycCollector.getKYCRecord)).toHaveBeenCalledWith(USER_ID);
+  });
+
   it('sets Content-Disposition attachment header', async () => {
     vi.mocked(prisma.user.findUnique).mockResolvedValue(MOCK_USER);
 
@@ -152,6 +186,9 @@ describe('DELETE /api/auth/account', () => {
     vi.mocked(prisma.$transaction).mockImplementation(async (fn) => fn(prisma));
     vi.mocked(prisma.user.update).mockResolvedValue({ id: USER_ID, deletedAt: new Date() });
     vi.mocked(prisma.kYCRecord.updateMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.aMLAlert.updateMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.auditLog.updateMany).mockResolvedValue({ count: 0 });
+    vi.mocked(prisma.auditLog.create).mockResolvedValue({});
     vi.mocked(prisma.transaction.updateMany).mockResolvedValue({ count: 0 });
   });
 
@@ -182,7 +219,7 @@ describe('DELETE /api/auth/account', () => {
           username: expect.stringMatching(/^deleted-/),
           passwordHash: '',
         }),
-      })
+      }),
     );
   });
 
@@ -193,7 +230,32 @@ describe('DELETE /api/auth/account', () => {
       expect.objectContaining({
         where: { userId: USER_ID },
         data: expect.objectContaining({ fullName: '[REDACTED]' }),
-      })
+      }),
+    );
+  });
+
+  it('retains AML alerts and audit logs while scrubbing identifying fields', async () => {
+    await request(app).delete('/api/auth/account').set('Authorization', `Bearer ${ACCESS_TOKEN}`);
+
+    expect(vi.mocked(prisma.aMLAlert.updateMany)).toHaveBeenCalledWith({
+      where: { userId: USER_ID },
+      data: { description: '[REDACTED: ACCOUNT DELETED]' },
+    });
+    expect(vi.mocked(prisma.auditLog.updateMany)).toHaveBeenCalledWith({
+      where: { userId: USER_ID },
+      data: expect.objectContaining({
+        ipAddress: null,
+        userAgent: null,
+        resourceId: null,
+      }),
+    });
+    expect(vi.mocked(prisma.auditLog.create)).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          actionType: 'ACCOUNT_DELETION',
+          details: expect.stringContaining('REGULATORY_COMPLIANCE_AND_SECURITY_RESPONSE'),
+        }),
+      }),
     );
   });
 
@@ -204,7 +266,7 @@ describe('DELETE /api/auth/account', () => {
       expect.objectContaining({
         where: { OR: [{ senderId: USER_ID }, { recipientId: USER_ID }] },
         data: { memo: null },
-      })
+      }),
     );
   });
 
