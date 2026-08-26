@@ -387,3 +387,16 @@ model WebhookDelivery {
   @@index([accountId, createdAt])
   @@index([status, nextAttemptAt])
 }
+
+model IPWhitelist {
+  id        String   @id @default(uuid())
+  ipAddress String   @unique
+  cidr      String?  // CIDR notation if applicable
+  reason    String?  // Why this IP was whitelisted
+  addedBy   String?  // Admin who added this entry
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([ipAddress])
+  @@index([createdAt])
+}
