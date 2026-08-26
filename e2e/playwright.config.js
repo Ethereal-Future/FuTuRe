@@ -50,6 +50,13 @@ export default defineConfig({
       name: 'visual-regression',
       use: { ...devices['Desktop Chrome'] },
       grep: /@visual/,
+      snapshotPathTemplate: '{testDir}/visual-baselines/{testFileDir}/{testFileName}-{platform}{ext}',
+      expect: {
+        toHaveScreenshot: {
+          threshold: 0.2,
+          maxDiffPixels: 100,
+        },
+      },
     },
   ],
 
