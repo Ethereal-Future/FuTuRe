@@ -664,7 +664,7 @@ npm run dev:backend
 
 5. Fill in the [PR template](.github/PULL_REQUEST_TEMPLATE.md) — it auto-populates the description box and includes the PR checklist below.
 
-6. A maintainer will review within a few business days. Address feedback by pushing new commits — do not force-push after review has started.
+6. Based on the paths you touched, GitHub will auto-request reviewers from [`.github/CODEOWNERS`](.github/CODEOWNERS). A maintainer will review within a few business days. Address feedback by pushing new commits — do not force-push after review has started.
 
 7. Once approved, a maintainer will squash-merge your PR.
 
