@@ -73,8 +73,8 @@ jobs:
 
       - name: Deploy frontend
         run: |
-          echo "Deploy frontend build artifacts to staging"
-          # Example: aws s3 sync frontend/dist s3://staging-bucket --delete
+          echo "Syncing frontend build to S3..."
+          aws s3 sync frontend/dist s3://${{ secrets.STAGING_FRONTEND_BUCKET_NAME }} --delete --delete
 
       - name: Smoke test
         run: |
