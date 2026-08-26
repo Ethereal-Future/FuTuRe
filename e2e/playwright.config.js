@@ -38,13 +38,32 @@ export default defineConfig({
       name: 'webkit',
       use: { ...devices['Desktop Safari'] },
     },
+    // Mobile Chrome (Android) — Pixel 5 profile
     {
       name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
+      use: {
+        ...devices['Pixel 5'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
     },
+    // Mobile Safari (iOS) — iPhone 12 profile
     {
       name: 'mobile-safari',
-      use: { ...devices['iPhone 12'] },
+      use: {
+        ...devices['iPhone 12'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
+    },
+    // iPad (iOS tablet)
+    {
+      name: 'mobile-safari-ipad',
+      use: {
+        ...devices['iPad Pro'],
+        hasTouch: true,
+      },
+      grep: /@mobile/,
     },
     {
       name: 'visual-regression',

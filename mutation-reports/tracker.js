@@ -52,6 +52,44 @@ function loadHistory() {
 
 function saveHistory(history) {
   fs.writeFileSync(HISTORY_FILE, JSON.stringify(history, null, 2));
+  // Ensure newline at end of file for git
+  fs.appendFileSync(HISTORY_FILE, '\n');
+}
+
+function generateJobSummary(score, totals, previous) {
+  const summaryFile = process.env.GITHUB_STEP_SUMMARY;
+  if (!summaryFile) return;
+
+  const delta = previous ? score - previous.score : null;
+  const statusEmoji = score >= 80 ? '✅' : score >= 60 ? '⚠️' : '❌';
+
+  let summary = `# Mutation Testing Results\n\n`;
+  summary += `${statusEmoji} **Score: ${score}%**\n\n`;
+  summary += `## Mutation Breakdown\n`;
+  summary += `| Metric | Count |\n`;
+  summary += `|--------|-------|\n`;
+  summary += `| Killed | ${totals.killed} |\n`;
+  summary += `| Survived | ${totals.survived} |\n`;
+  summary += `| Timeout | ${totals.timeout} |\n`;
+  summary += `| No Coverage | ${totals.noCoverage} |\n\n`;
+
+  if (previous) {
+    summary += `## Trend\n`;
+    summary += `| Metric | Value |\n`;
+    summary += `|--------|-------|\n`;
+    summary += `| Previous Score | ${previous.score}% |\n`;
+    summary += `| Current Score | ${score}% |\n`;
+    summary += `| Delta | ${delta >= 0 ? '+' : ''}${delta}% |\n\n`;
+  }
+
+  summary += `## Thresholds\n`;
+  summary += `| Level | Threshold | Status |\n`;
+  summary += `|-------|-----------|--------|\n`;
+  summary += `| Break | ≥${BREAK_THRESHOLD}% | ${score >= BREAK_THRESHOLD ? '✅ Pass' : '❌ Fail'} |\n`;
+  summary += `| Low | ≥60% | ${score >= 60 ? '✅ Pass' : '⚠️ Warning'} |\n`;
+  summary += `| High (Target) | ≥80% | ${score >= 80 ? '✅ Pass' : '⚠️ Below Target'} |\n`;
+
+  fs.writeFileSync(summaryFile, summary);
 }
 
 function run() {
@@ -72,16 +110,19 @@ function run() {
     console.log(`  Previous: ${previous.score}%  Delta: ${delta >= 0 ? '+' : ''}${delta}%`);
     if (delta < -REGRESSION_TOLERANCE) {
       console.error(`\n⚠ ALERT: Mutation score dropped by ${Math.abs(delta)}% (tolerance: ${REGRESSION_TOLERANCE}%)`);
+      generateJobSummary(score, totals, previous);
       process.exit(1);
     }
   }
 
   if (score < BREAK_THRESHOLD) {
     console.error(`\n✗ Mutation score ${score}% is below the required threshold of ${BREAK_THRESHOLD}%`);
+    generateJobSummary(score, totals, previous);
     process.exit(1);
   }
 
   console.log(`\n✓ Mutation score ${score}% meets threshold (≥${BREAK_THRESHOLD}%)`);
+  generateJobSummary(score, totals, previous);
 }
 
 run();
