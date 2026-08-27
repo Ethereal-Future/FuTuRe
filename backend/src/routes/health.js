@@ -111,6 +111,10 @@ async function checkRedisConnectivity() {
       tls: redisBackend.isTlsEnabled(),
       responseTime: Date.now(),
     };
+  }
+}
+
+async function checkEmailServiceConnectivity() {
   try {
     if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER) {
       return {
@@ -272,21 +276,18 @@ function calculateHealthPercentage(checks) {
 
 router.get('/health', async (req, res) => {
   try {
-    const systemInfo = getSystemInfo();
-    const appInfo = getApplicationInfo();
     const stellarCheck = await checkStellarConnectivity();
     const databaseCheck = await checkDatabaseConnectivity();
     const redisCheck = await checkRedisConnectivity();
     const emailCheck = await checkEmailServiceConnectivity();
     const wsCheck = await checkWebSocketConnectivity();
-    const dependencyCheck = await checkDependencies();
 
     const healthChecks = [
-      { name: 'stellar', ...stellarCheck },
-      { name: 'database', ...databaseCheck },
-      { name: 'redis', ...redisCheck },
-      { name: 'email', ...emailCheck },
-      { name: 'websocket', ...wsCheck },
+      { name: 'stellar', status: stellarCheck.status },
+      { name: 'database', status: databaseCheck.status },
+      { name: 'redis', status: redisCheck.status },
+      { name: 'email', status: emailCheck.status },
+      { name: 'websocket', status: wsCheck.status },
     ];
 
     // Calculate overall health (exclude unavailable services)
@@ -302,9 +303,6 @@ router.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       checks: healthChecks,
-      dependencies: dependencyCheck,
-      system: systemInfo,
-      application: appInfo,
     };
 
     const statusCode = status === 'healthy' ? 200 : status === 'degraded' ? 200 : 503;
@@ -466,6 +464,10 @@ router.get('/health/detailed', requireAuth, async (req, res) => {
       Promise.resolve(eventStore.events?.length ?? 0),
     ]);
 
+    const systemInfo = getSystemInfo();
+    const appInfo = getApplicationInfo();
+    const dependencyCheck = await checkDependencies();
+
     const cacheStats = cacheMonitor.getPerformanceStats();
     const cacheAlerts = cacheMonitor.getAlerts().slice(-5);
 
@@ -492,6 +494,9 @@ router.get('/health/detailed', requireAuth, async (req, res) => {
     res.json({
       status: overallStatus,
       timestamp: new Date().toISOString(),
+      system: systemInfo,
+      application: appInfo,
+      dependencies: dependencyCheck,
       cache: {
         status: cacheStats ? 'healthy' : 'unknown',
         performance: cacheStats,
