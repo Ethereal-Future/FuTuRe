@@ -566,3 +566,140 @@ model FeeSnapshot {
 
   @@index([capturedAt])
 }
+
+// ─── Event Sourcing (#1125) ───────────────────────────────────────────────────
+
+// Immutable event log – replaces the per-aggregate JSONL files that were
+// written to backend/data/events/ by eventStore.js.
+model EventStore {
+  id          String   @id @default(uuid())
+  aggregateId String
+  eventType   String
+  payload     Json
+  version     Int      @default(1)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([aggregateId])
+  @@index([aggregateId, version])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// Aggregate snapshots – replaces the per-aggregate JSON files written to
+// backend/data/snapshots/ by eventStore.js.
+model EventSnapshot {
+  id          String   @id @default(uuid())
+  aggregateId String   @unique
+  state       Json
+  version     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([aggregateId])
+}
+
+// Long-term event archive – replaces the archive files written to
+// backend/data/archive/ by eventArchiver.js.
+model EventArchive {
+  id          String   @id @default(uuid())
+  aggregateId String
+  eventType   String
+  payload     Json
+  version     Int      @default(1)
+  metadata    Json     @default("{}")
+  originalCreatedAt DateTime
+  archivedAt  DateTime @default(now())
+
+  @@index([aggregateId])
+  @@index([archivedAt])
+}
+
+// Read-model projections – replaces the per-projection JSON files written to
+// backend/data/projections/ by projectionManager.js.
+model EventProjection {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ─── Load Testing (#1125) ────────────────────────────────────────────────────
+
+// Full result set for a single load-test run – replaces the per-run JSON files
+// written to backend/data/load-tests/results/ by loadTestRunner.js.
+model LoadTestResult {
+  id        String   @id @default(uuid())
+  testName  String
+  metrics   Json
+  createdAt DateTime @default(now())
+
+  @@index([testName])
+  @@index([testName, createdAt])
+}
+
+// Named performance baselines – replaces the per-baseline JSON files written
+// to backend/data/load-tests/baselines/ by performanceBaseline.js.
+model PerformanceBaseline {
+  id             String   @id @default(uuid())
+  name           String
+  schemaVersion  Int      @default(2)
+  executionModel String   @default("concurrent")
+  metrics        Json
+  createdAt      DateTime @default(now())
+
+  @@index([name])
+  @@index([name, createdAt])
+}
+
+// Performance threshold violation alerts – replaces the per-run alert JSON
+// files written to backend/data/load-tests/alerts/ by performanceAlerting.js.
+model PerformanceAlert {
+  id        String   @id @default(uuid())
+  testName  String?
+  alertType String
+  severity  String
+  metric    String
+  message   String
+  value     Float
+  threshold Float
+  createdAt DateTime @default(now())
+
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ─── Mobile Security (#1125) ─────────────────────────────────────────────────
+
+// Per-device fingerprint, cert-pin, and jailbreak state – replaces the
+// in-process Map (this.devices) in mobile/security.js.
+model DeviceRegistry {
+  id           String   @id @default(uuid())
+  deviceId     String   @unique
+  fingerprint  String
+  certHash     String?
+  isJailbroken Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  alerts SecurityAlert[]
+
+  @@index([deviceId])
+}
+
+// Suspicious-event log – replaces the in-process array (this.alerts) in
+// mobile/security.js.
+model SecurityAlert {
+  id         String         @id @default(uuid())
+  deviceId   String
+  device     DeviceRegistry @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  severity   String         @default("medium")
+  details    String
+  createdAt  DateTime       @default(now())
+
+  @@index([deviceId])
+  @@index([createdAt])
+}
