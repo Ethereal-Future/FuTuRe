@@ -252,6 +252,13 @@ function App() {
     if (account?.publicKey && !accountLabel) loadLabel(account.publicKey);
   }, [account?.publicKey, accountLabel, loadLabel]);
 
+  // Show replay prompt if there are pending items (e.g., after tab reopen)
+  useEffect(() => {
+    if (pendingCount > 0) {
+      setShowReplayPrompt(true);
+    }
+  }, [pendingCount]);
+
   // Update document.title based on the active section
   useEffect(() => {
     if (showSettings) {

@@ -2,6 +2,9 @@
   "name": "backend",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
