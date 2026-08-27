@@ -14,8 +14,14 @@ import logger from '../config/logger.js';
 
 const router = express.Router();
 
-// Redis backend instance for health checks
-const redisBackend = new RedisBackend(process.env.REDIS_URL || null);
+// Redis backend instance for health checks (host/AUTH/TLS via env, or REDIS_URL)
+const redisBackend = new RedisBackend();
+
+function redisTlsRequired() {
+  const raw = (process.env.APP_ENV || process.env.NODE_ENV || 'development').trim().toLowerCase();
+  const env = raw === 'prod' ? 'production' : raw === 'dev' ? 'development' : raw;
+  return env !== 'development' && env !== 'test';
+}
 
 function getSystemInfo() {
   return {
@@ -78,25 +84,33 @@ async function checkRedisConnectivity() {
       return {
         status: 'unavailable',
         message: 'Redis not configured',
+        tls: false,
       };
     }
 
-    // Try to ping Redis
     const pong = await redisBackend.client.ping();
+    const tls = redisBackend.isTlsEnabled();
+    if (redisTlsRequired() && !tls) {
+      return {
+        status: 'unhealthy',
+        message: 'Redis connection is not using TLS',
+        tls: false,
+        responseTime: Date.now(),
+      };
+    }
+
     return {
       status: pong === 'PONG' ? 'healthy' : 'unhealthy',
+      tls,
       responseTime: Date.now(),
     };
   } catch (error) {
     return {
       status: 'unhealthy',
       error: error.message,
+      tls: redisBackend.isTlsEnabled(),
       responseTime: Date.now(),
     };
-  }
-}
-
-async function checkEmailServiceConnectivity() {
   try {
     if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER) {
       return {

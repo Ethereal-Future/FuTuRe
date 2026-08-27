@@ -9,10 +9,17 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // recorded before #1115, or multiply their `throughput` by 1000.
 const BASELINE_DIR = path.join(__dirname, '../../data/load-tests/baselines');
 
+// v1 baselines were produced by the serial for-loop in loadTestRunner
+// (issue #1114). They are not comparable to concurrent-worker results.
+export const BASELINE_SCHEMA_VERSION = 2;
+export const BASELINE_EXECUTION_MODEL = 'concurrent';
+
 class PerformanceBaseline {
   constructor(name) {
     this.name = name;
     this.timestamp = new Date().toISOString();
+    this.schemaVersion = BASELINE_SCHEMA_VERSION;
+    this.executionModel = BASELINE_EXECUTION_MODEL;
     this.metrics = {
       avgResponseTime: 0,
       p95ResponseTime: 0,
@@ -51,6 +58,11 @@ class PerformanceBaseline {
     return this;
   }
 
+  static isConcurrentModel(baseline) {
+    if (!baseline || typeof baseline !== 'object') return false;
+    return baseline.executionModel === BASELINE_EXECUTION_MODEL || baseline.schemaVersion === BASELINE_SCHEMA_VERSION;
+  }
+
   async save() {
     await fs.mkdir(BASELINE_DIR, { recursive: true });
     const file = path.join(BASELINE_DIR, `${this.name}-${Date.now()}.json`);
@@ -73,6 +85,13 @@ class PerformanceBaseline {
   }
 
   compareWith(other) {
+    if (!PerformanceBaseline.isConcurrentModel(this) || !PerformanceBaseline.isConcurrentModel(other)) {
+      return {
+        incomparable: true,
+        reason: 'Prior serial-execution baselines (pre-#1114) are not comparable to concurrent results. Re-generate the baseline before using bottleneck/capacity/regression output.',
+      };
+    }
+
     return {
       avgResponseTimeDiff: ((this.metrics.avgResponseTime - other.metrics.avgResponseTime) / other.metrics.avgResponseTime) * 100,
       p95ResponseTimeDiff: ((this.metrics.p95ResponseTime - other.metrics.p95ResponseTime) / other.metrics.p95ResponseTime) * 100,

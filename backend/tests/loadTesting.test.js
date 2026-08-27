@@ -236,4 +236,81 @@ describe('Load Testing Framework', () => {
       expect(prioritized[0].priority).toBe('CRITICAL');
     });
   });
+
+  describe('LoadTestRunner concurrency (#1114)', () => {
+    it('issues multiple requests in flight for concurrency > 1', async () => {
+      const http = await import('node:http');
+      let inFlight = 0;
+      let maxInFlight = 0;
+
+      const server = http.createServer((req, res) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        setTimeout(() => {
+          inFlight -= 1;
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, 80);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('concurrent', 'Concurrent in-flight');
+        scenario.setConcurrency(4).setDuration(1).setRampUp(0);
+        scenario.addRequest('GET', '/health');
+
+        const summary = await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        expect(summary.executionModel).toBe('concurrent');
+        expect(summary.totalRequests).toBeGreaterThan(1);
+        expect(maxInFlight).toBeGreaterThan(1);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('staggers worker start times across rampUp', async () => {
+      const http = await import('node:http');
+      const startTimes = [];
+
+      const server = http.createServer((req, res) => {
+        startTimes.push(Date.now());
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, 200);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('ramp', 'Ramp-up stagger');
+        scenario.setConcurrency(3).setDuration(1).setRampUp(0.3);
+        scenario.addRequest('GET', '/health');
+
+        await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        expect(startTimes.length).toBeGreaterThan(0);
+        const span = Math.max(...startTimes) - Math.min(...startTimes);
+        expect(span).toBeGreaterThanOrEqual(150);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('flags serial (pre-#1114) baselines as incomparable', () => {
+      const serial = { name: 'old', metrics: { avgResponseTime: 100, p95ResponseTime: 200, errorRate: 1, throughput: 100 } };
+      const current = { avgResponseTime: 100, p95ResponseTime: 200, errorRate: 1, throughput: 100 };
+      const regressions = regressionTester.detectRegression(current, serial);
+      expect(regressions.some((r) => r.metric === 'executionModel' && r.severity === 'CRITICAL')).toBe(true);
+
+      const currentBaseline = new PerformanceBaseline('new');
+      currentBaseline.metrics = serial.metrics;
+      const comparison = currentBaseline.compareWith(serial);
+      expect(comparison.incomparable).toBe(true);
+    });
+  });
 });

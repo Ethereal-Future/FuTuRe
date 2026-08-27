@@ -218,6 +218,64 @@ and rate limiting, so plan the cutover as a maintenance-window operation:
    (`aws elasticache test-failover --replication-group-id future-staging-redis
    --node-group-id <shard-id>`) and confirm the application reconnects with
    minimal downtime before relying on this in production.
+
+## Redis TLS + AUTH Cutover Runbook (issue #1111)
+
+Enabling `transit_encryption_enabled` and `auth_token` on
+`aws_elasticache_replication_group.redis` typically **replaces** the
+replication group (Terraform will show destroy/recreate). Cached data loss
+is acceptable — Redis is a cache (balances, rates, rate-limit counters) —
+but the connection-string change must ship with the backend at the same time.
+
+### Why a maintenance window
+
+- In-transit encryption and AUTH cannot be added in place on the current
+  group without a replacement in most engine/provider combinations.
+- The new group requires TLS (`REDIS_TLS=true`) and `REDIS_AUTH_TOKEN`
+  (injected from Secrets Manager). Old plaintext `redis://` clients will
+  fail to authenticate.
+- Rate-limit counters and L2 cache entries are wiped on replace; the app
+  already falls back to L1 / origin fetches (see `backend/src/cache/redis.js`).
+
+### Cutover steps
+
+1. **Populate / confirm secrets.** `random_password.redis_auth` is stored in
+   `aws_secretsmanager_secret.redis_auth_token` and wired to ElastiCache
+   `auth_token` plus the ECS task as `REDIS_AUTH_TOKEN`. Confirm the secret
+   version exists (`aws secretsmanager get-secret-value --secret-id
+   <prefix>/redis-auth-token`) before apply.
+2. **Review `terraform plan`.** Expect the replication group to be replaced
+   and the ECS task definition to add `REDIS_HOST` / `REDIS_PORT` /
+   `REDIS_TLS` / `REDIS_AUTH_TOKEN`. Do not apply if the plan also destroys
+   unrelated stateful resources.
+3. **Schedule a short window.** Announce a brief cache-cold period (origin
+   load spike as balances/rates re-warm). Rollback is: revert the Terraform
+   + backend release together (plaintext Redis will not accept AUTH/TLS
+   clients, and TLS clients will not talk to a plaintext cluster).
+4. **Apply Terraform, then deploy the backend** that uses TLS + AUTH
+   (`backend/src/cache/redis.js`). Force a new ECS deployment if the task
+   definition did not roll automatically:
+   ```bash
+   aws ecs update-service \
+     --cluster future-production-cluster \
+     --service future-production-backend \
+     --force-new-deployment
+   ```
+5. **Verify.** `GET /health` Redis check should be `healthy` with
+   `"tls": true`. From a task: `redis-cli --tls -a "$REDIS_AUTH_TOKEN" -h
+   "$REDIS_HOST" ping` → `PONG`. Confirm the app serves cached balances
+   after a warm-up request.
+6. **Rollback.** Re-apply the previous Terraform revision and the previous
+   backend image in the same window. Cache remains empty either way; restore
+   is reconnect + warm, not snapshot restore.
+
+### Cache-warm plan
+
+After the new group is in service, issue a small set of read paths
+(`GET` balance, exchange-rate, fee-stats) against staging then production
+so L2 fills before peak traffic. Rate-limit counters start at zero — expect
+a short period of more-permissive limiting until windows refill.
+
 ## Autoscaling
 
 The backend ECS service includes automatic application autoscaling that dynamically adjusts the number of running tasks based on load:
