@@ -57,3 +57,58 @@ describe('Configuration Management', () => {
   });
 });
 
+const DEPLOYED_BASE = {
+  STREAM_SECRET_ENCRYPTION_KEY: 'x'.repeat(32),
+  DATABASE_URL: 'postgresql://test:test@localhost:5432/test_db',
+  ALLOWED_ORIGINS: 'https://example.com',
+};
+
+describe('#1112 JWT secret fail-closed validation', () => {
+  it('allows the default JWT_SECRET only in development and test', () => {
+    const dev = createConfigFromEnv({ ...DEPLOYED_BASE, APP_ENV: 'development' });
+    expect(dev.security.jwtSecret).toBe('secret');
+
+    const testEnv = createConfigFromEnv({ ...DEPLOYED_BASE, APP_ENV: 'test' });
+    expect(testEnv.security.jwtSecret).toBe('secret');
+  });
+
+  it('fails to boot when APP_ENV is unrecognized (preprod) and JWT_SECRET is unset', () => {
+    expect(() =>
+      createConfigFromEnv({
+        ...DEPLOYED_BASE,
+        APP_ENV: 'preprod',
+      }),
+    ).toThrow(/JWT_SECRET is required/);
+  });
+
+  it('rejects the hardcoded default JWT_SECRET for unrecognized APP_ENV', () => {
+    expect(() =>
+      createConfigFromEnv({
+        ...DEPLOYED_BASE,
+        APP_ENV: 'preprod',
+        JWT_SECRET: 'secret',
+      }),
+    ).toThrow(/JWT_SECRET must not be the default value/);
+  });
+
+  it('requires a real JWT_SECRET for staging', () => {
+    expect(() =>
+      createConfigFromEnv({
+        ...DEPLOYED_BASE,
+        APP_ENV: 'staging',
+      }),
+    ).toThrow(/JWT_SECRET is required/);
+  });
+
+  it('requires ALLOWED_ORIGINS for unrecognized APP_ENV (same fail-closed pattern)', () => {
+    expect(() =>
+      createConfigFromEnv({
+        STREAM_SECRET_ENCRYPTION_KEY: DEPLOYED_BASE.STREAM_SECRET_ENCRYPTION_KEY,
+        DATABASE_URL: DEPLOYED_BASE.DATABASE_URL,
+        APP_ENV: 'demo',
+        JWT_SECRET: 'a-real-non-default-secret',
+      }),
+    ).toThrow(/ALLOWED_ORIGINS is required/);
+  });
+});
+

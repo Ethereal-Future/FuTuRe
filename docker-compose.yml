@@ -120,6 +120,8 @@ services:
     depends_on:
       - backend
     ports:
+      # Local Vite (Dockerfile.dev) listens on 3000. The production
+      # frontend/Dockerfile nginx runtime listens on 8080 as non-root.
       - "3000:3000"
     volumes:
       - ./frontend/src:/app/src

@@ -1,3 +1,5 @@
+import PerformanceBaseline, { BASELINE_EXECUTION_MODEL } from './performanceBaseline.js';
+
 class RegressionTester {
   constructor() {
     this.thresholds = {
@@ -14,6 +16,17 @@ class RegressionTester {
 
   detectRegression(current, baseline) {
     const regressions = [];
+
+    if (!PerformanceBaseline.isConcurrentModel(baseline)) {
+      regressions.push({
+        metric: 'executionModel',
+        severity: 'CRITICAL',
+        message: 'Stored baseline was generated under serial (pre-#1114) execution and is not comparable. Re-generate the baseline.',
+        current: BASELINE_EXECUTION_MODEL,
+        baseline: baseline?.executionModel ?? 'serial',
+      });
+      return regressions;
+    }
 
     // Check average response time
     if (current.avgResponseTime > baseline.metrics.avgResponseTime * this.thresholds.avgResponseTime) {
