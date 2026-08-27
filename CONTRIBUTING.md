@@ -733,6 +733,7 @@ Key conventions:
 - No unused variables; `_` prefix for intentionally unused parameters.
 - Keep functions small and single-purpose; avoid deeply nested callbacks.
 - All new CSS must use logical properties instead of physical directional ones, so layouts mirror correctly for RTL locales (Arabic, Hebrew). Use `margin-inline-start`/`margin-inline-end` instead of `margin-left`/`margin-right`, `padding-inline-start`/`padding-inline-end` instead of `padding-left`/`padding-right`, `text-align: start`/`end` instead of `left`/`right`, `border-inline-start`/`border-inline-end` instead of `border-left`/`border-right`, and `inset-inline-start`/`inset-inline-end` instead of positioning with `left`/`right`.
+- New user-facing JSX strings must go through the i18n module (`t('key')`), not hardcoded literals — `npm run lint:i18n` (`scripts/check-i18n-strings.mjs`) enforces this in CI. See [scripts/README.md](scripts/README.md) for what it checks and how to accept a false positive.
 
 ### JSDoc for Backend Services
 
@@ -843,6 +844,10 @@ All `uses:` references in `.github/workflows/` **must** be pinned to a full comm
 
 ## Dependency Vulnerability Management
 
+Found an actual exploitable vulnerability rather than a routine dependency alert? See [SECURITY.md](SECURITY.md) for the private disclosure process — don't open a public issue for it.
+
+Separately, every `npm test` run and every CI run scans tracked files for accidentally committed secrets/PII (Stellar secret keys, JWTs, non-example email addresses) via `scripts/pii-scan.mjs` — see [scripts/README.md](scripts/README.md#pii-scanmjs) for what it checks and how to allowlist a false positive.
+
 ### Automated scanning
 
 `npm audit --audit-level=high` runs as a blocking CI step in both `test.yml` and `security-pipeline.yml` (covering the root workspace, `backend/`, and `frontend/`). A PR cannot merge if any **high** or **critical** vulnerability is present in the dependency tree.
@@ -900,14 +905,14 @@ security advisories.
 | Major npm updates               | Separate PR per package, requires manual review     |
 | GitHub Actions                  | Weekly SHA-pin update PR                            |
 | Prisma (client + CLI + adapter) | Grouped together to keep versions in sync           |
-| `@stellar/stellar-sdk`          | Pinned exact version — update manually with care    |
+| `@stellar/stellar-sdk`          | Pinned exact version — update manually, see below   |
 | Lock-file maintenance           | Monthly PR to refresh `package-lock.json`           |
 
 ### Reviewing a Renovate PR
 
 1. Read the changelog / release notes linked in the PR body.
 2. Check the CI status — all jobs must pass before merging.
-3. For `@stellar/stellar-sdk` major bumps, test against the Stellar testnet before merging.
+3. For `@stellar/stellar-sdk` and Prisma major bumps, follow the package-specific checklist in [docs/guides/dependency-upgrades.md](docs/guides/dependency-upgrades.md) before merging — changelog review and passing CI aren't sufficient on their own for these two.
 4. Merge Renovate PRs promptly — letting them accumulate defeats the purpose of automation.
 
 ### Renovate vs Dependabot
