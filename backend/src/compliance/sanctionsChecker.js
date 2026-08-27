@@ -1,12 +1,27 @@
 // Sanctions screening — integrates with the OFAC SDN API.
-// Falls back to a local name-match if SANCTIONS_API_KEY is not set.
 // Set SANCTIONS_API_KEY and SANCTIONS_API_URL in your environment.
+//
+// Fail mode (SANCTIONS_FAIL_MODE, default 'closed'): when the API is
+// unconfigured or unreachable, 'closed' blocks the check as a hit pending
+// manual review rather than silently passing everyone. Production and
+// staging additionally refuse to start at all without SANCTIONS_API_KEY.
 
 import https from 'https';
+import logger from '../config/logger.js';
 
 const API_URL  = process.env.SANCTIONS_API_URL  ?? 'https://api.ofac-api.com/v4/search';
 const API_KEY  = process.env.SANCTIONS_API_KEY  ?? '';
 const MIN_SCORE = parseInt(process.env.SANCTIONS_MIN_SCORE ?? '85', 10);
+const FAIL_MODE = (process.env.SANCTIONS_FAIL_MODE ?? 'closed').trim().toLowerCase();
+const APP_ENV = (process.env.APP_ENV || process.env.NODE_ENV || 'development').trim().toLowerCase();
+const IS_DEPLOYED = APP_ENV === 'production' || APP_ENV === 'staging';
+
+if (!API_KEY && IS_DEPLOYED) {
+  throw new Error(
+    `SANCTIONS_API_KEY is not configured; sanctions screening cannot start in ${APP_ENV}. ` +
+    'Set SANCTIONS_API_KEY before deploying.'
+  );
+}
 
 function httpPost(url, body, headers) {
   return new Promise((resolve, reject) => {
@@ -41,8 +56,19 @@ class SanctionsChecker {
     if (API_KEY) {
       return this._checkViaApi(fullName, nationality);
     }
-    // No API key — warn and return clear (operator must configure for production)
-    console.warn('[sanctions] SANCTIONS_API_KEY not set; screening skipped. Configure for production.');
+    logger.error('sanctions.check.unconfigured', {
+      message: 'SANCTIONS_API_KEY not set; screening cannot be performed',
+      appEnv: APP_ENV,
+      failMode: FAIL_MODE,
+    });
+    if (FAIL_MODE === 'closed') {
+      return {
+        hit: true,
+        reason: 'Sanctions screening is not configured — blocking pending manual review',
+        source: 'SCREENING_UNCONFIGURED',
+        screeningError: true,
+      };
+    }
     return { hit: false };
   }
 
@@ -57,8 +83,15 @@ class SanctionsChecker {
       const { status, body } = await httpPost(API_URL, payload, { apiKey: API_KEY });
 
       if (status !== 200) {
-        console.error('[sanctions] API error', status, body);
-        // Fail open with a warning — operator should decide fail-closed policy
+        logger.error('sanctions.api.error_status', { status, appEnv: APP_ENV, failMode: FAIL_MODE });
+        if (FAIL_MODE === 'closed') {
+          return {
+            hit: true,
+            reason: `Sanctions API returned ${status} — blocking pending manual review`,
+            source: 'SCREENING_ERROR',
+            screeningError: true,
+          };
+        }
         return { hit: false, warning: `Sanctions API returned ${status}` };
       }
 
@@ -73,7 +106,15 @@ class SanctionsChecker {
       }
       return { hit: false };
     } catch (err) {
-      console.error('[sanctions] API call failed:', err.message);
+      logger.error('sanctions.api.call_failed', { error: err.message, appEnv: APP_ENV, failMode: FAIL_MODE });
+      if (FAIL_MODE === 'closed') {
+        return {
+          hit: true,
+          reason: `Sanctions API unavailable (${err.message}) — blocking pending manual review`,
+          source: 'SCREENING_ERROR',
+          screeningError: true,
+        };
+      }
       return { hit: false, warning: `Sanctions API unavailable: ${err.message}` };
     }
   }
