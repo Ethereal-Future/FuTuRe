@@ -726,6 +726,7 @@ npm run format   # applies Prettier
 npm run lint     # ESLint check
 ```
 
+That covers formatting and the lint rules themselves (unused vars, no-shadow, no-console, React hooks rules, and more). It does **not** cover conventions ESLint can't check — ES-modules-only, async/await style, JSDoc on backend services, image asset naming, RTL/logical-properties CSS, backend error-handling shape, naming conventions, and Prisma query patterns. See [`docs/guides/code-style.md`](docs/guides/code-style.md) for the full guide, which explicitly separates what's tooling-enforced from what you have to remember, and [`docs/guides/i18n.md`](docs/guides/i18n.md) for the i18n/RTL workflow specifically.
 Key conventions:
 
 - ES modules (`import`/`export`) throughout — no `require()`.
