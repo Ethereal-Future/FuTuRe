@@ -546,3 +546,21 @@ model Sep31Transaction {
   @@unique([anchorUrl, externalId])
   @@index([status])
 }
+
+
+// Real Horizon fee-stats snapshots persisted by the scheduler every 5 minutes.
+// getFeeHistory() queries this table instead of generating synthetic data.
+// See issue #1119.
+model FeeSnapshot {
+  id         String   @id @default(uuid())
+  capturedAt DateTime @default(now())
+  baseFee    Int      // last_ledger_base_fee (stroops)
+  p10        Int      // fee_charged.p10
+  p50        Int      // fee_charged.p50
+  p75        Int      // fee_charged.p75
+  p90        Int      // fee_charged.p90
+  p99        Int      // fee_charged.p99
+  peakFee    Int      // peak_fee.p99
+
+  @@index([capturedAt])
+}
