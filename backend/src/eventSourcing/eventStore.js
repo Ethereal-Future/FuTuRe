@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVENTS_DIR = path.join(__dirname, '../../data/events');
@@ -27,7 +28,7 @@ class EventStore {
     if (!this.initialized) await this.initialize();
 
     const eventWithMetadata = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: randomUUID(),
       aggregateId,
       type: event.type,
       data: event.data,

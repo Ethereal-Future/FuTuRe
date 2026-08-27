@@ -8,6 +8,7 @@ const PROJECTIONS_DIR = path.join(__dirname, '../../data/projections');
 class ProjectionManager {
   constructor() {
     this.projections = new Map();
+    this.writeQueues = new Map();
   }
 
   async initialize() {
@@ -35,8 +36,21 @@ class ProjectionManager {
   }
 
   async saveProjection(name, data) {
-    const file = path.join(PROJECTIONS_DIR, `${name}.json`);
-    await fs.writeFile(file, JSON.stringify(data, null, 2));
+    if (!this.writeQueues.has(name)) {
+      this.writeQueues.set(name, Promise.resolve());
+    }
+
+    const queuePromise = this.writeQueues.get(name);
+    const newPromise = queuePromise.then(async () => {
+      const file = path.join(PROJECTIONS_DIR, `${name}.json`);
+      const tmpFile = `${file}.tmp`;
+
+      await fs.writeFile(tmpFile, JSON.stringify(data, null, 2));
+      await fs.rename(tmpFile, file);
+    });
+
+    this.writeQueues.set(name, newPromise);
+    await newPromise;
   }
 
   async loadProjection(name) {

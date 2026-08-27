@@ -5,11 +5,13 @@ import { getConfig } from '../config/env.js';
 import { getIssuer } from '../config/assets.js';
 import logger, { withContext } from '../config/logger.js';
 import prisma from '../db/client.js';
-import { callWithCircuitBreaker } from './circuitBreaker.js';
+import { createCircuitBreaker } from './circuitBreaker.js';
 import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
 import { recordHorizonCall } from '../monitoring/horizonAlerter.js';
 import { withSpan } from '../config/otel.js';
 import { recordFeeSample, getSevenDayAverageFee, detectFeeSurge } from './feeSurge.js';
+
+const stellarInteractiveBreaker = createCircuitBreaker('Horizon-Interactive');
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -115,7 +117,7 @@ export function getHorizonTimeout() {
  */
 export async function withHorizonTimeout(fn) {
   const ms = getHorizonTimeout();
-  return callWithCircuitBreaker(() => {
+  return stellarInteractiveBreaker.call(() => {
     let timer;
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
@@ -1190,4 +1192,8 @@ export async function buildUnsignedXdr(
   return {
     xdr: transaction.toEnvelope().toXDR('base64'),
   };
+}
+
+export function getInteractiveCircuitBreakerState() {
+  return stellarInteractiveBreaker.getState();
 }
