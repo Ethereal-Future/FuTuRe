@@ -524,6 +524,8 @@ model IPWhitelist {
 
   @@index([ipAddress])
   @@index([createdAt])
+}
+
 // Tracks a SEP-0031 cross-border direct payment handed off to a receiving
 // anchor. One row per transaction created via POST /transactions against an
 // anchor's DIRECT_PAYMENT_SERVER; status is refreshed by polling
