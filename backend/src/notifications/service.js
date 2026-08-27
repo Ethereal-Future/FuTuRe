@@ -10,6 +10,7 @@ import { sendEmail } from './channels/email.js';
 import { sendPush } from './channels/push.js';
 import { sendSms } from './channels/sms.js';
 import { sendInApp } from './channels/inApp.js';
+import { getSubscription, sendWebPush } from './webPush.js';
 
 const CHANNELS = ['email', 'push', 'sms', 'inApp'];
 
@@ -54,9 +55,24 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
             if (!email) { results[channel] = { skipped: true, reason: 'no_email' }; return; }
             result = await sendEmail(email, content);
             break;
-          case 'push':
+          case 'push': {
             result = await sendPush(userId, content);
+            // In addition to the mobile FCM/APNs channel above, also deliver
+            // to any registered browser Web Push subscription (RFC 8291 /
+            // VAPID — see notifications/webPush.js, issue #1123). Best-effort:
+            // a missing subscription or delivery failure here must not
+            // affect the mobile push result already recorded.
+            const webSubscription = getSubscription(userId);
+            if (webSubscription) {
+              const webPushResult = await sendWebPush(webSubscription, {
+                title: content.title,
+                body: content.body,
+                data,
+              });
+              result = { ...result, webPush: webPushResult };
+            }
             break;
+          }
           case 'sms':
             if (!phone) { results[channel] = { skipped: true, reason: 'no_phone' }; return; }
             result = await sendSms(phone, content);
