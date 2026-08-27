@@ -9,7 +9,8 @@ import {
   projectionManager,
   eventArchiver,
   eventAnalytics,
-  eventMonitor
+  eventMonitor,
+  SCHEMA_VERSIONS,
 } from '../src/eventSourcing/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -108,6 +109,33 @@ describe('Event Sourcing System', () => {
 
       expect(restored.type).toBe('PaymentSent');
       expect(restored.data.amount).toBe(100);
+    });
+
+    it('throws rather than silently relabeling when a migration method is missing', () => {
+      const original = SCHEMA_VERSIONS.AccountCreated.current;
+      SCHEMA_VERSIONS.AccountCreated.current = 2;
+      try {
+        expect(() =>
+          eventSerializer.deserialize({
+            type: 'AccountCreated',
+            data: { publicKey: 'test' },
+            schemaVersion: 1,
+          })
+        ).toThrow(/Missing schema migration AccountCreated_v1_to_v2/);
+      } finally {
+        SCHEMA_VERSIONS.AccountCreated.current = original;
+      }
+    });
+
+    it('applies PaymentSent_v1_to_v2 and stamps the current schema version', () => {
+      const deserialized = eventSerializer.deserialize({
+        type: 'PaymentSent',
+        data: { destination: 'GDEST', amount: '50', hash: 'abc' },
+        schemaVersion: 1,
+      });
+      expect(deserialized.schemaVersion).toBe(2);
+      expect(deserialized.data.asset).toBe('XLM');
+      expect(deserialized.data.amount).toBe('50');
     });
   });
 

@@ -498,12 +498,21 @@ After each successful payment, `amlMonitor.screenTransaction()` runs asynchronou
 | `AML_STRUCTURING_THRESHOLD` | `1000` | Per-transaction ceiling for structuring detection |
 | `AML_STRUCTURING_COUNT` | `3` | Number of sub-threshold transactions in 24 h to trigger `STRUCTURING` |
 | `AML_VELOCITY_LIMIT` | `10000` | Total sent in 24 h that triggers `VELOCITY` |
+| `AML_RAPID_TX_COUNT` | `5` | Transactions from one sender within the rapid window that trigger `RAPID_SUCCESSION` |
+| `AML_RAPID_TX_WINDOW_MS` | `3600000` | Rapid-succession window (1 hour) |
+| `AML_NEAR_THRESHOLD_LOW` | `9000` | Lower bound for `NEAR_THRESHOLD` (upper bound is `AML_LARGE_TX_THRESHOLD`) |
+| `FRAUD_ANALYZE_MAX_RANGE_DAYS` | `90` | Max `from`/`to` span for `GET /api/analytics/fraud/flags` |
+| `FRAUD_ANALYZE_PAGE_SIZE` | `500` | Cursor page size for the fraud-analysis query |
+
+Thresholds and detection live in `backend/src/compliance/rules.js` and are shared by the live AML pipeline and the analytics dashboard.
 
 Rules implemented:
 
 - **LARGE_TX** — single transaction ≥ `AML_LARGE_TX_THRESHOLD`
 - **STRUCTURING** — more than `AML_STRUCTURING_COUNT` transactions each below `AML_STRUCTURING_THRESHOLD` within 24 h
+- **NEAR_THRESHOLD** — single transaction in [`AML_NEAR_THRESHOLD_LOW`, `AML_LARGE_TX_THRESHOLD`) (post-submission / analytics)
 - **VELOCITY** — cumulative 24 h send total exceeds `AML_VELOCITY_LIMIT`
+- **RAPID_SUCCESSION** — ≥ `AML_RAPID_TX_COUNT` transactions from the same sender within `AML_RAPID_TX_WINDOW_MS`
 - **UNVERIFIED_USER** — sender has no approved KYC record
 
 ### Web Vitals analytics (#499)

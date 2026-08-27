@@ -1,8 +1,12 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { throughputRps } from './throughput.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// `metrics.throughput` is requests per second (req/s). No baseline JSON files
+// were checked in under the old req/ms convention; discard any local files
+// recorded before #1115, or multiply their `throughput` by 1000.
 const BASELINE_DIR = path.join(__dirname, '../../data/load-tests/baselines');
 
 // v1 baselines were produced by the serial for-loop in loadTestRunner
@@ -22,6 +26,7 @@ class PerformanceBaseline {
       p99ResponseTime: 0,
       maxResponseTime: 0,
       minResponseTime: Infinity,
+      /** Throughput in requests per second (req/s). */
       throughput: 0,
       errorRate: 0,
       successCount: 0,
@@ -30,6 +35,10 @@ class PerformanceBaseline {
     };
   }
 
+  /**
+   * Derive baseline metrics from raw request results.
+   * `metrics.throughput` is requests per second (req/s).
+   */
   calculateFromResults(results) {
     const responseTimes = results.map(r => r.responseTime).sort((a, b) => a - b);
     const total = responseTimes.length;
@@ -43,7 +52,8 @@ class PerformanceBaseline {
     this.metrics.successCount = results.filter(r => r.success).length;
     this.metrics.errorCount = results.filter(r => !r.success).length;
     this.metrics.errorRate = (this.metrics.errorCount / total) * 100;
-    this.metrics.throughput = total / (results[total - 1].timestamp - results[0].timestamp);
+    const elapsedMs = results[total - 1].timestamp - results[0].timestamp;
+    this.metrics.throughput = throughputRps(total, elapsedMs);
 
     return this;
   }

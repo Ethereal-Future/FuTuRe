@@ -150,12 +150,16 @@ router.get('/patterns', async (req, res) => {
  *       - in: query
  *         name: from
  *         schema: { type: string, format: date-time }
+ *         description: Start of window (defaults to 30 days before `to`)
  *       - in: query
  *         name: to
  *         schema: { type: string, format: date-time }
+ *         description: End of window (defaults to now). Max range is 90 days.
  *     responses:
  *       200:
  *         description: Fraud flags
+ *       400:
+ *         description: Invalid or unbounded date range
  *       401:
  *         description: Unauthorized
  *       500:
@@ -167,6 +171,9 @@ router.get('/fraud/flags', requireAuth, async (req, res) => {
     const flags = await fraudDetector.analyze({ from, to });
     res.json({ count: flags.length, flags });
   } catch (err) {
+    if (err.statusCode === 400) {
+      return res.status(400).json({ error: err.message });
+    }
     res.status(500).json({ error: err.message });
   }
 });
