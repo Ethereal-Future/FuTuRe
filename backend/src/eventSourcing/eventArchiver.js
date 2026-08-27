@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ARCHIVE_DIR = path.join(__dirname, '../../data/archive');
@@ -49,7 +50,7 @@ class EventArchiver {
 
       return archivedCount;
     } catch (error) {
-      console.error('Archive failed:', error);
+      logger.error('Archive failed:', error);
       throw error;
     }
   }
@@ -73,7 +74,7 @@ class EventArchiver {
 
       return allEvents.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
     } catch (error) {
-      console.error('Failed to get archived events:', error);
+      logger.error('Failed to get archived events:', error);
       return [];
     }
   }

@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const METRICS_DIR = path.join(__dirname, '../../data/metrics');
@@ -70,7 +71,7 @@ class EventAnalytics {
 
       return analytics;
     } catch (error) {
-      console.error('Failed to get analytics:', error);
+      logger.error('Failed to get analytics:', error);
       return null;
     }
   }
@@ -98,7 +99,7 @@ class EventAnalytics {
 
       return stats;
     } catch (error) {
-      console.error('Failed to get event stats:', error);
+      logger.error('Failed to get event stats:', error);
       return {};
     }
   }

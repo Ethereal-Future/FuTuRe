@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVENTS_DIR = path.join(__dirname, '../../data/events');
@@ -18,7 +19,7 @@ class EventStore {
       await fs.mkdir(SNAPSHOTS_DIR, { recursive: true });
       this.initialized = true;
     } catch (error) {
-      console.error('Failed to initialize event store:', error);
+      logger.error('Failed to initialize event store:', error);
       throw error;
     }
   }
@@ -80,7 +81,7 @@ class EventStore {
         .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
         .slice(offset, offset + limit);
     } catch (error) {
-      console.error('Failed to get all events:', error);
+      logger.error('Failed to get all events:', error);
       return [];
     }
   }
