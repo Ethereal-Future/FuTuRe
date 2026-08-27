@@ -5,6 +5,7 @@ import { startScheduler as startBackupScheduler } from './backup/manager.js';
 import { sendScheduledDigests } from './services/digestGenerator.js';
 import { checkAllUserBalances } from './services/lowBalanceMonitor.js';
 import { processDueWebhookDeliveries } from './webhooks/dispatcher.js';
+import { recordFeeSnapshot, purgeStaleFeeSnapshots } from './services/feeHistory.js';
 
 let intervals = [];
 
@@ -82,6 +83,38 @@ export async function startScheduler() {
     }
   }, 30 * 60 * 1000); // Every 30 minutes
   intervals.push(balanceCheckInterval);
+
+  // Fee snapshot worker – persist a real Horizon fee-stats snapshot every
+  // 5 minutes so getFeeHistory() can build a chart from genuine data.
+  // Take an initial snapshot immediately on startup so the chart is never
+  // empty right after deploy.
+  (async () => {
+    try {
+      await recordFeeSnapshot();
+      logger.info('scheduler.feeSnapshot.initial');
+    } catch (err) {
+      logger.error('scheduler.feeSnapshot.initial.failed', { error: err.message });
+    }
+  })();
+
+  const feeSnapshotInterval = setInterval(async () => {
+    try {
+      await recordFeeSnapshot();
+    } catch (err) {
+      logger.error('scheduler.feeSnapshot.failed', { error: err.message });
+    }
+  }, 5 * 60 * 1000); // Every 5 minutes
+  intervals.push(feeSnapshotInterval);
+
+  // Fee snapshot cleanup – purge snapshots older than 30 days, daily at ~midnight.
+  const feeSnapshotPurgeInterval = setInterval(async () => {
+    try {
+      await purgeStaleFeeSnapshots(30);
+    } catch (err) {
+      logger.error('scheduler.feeSnapshot.purge.failed', { error: err.message });
+    }
+  }, 24 * 60 * 60 * 1000); // Every 24 hours
+  intervals.push(feeSnapshotPurgeInterval);
 }
 
 export function stopScheduler() {
