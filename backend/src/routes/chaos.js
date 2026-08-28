@@ -9,8 +9,13 @@ import {
   chaosTestAutomation,
   chaosReporter
 } from '../chaos/index.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = express.Router();
+
+// Fault-injection endpoints can degrade or take down live services, so they
+// are admin-only (#1102).
+router.use(requireAdmin);
 
 /**
  * @swagger

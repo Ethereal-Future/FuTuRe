@@ -5,8 +5,13 @@ import { getFeeBumpStats } from '../services/stellar.js';
 import { getCdnStats } from '../cdn/index.js';
 import { checkShardHealth, getShardStats } from '../db/sharding.js';
 import { getHorizonErrorStats } from '../monitoring/horizonAlerter.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = express.Router();
+
+// GET routes below are intentionally public: they expose only aggregate,
+// non-sensitive operational metrics and are scraped by Prometheus /
+// load balancers without app-level credentials (#1102).
 
 // GET /api/metrics — full snapshot (Prometheus text if Accept: text/plain, else JSON)
 router.get('/', (req, res) => {
@@ -20,8 +25,8 @@ router.get('/', (req, res) => {
   res.json(snapshot);
 });
 
-// DELETE /api/metrics — reset collected metrics
-router.delete('/', (_req, res) => {
+// DELETE /api/metrics — reset collected metrics (destructive, admin-only per #1102)
+router.delete('/', requireAdmin, (_req, res) => {
   resetMetrics();
   res.json({ message: 'Metrics reset' });
 });

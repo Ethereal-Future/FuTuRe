@@ -85,14 +85,55 @@ aws dynamodb create-table \
 
 ### 2. Enable the backend
 
-Uncomment the `backend "s3"` block in `infra/main.tf` and fill in the bucket name.
+The `backend "s3" {}` block in `infra/main.tf` is already active (issue #1101)
+but deliberately left as a *partial* configuration — bucket, region, and the
+DynamoDB lock table are supplied at `terraform init` time via
+`-backend-config` flags rather than hardcoded, so the same `main.tf` works
+for both staging and production state.
+
+In CI (`.github/workflows/terraform-plan.yml` / `terraform-apply.yml`) these
+values come from repository variables (**Settings → Secrets and variables →
+Actions → Variables**):
+
+| Variable                  | Example                    |
+|----------------------------|----------------------------|
+| `TF_STATE_BUCKET`          | `future-terraform-state`   |
+| `TF_STATE_DYNAMODB_TABLE`  | `future-terraform-locks`   |
+| `TF_STATE_REGION`          | `us-east-1` (optional, defaults to `us-east-1`) |
+
+The state `key` is set per-workflow-run to `staging/terraform.tfstate` or
+`production/terraform.tfstate` so the two environments never share state.
 
 ### 3. Initialize Terraform
 
+Locally, pass the same values by hand (or put them in a gitignored
+`backend.hcl` and use `-backend-config=backend.hcl`):
+
 ```bash
 cd infra
-terraform init
+terraform init \
+  -backend-config="bucket=future-terraform-state" \
+  -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=future-terraform-locks" \
+  -backend-config="key=staging/terraform.tfstate"   # or production/terraform.tfstate
 ```
+
+### 3b. Reconcile pre-existing resources (one-time)
+
+If any of the resources this configuration manages already exist in AWS
+from before the backend was enabled (created manually or via an earlier
+local-state apply), import them into the new remote state before running
+`terraform apply`, e.g.:
+
+```bash
+terraform import aws_s3_bucket.frontend <bucket-name>
+terraform import aws_ecs_cluster.main <cluster-arn>
+# ...repeat for any other resource `terraform plan` proposes to re-create
+```
+
+Run `terraform plan` first and only import resources it reports as "will be
+created" that you know already exist — a plan with no unexpected
+create/destroy diffs confirms the import is complete.
 
 ### 4. Populate secrets (before first apply)
 

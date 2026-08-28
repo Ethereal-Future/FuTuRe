@@ -3,8 +3,14 @@ import { transactionService } from '../services/transactions.js';
 import { validate, rules } from '../middleware/validate.js';
 import { broadcastToAccount } from '../services/websocket.js';
 import logger from '../config/logger.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Transaction history/search/export/monitor is per-account user data (the
+// swagger spec already documents 401 responses here); require a logged-in
+// caller (#1102).
+router.use(requireAuth);
 
 function logError(req, error, context = {}) {
   logger.error('route.error', {

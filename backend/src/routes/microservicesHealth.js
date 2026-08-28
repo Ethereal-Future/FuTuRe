@@ -16,6 +16,9 @@ export const serviceRegistry = new ServiceRegistry();
  * Returns the aggregate health of all registered microservices.
  * Response shape:
  *   { status, uptime, timestamp, services: [{ name, status, totalInstances, healthyInstances }] }
+ *
+ * Intentionally public: load balancers and orchestrators probe this route
+ * without credentials, and it exposes no sensitive data (#1102).
  */
 router.get('/microservices/health', (req, res) => {
   const health = serviceRegistry.health();

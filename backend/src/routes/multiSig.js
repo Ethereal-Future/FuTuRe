@@ -6,6 +6,10 @@ import { AppError, ErrorCodes } from '../middleware/errorHandler.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import logger from '../config/logger.js';
 
+// Intentionally public: every mutating route here requires a `sourceSecret`
+// (or a transaction already signed with one), so possession of the Stellar
+// secret key is the credential — the same model used by routes/stellar/*.
+// See #1102.
 const router = express.Router();
 
 function logError(req, error, context = {}) {

@@ -20,15 +20,16 @@ terraform {
     }
   }
 
-  # Remote state — configure an S3 backend before first apply.
-  # Uncomment and fill in once the state bucket exists.
-  # backend "s3" {
-  #   bucket         = "future-terraform-state"
-  #   key            = "production/terraform.tfstate"
-  #   region         = var.aws_region
-  #   encrypt        = true
-  #   dynamodb_table = "future-terraform-locks"
-  # }
+  # Remote state (issue #1101). Deliberately left as a *partial* backend
+  # config — bucket/key/region/dynamodb_table are supplied at `terraform
+  # init` time via -backend-config flags, sourced from repository variables
+  # in .github/workflows/terraform-plan.yml / terraform-apply.yml, so
+  # staging and production can point at different buckets/state keys
+  # without editing this file. See infra/README.md "First-Time Setup" for
+  # the one-time bootstrap (creating the bucket/table) and local usage.
+  backend "s3" {
+    encrypt = true
+  }
 }
 
 provider "aws" {

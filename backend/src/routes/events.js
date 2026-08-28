@@ -7,8 +7,13 @@ import {
   eventArchiver,
   eventAnalytics
 } from '../eventSourcing/index.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = express.Router();
+
+// Event-sourcing internals (replay, projections, archival) are an
+// engineering/ops surface, not user-facing, so they are admin-only (#1102).
+router.use(requireAdmin);
 
 /**
  * @swagger
