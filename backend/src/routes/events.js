@@ -7,8 +7,11 @@ import {
   eventArchiver,
   eventAnalytics
 } from '../eventSourcing/index.js';
+import { requireAuth, requireAdmin, requireOwnAccount } from '../middleware/auth.js';
 
 const router = express.Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -26,7 +29,7 @@ const router = express.Router();
  *       200:
  *         description: Event history retrieved
  */
-router.get('/history/:aggregateId', async (req, res) => {
+router.get('/history/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const events = await eventMonitor.getEventHistory(req.params.aggregateId);
     res.json({ aggregateId: req.params.aggregateId, events });
@@ -48,7 +51,7 @@ router.get('/history/:aggregateId', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/state/:aggregateId', async (req, res) => {
+router.get('/state/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const state = await eventMonitor.getAggregateState(req.params.aggregateId);
     res.json({ aggregateId: req.params.aggregateId, state });
@@ -74,7 +77,7 @@ router.get('/state/:aggregateId', async (req, res) => {
  *         schema:
  *           type: integer
  */
-router.get('/replay/:aggregateId', async (req, res) => {
+router.get('/replay/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const toVersion = req.query.toVersion ? parseInt(req.query.toVersion) : null;
     const state = await eventReplayer.replay(req.params.aggregateId, toVersion);
@@ -97,7 +100,7 @@ router.get('/replay/:aggregateId', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/projection/:name', async (req, res) => {
+router.get('/projection/:name', requireAdmin, async (req, res) => {
   try {
     const projection = await eventMonitor.getProjection(req.params.name);
     res.json({ name: req.params.name, projection });
@@ -119,7 +122,7 @@ router.get('/projection/:name', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/analytics/:eventType', async (req, res) => {
+router.get('/analytics/:eventType', requireAdmin, async (req, res) => {
   try {
     const analytics = await eventMonitor.getAnalytics(req.params.eventType);
     res.json(analytics);
@@ -135,7 +138,7 @@ router.get('/analytics/:eventType', async (req, res) => {
  *     summary: Get event statistics
  *     tags: [Events]
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', requireAdmin, async (req, res) => {
   try {
     const stats = await eventMonitor.getEventStats();
     res.json(stats);
@@ -161,7 +164,7 @@ router.get('/stats', async (req, res) => {
  *                 type: integer
  *                 default: 30
  */
-router.post('/archive', async (req, res) => {
+router.post('/archive', requireAdmin, async (req, res) => {
   try {
     const { olderThanDays = 30 } = req.body;
     const result = await eventArchiver.archiveOldEvents(olderThanDays);
@@ -189,7 +192,7 @@ router.post('/archive', async (req, res) => {
  *           type: integer
  *           default: 0
  */
-router.get('/all', async (req, res) => {
+router.get('/all', requireAdmin, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 1000;
     const offset = parseInt(req.query.offset) || 0;
