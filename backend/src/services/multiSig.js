@@ -1,4 +1,5 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
+import { randomUUID } from 'crypto';
 import { eventMonitor } from '../eventSourcing/index.js';
 import { getConfig } from '../config/env.js';
 import prisma from '../db/client.js';
@@ -124,7 +125,7 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
     .build();
 
   const txXdr = transaction.toXDR();
-  const txId = `multisig-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
+  const txId = `multisig-${randomUUID()}`;
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
   await prisma.pendingMultiSigTx.create({

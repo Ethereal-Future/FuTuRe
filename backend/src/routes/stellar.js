@@ -552,9 +552,33 @@ router.get('/account/:publicKey/trustlines', rules.publicKeyParam, validate, asy
   }
 });
 
+const FULL_TX_HASH_RE = /^[0-9a-f]{64}$/i;
+
 router.get('/account/:publicKey/transactions', rules.publicKeyParam, validate, async (req, res) => {
   try {
     const { cursor, limit, type, dateFrom, dateTo, hash } = req.query;
+
+    // A full 64-char hash bypasses pagination entirely and looks the
+    // transaction up directly from Horizon (issue #1122) — this finds
+    // transactions regardless of how far back they sit in the account's
+    // history, unlike filtering the most recent page of records.
+    if (hash && FULL_TX_HASH_RE.test(hash)) {
+      try {
+        const transaction = await StellarService.getTransactionRecordByHash(
+          hash,
+          req.params.publicKey,
+        );
+        return res.json({ transaction });
+      } catch (error) {
+        if (error.notFoundReason === 'horizon') {
+          return res.status(404).json({ error: 'Transaction not found' });
+        }
+        if (error.notFoundReason === 'account_mismatch') {
+          return res.status(404).json({ error: 'Transaction not found for this account' });
+        }
+        throw error;
+      }
+    }
 
     let parsedLimit = 20;
     if (limit !== undefined) {
@@ -572,6 +596,8 @@ router.get('/account/:publicKey/transactions', rules.publicKeyParam, validate, a
       dateTo,
     });
     if (hash) {
+      // Partial hash — treated as a prefix filter over the fetched page
+      // (kept for backward compatibility with existing callers).
       const prefix = hash.toLowerCase();
       result.records = result.records.filter((tx) => tx.hash?.toLowerCase().startsWith(prefix));
     }

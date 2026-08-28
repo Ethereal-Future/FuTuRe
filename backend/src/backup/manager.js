@@ -6,6 +6,7 @@
  *  - AES-256-GCM encryption of backup files
  *  - SHA-256 integrity verification
  *  - Point-in-time recovery (PITR) via pg_restore with --target-time
+ *  - S3 upload for disaster recovery
  *  - Retention policy enforcement
  *  - Monitoring: metrics, alerts, scheduled health checks
  */
@@ -18,6 +19,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { pipeline } from 'stream/promises';
 import { createGzip, createGunzip } from 'zlib';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 import logger from '../config/logger.js';
 
 const execFileAsync = promisify(execFile);
@@ -29,6 +31,14 @@ const BACKUP_ENC_KEY = process.env.BACKUP_ENC_KEY || null;
 const RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS, 10) || 7;
 const BACKUP_SCHEDULE = parseInt(process.env.BACKUP_INTERVAL_HOURS, 10) || 24;
 const DATABASE_URL = process.env.DATABASE_URL || '';
+
+const S3_BUCKET = process.env.BACKUP_S3_BUCKET || null;
+const S3_REGION = process.env.AWS_REGION || 'us-east-1';
+const S3_ENABLED = Boolean(S3_BUCKET);
+
+const s3Client = S3_ENABLED
+  ? new S3Client({ region: S3_REGION })
+  : null;
 
 const KEY_VERSIONS_FILE = path.join(BACKUP_DIR, '.key-versions.json');
 async function readKeyVersions() {
@@ -133,6 +143,61 @@ async function decryptFile(srcPath, dstPath, hexKey) {
   await fs.writeFile(dstPath, decrypted);
 }
 
+// ── S3 Storage ───────────────────────────────────────────────────────────────
+
+async function uploadToS3(filePath, fileName) {
+  if (!S3_ENABLED) {
+    logger.debug('backup.s3.disabled', { fileName });
+    return null;
+  }
+
+  try {
+    const fileContent = await fs.readFile(filePath);
+    const command = new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: `backups/${fileName}`,
+      Body: fileContent,
+      ContentType: 'application/octet-stream',
+      ServerSideEncryption: 'AES256',
+      Metadata: {
+        'backup-timestamp': new Date().toISOString(),
+        'backup-source': 'automated',
+      },
+    });
+
+    await s3Client.send(command);
+    logger.info('backup.s3.uploaded', { fileName, bucket: S3_BUCKET });
+    return { bucket: S3_BUCKET, key: `backups/${fileName}` };
+  } catch (err) {
+    logger.error('backup.s3.upload.failed', { fileName, error: err.message });
+    addAlert('S3_UPLOAD_FAILED', `Failed to upload ${fileName} to S3: ${err.message}`);
+    throw err;
+  }
+}
+
+async function downloadFromS3(fileName, dstPath) {
+  if (!S3_ENABLED) {
+    throw new Error('S3 storage not configured');
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: `backups/${fileName}`,
+    });
+
+    const response = await s3Client.send(command);
+    const writeStream = createWriteStream(dstPath);
+    await pipeline(response.Body, writeStream);
+    logger.info('backup.s3.downloaded', { fileName, bucket: S3_BUCKET });
+    return dstPath;
+  } catch (err) {
+    logger.error('backup.s3.download.failed', { fileName, error: err.message });
+    addAlert('S3_DOWNLOAD_FAILED', `Failed to download ${fileName} from S3: ${err.message}`);
+    throw err;
+  }
+}
+
 // ── Integrity ────────────────────────────────────────────────────────────────
 
 async function sha256File(filePath) {
@@ -208,6 +273,17 @@ export async function createBackup({ tag = 'scheduled' } = {}) {
     const checksum = await writeChecksum(outFile);
     const { size } = await fs.stat(outFile);
 
+    // 5. Upload to S3 (if configured)
+    let s3Meta = null;
+    try {
+      s3Meta = await uploadToS3(outFile, path.basename(outFile));
+      if (S3_ENABLED) {
+        await uploadToS3(outFile + '.sha256', path.basename(outFile) + '.sha256');
+      }
+    } catch (err) {
+      logger.warn('backup.s3.upload.skipped', { error: err.message });
+    }
+
     metrics.successfulBackups++;
     metrics.lastBackupAt = new Date().toISOString();
     metrics.lastBackupSize = size;
@@ -219,6 +295,7 @@ export async function createBackup({ tag = 'scheduled' } = {}) {
       checksum,
       encrypted: Boolean(BACKUP_ENC_KEY),
       createdAt: metrics.lastBackupAt,
+      s3: s3Meta,
     };
 
     logger.info('backup.created', meta);
@@ -255,6 +332,7 @@ export async function verifyBackup(filePath) {
 /**
  * Restore a backup file to the database.
  * Optionally pass targetTime (ISO string) for point-in-time recovery.
+ * If filePath is just a filename (no path), attempts S3 download first, then local disk.
  */
 export async function restoreBackup(filePath, { targetTime, targetDatabase } = {}) {
   const db = parseDatabaseUrl(DATABASE_URL);
@@ -262,11 +340,23 @@ export async function restoreBackup(filePath, { targetTime, targetDatabase } = {
   let workFile = filePath;
 
   try {
+    // 0. If filePath is just a filename, try S3 first
+    if (!filePath.includes(path.sep) && S3_ENABLED) {
+      try {
+        const tempPath = path.join(BACKUP_DIR, `.restore_${path.basename(filePath)}`);
+        workFile = await downloadFromS3(filePath, tempPath);
+      } catch (err) {
+        logger.warn('backup.restore.s3.failed', { filePath, error: err.message });
+        workFile = filePath;
+      }
+    }
+
     // 1. Decrypt if needed
-    if (filePath.endsWith('.enc')) {
+    if (workFile.endsWith('.enc')) {
       if (!BACKUP_ENC_KEY) throw new Error('BACKUP_ENC_KEY required to restore encrypted backup');
-      workFile = filePath.replace(/\.enc$/, '.restore');
-      await decryptFile(filePath, workFile, BACKUP_ENC_KEY);
+      const decryptPath = workFile.replace(/\.enc$/, '.restore');
+      await decryptFile(workFile, decryptPath, BACKUP_ENC_KEY);
+      workFile = decryptPath;
     }
 
     // 2. Decompress

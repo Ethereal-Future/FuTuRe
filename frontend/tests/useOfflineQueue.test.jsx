@@ -188,4 +188,40 @@ describe('useOfflineQueue', () => {
     act(() => { result.current.dismissNotification(notifId); });
     expect(result.current.notifications).toHaveLength(0);
   });
+
+  it('replayAll without replayFn does nothing when items are pending', async () => {
+    const { result } = renderHook(() => useOfflineQueue());
+
+    await act(async () => { await result.current.queue(mockPayment); });
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+
+    // replayAll without a replayFn should do nothing
+    await act(async () => { await result.current.replayAll(); });
+    await waitFor(() => expect(result.current.pendingCount).toBe(1));
+    expect(result.current.notifications).toHaveLength(0);
+  });
+
+  it('can replay pending items after unmount/remount (tab close/reopen scenario)', async () => {
+    const { result: result1, unmount } = renderHook(() => useOfflineQueue());
+
+    // Queue an item
+    await act(async () => { await result1.current.queue(mockPayment); });
+    await waitFor(() => expect(result1.current.pendingCount).toBe(1));
+
+    // Unmount (simulating tab close) - the hook has no replayFn, so secret is lost
+    unmount();
+
+    // Remount with replayFn now available (user has re-authenticated)
+    const replayFn = vi.fn().mockResolvedValue(undefined);
+    const { result: result2 } = renderHook(() => useOfflineQueue({ replayFn }));
+
+    // Pending items should still be found
+    await waitFor(() => expect(result2.current.pendingCount).toBe(1));
+
+    // Now replay should work
+    await act(async () => { await result2.current.replayAll(); });
+
+    expect(replayFn).toHaveBeenCalledWith(expect.objectContaining(mockPayment));
+    await waitFor(() => expect(result2.current.pendingCount).toBe(0));
+  });
 });
