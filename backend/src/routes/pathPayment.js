@@ -12,6 +12,10 @@ import { validate, rules } from '../middleware/validate.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
 
+// Intentionally public: path-finding routes only simulate conversions (no
+// funds move), and /send requires a `sourceSecret`, the same secret-key
+// possession model used by routes/stellar/*. /analytics exposes only
+// aggregate, non-user-scoped stats. See #1102.
 const router = Router();
 
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;

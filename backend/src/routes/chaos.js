@@ -18,6 +18,8 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 // surface regardless of whether it is wired up.
 const router = express.Router();
 
+// Fault-injection endpoints can degrade or take down live services, so they
+// are admin-only (#1102).
 router.use(requireAdmin);
 
 /**

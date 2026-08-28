@@ -9,8 +9,17 @@ import {
   performanceAlerting,
   optimizationRecommender
 } from '../loadTesting/index.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
+import { validateWebhookUrl } from '../webhooks/urlValidator.js';
 
 const router = express.Router();
+
+// Load tests can flood an arbitrary target and are only meant for internal
+// performance engineering, so every route here requires admin auth (#1100, #1102).
+router.use(requireAdmin);
+
+const MAX_CONCURRENCY = 200;
+const MAX_DURATION_SECONDS = 600;
 
 /**
  * @swagger
@@ -49,12 +58,20 @@ const router = express.Router();
 router.post('/scenarios/create', async (req, res) => {
   try {
     const { name, description, requests, duration, rampUp, concurrency } = req.body;
+
+    if (concurrency > MAX_CONCURRENCY) {
+      return res.status(400).json({ error: `concurrency must not exceed ${MAX_CONCURRENCY}` });
+    }
+    if (duration > MAX_DURATION_SECONDS) {
+      return res.status(400).json({ error: `duration must not exceed ${MAX_DURATION_SECONDS} seconds` });
+    }
+
     const scenario = new LoadTestScenario(name, description);
-    
+
     for (const reqItem of requests) {
       scenario.addRequest(reqItem.method, reqItem.path, reqItem.body, reqItem.weight);
     }
-    
+
     scenario.setDuration(duration).setRampUp(rampUp).setConcurrency(concurrency);
     await scenario.save();
     
@@ -89,10 +106,17 @@ router.post('/scenarios/create', async (req, res) => {
 router.post('/run', async (req, res) => {
   try {
     const { scenarioName, baseUrl } = req.body;
+    const targetUrl = baseUrl || 'http://localhost:3001';
+
+    const { valid, error } = await validateWebhookUrl(targetUrl);
+    if (!valid) {
+      return res.status(400).json({ error: `Invalid baseUrl: ${error}` });
+    }
+
     const scenario = await LoadTestScenario.load(scenarioName);
     const runner = new LoadTestRunner();
-    
-    const results = await runner.runScenario(scenario, baseUrl || 'http://localhost:3001');
+
+    const results = await runner.runScenario(scenario, targetUrl);
     const saved = await runner.saveResults(scenarioName);
     
     res.json(saved);

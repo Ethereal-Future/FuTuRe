@@ -17,6 +17,12 @@ const router = express.Router();
 
 /**
  * GET /microservices/health
+ * Returns the aggregate health of all registered microservices.
+ * Response shape:
+ *   { status, uptime, timestamp, services: [{ name, status, totalInstances, healthyInstances }] }
+ *
+ * Intentionally public: load balancers and orchestrators probe this route
+ * without credentials, and it exposes no sensitive data (#1102).
  * Returns a static healthy response — the orchestration layer uses this as a
  * liveness probe.  Detailed service-mesh health monitoring was removed with
  * the discovery / mesh subsystems in Issue #1126.

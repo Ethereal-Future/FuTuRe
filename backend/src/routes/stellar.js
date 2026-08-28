@@ -1,3 +1,10 @@
+/**
+ * NOTE (#1102): this file is not mounted by backend/src/server.js — production
+ * traffic is served by routes/stellar/index.js and its sub-routers instead.
+ * It is only imported by test fixtures (tests/helpers/app.js, full-app.js),
+ * so it carries no live unauthenticated-route risk; left unchanged here to
+ * avoid touching test-only behavior.
+ */
 import express from 'express';
 import { body } from 'express-validator';
 import * as StellarSDK from '@stellar/stellar-sdk';

@@ -37,6 +37,17 @@ const prefsStore = new Map();
  * @returns {object}
  */
 export async function getPreferences(userId) {
+  let notificationsOn = DEFAULT_PREFERENCES.notificationsOn ?? true;
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { userId },
+      select: { notificationsOn: true },
+    });
+    if (setting) notificationsOn = setting.notificationsOn;
+  } catch (err) {
+    logger.warn('notifications.preferences.settingRead.failed', { userId, error: err.message });
+  }
+
   try {
     // Fetch from database first
     const notificationPrefs = await prisma.notificationPreference.findUnique({
@@ -46,6 +57,11 @@ export async function getPreferences(userId) {
     if (notificationPrefs) {
       return {
         ...DEFAULT_PREFERENCES,
+        notificationsOn,
+        email: notificationPrefs.emailEnabled,
+        push: notificationPrefs.pushEnabled,
+        sms: notificationPrefs.smsEnabled,
+        inApp: notificationPrefs.inAppEnabled,
         emailEnabled: notificationPrefs.emailEnabled,
         pushEnabled: notificationPrefs.pushEnabled,
         smsEnabled: notificationPrefs.smsEnabled,
@@ -69,6 +85,7 @@ export async function getPreferences(userId) {
   const stored = prefsStore.get(userId) ?? {};
   return {
     ...DEFAULT_PREFERENCES,
+    notificationsOn,
     ...stored,
     types: { ...DEFAULT_PREFERENCES.types, ...(stored.types ?? {}) },
   };
@@ -113,6 +130,19 @@ export async function updatePreferences(userId, updates) {
     const threshold = parseFloat(updates.lowBalanceThreshold);
     if (Number.isNaN(threshold) || threshold < 0) {
       throw new Error('lowBalanceThreshold must be a positive number');
+    }
+  }
+
+  if (typeof updates.notificationsOn !== 'undefined') {
+    try {
+      await prisma.setting.upsert({
+        where: { userId },
+        update: { notificationsOn: updates.notificationsOn },
+        create: { userId, notificationsOn: updates.notificationsOn },
+      });
+    } catch (err) {
+      logger.error('notifications.preferences.settingWrite.failed', { userId, error: err.message });
+      throw err;
     }
   }
 
