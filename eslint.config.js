@@ -66,6 +66,19 @@ export default [
       'no-unused-vars': ['warn', { argsIgnorePattern: '^_' }],
       'no-console': 'warn',
       'no-shadow': ['error', { builtinGlobals: false, hoist: 'all', allow: [] }],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'MemberExpression[object.name="process"][property.name=/^[A-Z_]+$/]',
+          message: 'Accessing process.env directly is not allowed. Use getConfig() from backend/src/config/env.js instead.',
+        },
+      ],
+    },
+  },
+  {
+    files: ['backend/src/config/env.js', 'backend/src/config/secrets.js'],
+    rules: {
+      'no-restricted-syntax': 'off',
     },
   },
   {

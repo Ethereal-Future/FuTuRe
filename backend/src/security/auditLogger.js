@@ -1,4 +1,7 @@
+import logger from '../config/logger.js';
 import { getClient } from '../db/client.js';
+
+const auditLogger = logger.child({ component: 'audit' });
 
 class SecurityAuditLogger {
   async initialize() {}
@@ -27,7 +30,7 @@ class SecurityAuditLogger {
         },
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to create audit entry:', error.message);
+      auditLogger.error('Failed to create audit entry', { error: error.message });
     }
   }
 
@@ -119,7 +122,7 @@ class SecurityAuditLogger {
         skip: offset,
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to retrieve audit log:', error.message);
+      auditLogger.error('Failed to retrieve audit log', { error: error.message });
       return [];
     }
   }
@@ -133,7 +136,7 @@ class SecurityAuditLogger {
         take: limit,
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to get security events:', error.message);
+      auditLogger.error('Failed to get security events', { error: error.message });
       return [];
     }
   }

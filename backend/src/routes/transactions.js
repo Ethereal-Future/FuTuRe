@@ -2,6 +2,7 @@ import express from 'express';
 import { transactionService } from '../services/transactions.js';
 import { validate, rules } from '../middleware/validate.js';
 import { broadcastToAccount } from '../services/websocket.js';
+import { requireAuth, requireOwnAccount } from '../middleware/auth.js';
 import logger from '../config/logger.js';
 import { requireAuth } from '../middleware/auth.js';
 
@@ -455,7 +456,7 @@ router.get('/:accountId/latest', rules.accountIdParam, validate, async (req, res
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:accountId/monitor', rules.accountIdParam, validate, async (req, res) => {
+router.post('/:accountId/monitor', requireAuth, rules.accountIdParam, validate, requireOwnAccount('accountId'), async (req, res) => {
   try {
     const { accountId } = req.params;
     transactionService.startMonitoring(accountId);
@@ -503,7 +504,7 @@ router.post('/:accountId/monitor', rules.accountIdParam, validate, async (req, r
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.delete('/:accountId/monitor', rules.accountIdParam, validate, async (req, res) => {
+router.delete('/:accountId/monitor', requireAuth, rules.accountIdParam, validate, requireOwnAccount('accountId'), async (req, res) => {
   try {
     const { accountId } = req.params;
     transactionService.stopMonitoring(req.params.accountId);
@@ -568,7 +569,7 @@ router.delete('/:accountId/monitor', rules.accountIdParam, validate, async (req,
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/:accountId/export', rules.accountIdParam, validate, async (req, res) => {
+router.get('/:accountId/export', requireAuth, rules.accountIdParam, validate, requireOwnAccount('accountId'), async (req, res) => {
   try {
     const { accountId } = req.params;
     const { format = 'csv', startTime, endTime } = req.query;

@@ -7,6 +7,9 @@ import { maybeDecryptEnvValue } from './secrets.js';
 
 export const CONFIG_SCHEMA_VERSION = 1;
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
 const emitter = new EventEmitter();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -416,6 +419,82 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
     alerts: {
       email: alertEmail,
       slackWebhookUrl,
+    },
+    aml: {
+      largeThreshold: parseFloatEnv(env.AML_LARGE_TX_THRESHOLD, {
+        envVarName: 'AML_LARGE_TX_THRESHOLD',
+        defaultValue: 10000,
+      }),
+      structuringThreshold: parseFloatEnv(env.AML_STRUCTURING_THRESHOLD, {
+        envVarName: 'AML_STRUCTURING_THRESHOLD',
+        defaultValue: 1000,
+      }),
+      structuringCount: parseInteger(env.AML_STRUCTURING_COUNT, {
+        envVarName: 'AML_STRUCTURING_COUNT',
+        defaultValue: 3,
+      }),
+      velocityLimit: parseFloatEnv(env.AML_VELOCITY_LIMIT, {
+        envVarName: 'AML_VELOCITY_LIMIT',
+        defaultValue: 10000,
+      }),
+      rapidTxCount: parseInteger(env.AML_RAPID_TX_COUNT, {
+        envVarName: 'AML_RAPID_TX_COUNT',
+        defaultValue: 5,
+      }),
+      rapidTxWindowMs: parseInteger(env.AML_RAPID_TX_WINDOW_MS, {
+        envVarName: 'AML_RAPID_TX_WINDOW_MS',
+        defaultValue: HOUR_MS,
+      }),
+      nearThresholdLow: parseFloatEnv(env.AML_NEAR_THRESHOLD_LOW, {
+        envVarName: 'AML_NEAR_THRESHOLD_LOW',
+        defaultValue: 9000,
+      }),
+      sanctionsApiKey: env.SANCTIONS_API_KEY || '',
+      sanctionsApiUrl: env.SANCTIONS_API_URL || 'https://api.ofac-api.com/v4/search',
+      sanctionsMinScore: parseInteger(env.SANCTIONS_MIN_SCORE, {
+        envVarName: 'SANCTIONS_MIN_SCORE',
+        defaultValue: 85,
+      }),
+    },
+    backup: {
+      encryptionKey: env.BACKUP_ENC_KEY || '',
+      encryptionKeyPrevious: env.BACKUP_ENC_KEY_PREVIOUS || '',
+      directory: env.BACKUP_DIR || './backups',
+      intervalHours: parseInteger(env.BACKUP_INTERVAL_HOURS, {
+        envVarName: 'BACKUP_INTERVAL_HOURS',
+        defaultValue: 24,
+      }),
+      retentionDays: parseInteger(env.BACKUP_RETENTION_DAYS, {
+        envVarName: 'BACKUP_RETENTION_DAYS',
+        defaultValue: 30,
+      }),
+    },
+    cache: {
+      ttlBalanceSeconds: parseInteger(env.CACHE_TTL_BALANCE_S, {
+        envVarName: 'CACHE_TTL_BALANCE_S',
+        defaultValue: 300,
+      }),
+      ttlFeeSeconds: parseInteger(env.CACHE_TTL_FEE_S, {
+        envVarName: 'CACHE_TTL_FEE_S',
+        defaultValue: 3600,
+      }),
+    },
+    cdn: {
+      enabled: parseBoolean(env.CDN_ENABLED),
+      url: env.CDN_URL || '',
+      secondaryUrl: env.CDN_SECONDARY_URL || '',
+      regions: parseCsv(env.CDN_REGIONS),
+      cacheMaxAgeSeconds: parseInteger(env.CDN_CACHE_MAX_AGE_S, {
+        envVarName: 'CDN_CACHE_MAX_AGE_S',
+        defaultValue: 86400,
+      }),
+    },
+    crypto: {
+      databaseEncryptionKey: env.DATABASE_ENCRYPTION_KEY || '',
+    },
+    mobile: {
+      webauthnRpId: env.WEBAUTHN_RP_ID || 'future.app',
+      jwtSecret: env.MOBILE_JWT_SECRET || env.JWT_SECRET || '',
     },
   };
 }
