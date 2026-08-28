@@ -84,7 +84,9 @@ export function KYCForm() {
       case 'email':
         return value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? 'Invalid email' : null;
       case 'phoneNumber':
-        return value && !/^\+?[\d\s-()]{10,}$/.test(value) ? 'Invalid phone number' : null;
+        return value && !/^\+[1-9]\d{1,14}$/.test(value)
+          ? 'Invalid phone number (use E.164 format, e.g. +12025551234)'
+          : null;
       default:
         return null;
     }
@@ -149,8 +151,18 @@ export function KYCForm() {
     <section className="section" aria-labelledby="kyc-heading">
       <h2 id="kyc-heading" style={{ marginBottom: 16 }}>Know Your Customer (KYC)</h2>
 
-      {error && <StatusMessage type="error" message={error} />}
-      {success && <StatusMessage type="success" message={success} />}
+      {error && (
+        <StatusMessage
+          messages={[{ id: 'kyc-error', type: 'error', message: error, icon: '⚠️' }]}
+          onRemove={() => setError(null)}
+        />
+      )}
+      {success && (
+        <StatusMessage
+          messages={[{ id: 'kyc-success', type: 'success', message: success, icon: '✅' }]}
+          onRemove={() => setSuccess(null)}
+        />
+      )}
 
       {statusLoading ? (
         <Spinner />
@@ -252,9 +264,9 @@ export function KYCForm() {
               style={{ width: '100%', padding: 8, border: '1px solid #ccc', borderRadius: 4, boxSizing: 'border-box' }}
             >
               <option value="PASSPORT">Passport</option>
-              <option value="DRIVER_LICENSE">Driver's License</option>
+              <option value="DRIVERS_LICENSE">Driver's License</option>
               <option value="NATIONAL_ID">National ID</option>
-              <option value="OTHER">Other</option>
+              <option value="RESIDENCE_PERMIT">Residence Permit</option>
             </select>
           </FormField>
 
@@ -316,7 +328,7 @@ export function KYCForm() {
             <input
               type="tel"
               name="phoneNumber"
-              placeholder="optional +1234567890"
+              placeholder="optional, e.g. +12025551234"
               value={form.phoneNumber}
               onChange={handleChange}
               onBlur={handleBlur}

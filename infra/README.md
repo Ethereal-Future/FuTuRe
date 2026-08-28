@@ -209,9 +209,17 @@ For production deployments or emergency hotfixes, you can deploy manually:
 
 ```bash
 cd infra
-terraform apply -var-file=environments/production.tfvars -var="backend_image=ghcr.io/org/future/backend:1.2.3"
-terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
+terraform apply \
+  -var-file=environments/production.tfvars \
+  -var="backend_image=ghcr.io/org/future/backend:1.2.3" \
+  -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
 ```
+
+`environment` has no default — it must always be passed explicitly, either via
+`-var-file` (as above) or `-var="environment=..."`. This is intentional: it
+gates cost- and safety-relevant behavior (Multi-AZ RDS, deletion protection,
+final-snapshot-on-destroy), so an `apply` with the value omitted fails fast
+instead of silently provisioning production-grade infrastructure.
 
 ## Environment Files
 
@@ -425,7 +433,7 @@ Prefer fixing the underlying misconfiguration over suppressing it whenever the f
 | Variable                  | Default           | Description                          |
 |---------------------------|-------------------|--------------------------------------|
 | `aws_region`              | `us-east-1`       | AWS region                           |
-| `environment`             | `production`      | `production` or `staging`            |
+| `environment`             | _(required)_      | `production` or `staging` — always passed explicitly, never defaulted |
 | `app_name`                | `future`          | Resource name prefix                 |
 | `vpc_cidr`                | `10.0.0.0/16`     | VPC CIDR block                       |
 | `availability_zones`      | 3 AZs             | AZs for subnet distribution          |

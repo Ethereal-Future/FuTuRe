@@ -67,6 +67,7 @@ jobs:
             -no-color \
             -input=false \
             -out=tfplan \
+            -var-file=environments/production.tfvars \
             -var="backend_image=${{ steps.images.outputs.backend_image }}" \
             -var="frontend_image=${{ steps.images.outputs.frontend_image }}" \
             2>&1 | tee /tmp/plan_output.txt
