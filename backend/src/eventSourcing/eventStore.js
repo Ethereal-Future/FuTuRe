@@ -6,24 +6,22 @@ import { randomUUID } from 'crypto';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const EVENTS_DIR = path.join(__dirname, '../../data/events');
 const SNAPSHOTS_DIR = path.join(__dirname, '../../data/snapshots');
+/**
+ * Event Store — durable, cross-instance implementation backed by Postgres via
+ * Prisma.  Replaces the old local-file JSONL approach that stored events under
+ * backend/data/events/ and was not visible to other process instances.
+ *
+ * Migrated as part of Issue #1125.
+ */
+import prisma from '../db/client.js';
 
 class EventStore {
-  constructor() {
-    this.events = [];
-    this.initialized = false;
-  }
-
-  async initialize() {
-    try {
-      await fs.mkdir(EVENTS_DIR, { recursive: true });
-      await fs.mkdir(SNAPSHOTS_DIR, { recursive: true });
-      this.initialized = true;
-    } catch (error) {
-      console.error('Failed to initialize event store:', error);
-      throw error;
-    }
-  }
-
+  /**
+   * Append a new event for an aggregate.
+   * @param {string} aggregateId
+   * @param {{ type: string, data: object, version?: number, metadata?: object }} event
+   * @returns {Promise<object>} the persisted event record
+   */
   async append(aggregateId, event) {
     if (!this.initialized) await this.initialize();
 
@@ -35,82 +33,108 @@ class EventStore {
       version: event.version || 1,
       timestamp: new Date().toISOString(),
       metadata: event.metadata || {}
+    const record = await prisma.eventStore.create({
+      data: {
+        aggregateId,
+        eventType: event.type,
+        payload: event.data ?? {},
+        version: event.version ?? 1,
+        metadata: event.metadata ?? {},
+      },
+    });
+
+    return {
+      id: record.id,
+      aggregateId: record.aggregateId,
+      type: record.eventType,
+      data: record.payload,
+      version: record.version,
+      timestamp: record.createdAt.toISOString(),
+      metadata: record.metadata,
     };
-
-    const eventFile = path.join(EVENTS_DIR, `${aggregateId}.jsonl`);
-    await fs.appendFile(eventFile, JSON.stringify(eventWithMetadata) + '\n');
-    this.events.push(eventWithMetadata);
-
-    return eventWithMetadata;
   }
 
+  /**
+   * Retrieve all events for an aggregate, optionally after a given version.
+   * @param {string} aggregateId
+   * @param {number} [fromVersion=0]
+   * @returns {Promise<object[]>}
+   */
   async getEvents(aggregateId, fromVersion = 0) {
-    if (!this.initialized) await this.initialize();
+    const records = await prisma.eventStore.findMany({
+      where: {
+        aggregateId,
+        version: { gt: fromVersion },
+      },
+      orderBy: { createdAt: 'asc' },
+    });
 
-    const eventFile = path.join(EVENTS_DIR, `${aggregateId}.jsonl`);
-    try {
-      const content = await fs.readFile(eventFile, 'utf-8');
-      return content
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line))
-        .filter(event => event.version > fromVersion);
-    } catch (error) {
-      if (error.code === 'ENOENT') return [];
-      throw error;
-    }
+    return records.map((r) => ({
+      id: r.id,
+      aggregateId: r.aggregateId,
+      type: r.eventType,
+      data: r.payload,
+      version: r.version,
+      timestamp: r.createdAt.toISOString(),
+      metadata: r.metadata,
+    }));
   }
 
+  /**
+   * Retrieve a paginated, time-ordered view of all events across all aggregates.
+   * @param {number} [limit=1000]
+   * @param {number} [offset=0]
+   * @returns {Promise<object[]>}
+   */
   async getAllEvents(limit = 1000, offset = 0) {
-    if (!this.initialized) await this.initialize();
+    const records = await prisma.eventStore.findMany({
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+      skip: offset,
+    });
 
-    try {
-      const files = await fs.readdir(EVENTS_DIR);
-      const allEvents = [];
-
-      for (const file of files) {
-        const content = await fs.readFile(path.join(EVENTS_DIR, file), 'utf-8');
-        const events = content
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line));
-        allEvents.push(...events);
-      }
-
-      return allEvents
-        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
-        .slice(offset, offset + limit);
-    } catch (error) {
-      console.error('Failed to get all events:', error);
-      return [];
-    }
+    return records.map((r) => ({
+      id: r.id,
+      aggregateId: r.aggregateId,
+      type: r.eventType,
+      data: r.payload,
+      version: r.version,
+      timestamp: r.createdAt.toISOString(),
+      metadata: r.metadata,
+    }));
   }
 
+  /**
+   * Persist an aggregate snapshot, upserting by aggregateId.
+   * @param {string} aggregateId
+   * @param {object} state
+   * @param {number} version
+   */
   async saveSnapshot(aggregateId, state, version) {
-    if (!this.initialized) await this.initialize();
-
-    const snapshot = {
-      aggregateId,
-      state,
-      version,
-      timestamp: new Date().toISOString()
-    };
-
-    const snapshotFile = path.join(SNAPSHOTS_DIR, `${aggregateId}.json`);
-    await fs.writeFile(snapshotFile, JSON.stringify(snapshot, null, 2));
+    await prisma.eventSnapshot.upsert({
+      where: { aggregateId },
+      update: { state, version, updatedAt: new Date() },
+      create: { aggregateId, state, version },
+    });
   }
 
+  /**
+   * Load the most recent snapshot for an aggregate.
+   * @param {string} aggregateId
+   * @returns {Promise<object|null>}
+   */
   async getSnapshot(aggregateId) {
-    if (!this.initialized) await this.initialize();
+    const record = await prisma.eventSnapshot.findUnique({
+      where: { aggregateId },
+    });
+    if (!record) return null;
 
-    const snapshotFile = path.join(SNAPSHOTS_DIR, `${aggregateId}.json`);
-    try {
-      const content = await fs.readFile(snapshotFile, 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    }
+    return {
+      aggregateId: record.aggregateId,
+      state: record.state,
+      version: record.version,
+      timestamp: record.updatedAt.toISOString(),
+    };
   }
 }
 

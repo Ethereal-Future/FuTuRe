@@ -1,10 +1,12 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
+/**
+ * Load Test Runner — stores results in Postgres via Prisma instead of writing
+ * per-run JSON files to backend/data/load-tests/results/.  Results are now
+ * visible to all process instances and survive restarts.
+ *
+ * Migrated as part of Issue #1125.
+ */
 import { throughputRps } from './throughput.js';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const RESULTS_DIR = path.join(__dirname, '../../data/load-tests/results');
+import prisma from '../db/client.js';
 
 class LoadTestRunner {
   constructor() {
@@ -15,18 +17,16 @@ class LoadTestRunner {
 
   /**
    * Run `concurrency` workers in parallel, each issuing requests until the
-   * request budget is spent or `duration` elapses. Workers stagger their
+   * request budget is spent or `duration` elapses.  Workers stagger their
    * start across `rampUp` seconds so load climbs rather than arriving as a
    * single burst.
    *
-   * Request budget is `concurrency * duration` (same product as the old
-   * serial loop) so existing scenario files keep a comparable total, but
-   * those requests are now genuinely in flight together. Duration is a
-   * wall-clock cap for slow backends.
+   * Request budget is `concurrency * duration` (same product as the old serial
+   * loop) so existing scenario files keep a comparable total, but those
+   * requests are now genuinely in flight together.  Duration is a wall-clock
+   * cap for slow backends.
    */
   async runScenario(scenario, baseUrl = 'http://localhost:3001') {
-    await fs.mkdir(RESULTS_DIR, { recursive: true });
-
     this.results = [];
     this.startTime = Date.now();
 
@@ -86,7 +86,7 @@ class LoadTestRunner {
       const url = `${baseUrl}${request.path}`;
       const options = {
         method: request.method,
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
       };
 
       if (request.body) {
@@ -102,7 +102,7 @@ class LoadTestRunner {
         statusCode: response.status,
         success: response.status >= 200 && response.status < 300,
         method: request.method,
-        path: request.path
+        path: request.path,
       };
     } catch (error) {
       return {
@@ -112,7 +112,7 @@ class LoadTestRunner {
         success: false,
         method: request.method,
         path: request.path,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -121,7 +121,7 @@ class LoadTestRunner {
    * @returns {object} summary whose `throughput` field is requests per second (req/s)
    */
   getResults() {
-    const responseTimes = this.results.map(r => r.responseTime).sort((a, b) => a - b);
+    const responseTimes = this.results.map((r) => r.responseTime).sort((a, b) => a - b);
     const total = this.results.length;
 
     if (total === 0) {
@@ -138,20 +138,20 @@ class LoadTestRunner {
         p95ResponseTime: 0,
         p99ResponseTime: 0,
         throughput: 0,
-        duration: this.endTime && this.startTime ? (this.endTime - this.startTime) / 1000 : 0
+        duration: this.endTime && this.startTime ? (this.endTime - this.startTime) / 1000 : 0,
       };
     }
 
     return {
       executionModel: 'concurrent',
       totalRequests: total,
-      successCount: this.results.filter(r => r.success).length,
-      errorCount: this.results.filter(r => !r.success).length,
-      errorRate: (this.results.filter(r => !r.success).length / total) * 100,
+      successCount: this.results.filter((r) => r.success).length,
+      errorCount: this.results.filter((r) => !r.success).length,
+      errorRate: (this.results.filter((r) => !r.success).length / total) * 100,
       avgResponseTime: responseTimes.reduce((a, b) => a + b, 0) / total,
       minResponseTime: Math.min(...responseTimes),
       maxResponseTime: Math.max(...responseTimes),
-      p50ResponseTime: responseTimes[Math.floor(total * 0.50)],
+      p50ResponseTime: responseTimes[Math.floor(total * 0.5)],
       p95ResponseTime: responseTimes[Math.floor(total * 0.95)],
       p99ResponseTime: responseTimes[Math.floor(total * 0.99)],
       /** Throughput in requests per second (req/s). */
@@ -160,35 +160,51 @@ class LoadTestRunner {
     };
   }
 
+  /**
+   * Persist the current run's results and summary to Postgres.
+   * @param {string} testName
+   * @returns {Promise<object>}
+   */
   async saveResults(testName) {
-    const results = {
-      testName,
-      timestamp: new Date().toISOString(),
-      results: this.results,
-      summary: this.getResults()
-    };
+    const summary = this.getResults();
+    const record = await prisma.loadTestResult.create({
+      data: {
+        testName,
+        metrics: {
+          summary,
+          rawResults: this.results,
+        },
+      },
+    });
 
-    const file = path.join(RESULTS_DIR, `${testName}-${Date.now()}.json`);
-    await fs.writeFile(file, JSON.stringify(results, null, 2));
-    return results;
+    return {
+      id: record.id,
+      testName: record.testName,
+      timestamp: record.createdAt.toISOString(),
+      results: this.results,
+      summary,
+    };
   }
 
+  /**
+   * Retrieve the most recent `limit` results for a named test.
+   * @param {string} testName
+   * @param {number} [limit=10]
+   * @returns {Promise<object[]>}
+   */
   static async getLatestResults(testName, limit = 10) {
-    try {
-      await fs.mkdir(RESULTS_DIR, { recursive: true });
-      const files = await fs.readdir(RESULTS_DIR);
-      const matching = files.filter(f => f.startsWith(testName)).sort().reverse().slice(0, limit);
+    const records = await prisma.loadTestResult.findMany({
+      where: { testName },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
 
-      const results = [];
-      for (const file of matching) {
-        const content = await fs.readFile(path.join(RESULTS_DIR, file), 'utf-8');
-        results.push(JSON.parse(content));
-      }
-
-      return results;
-    } catch (error) {
-      return [];
-    }
+    return records.map((r) => ({
+      id: r.id,
+      testName: r.testName,
+      timestamp: r.createdAt.toISOString(),
+      ...r.metrics,
+    }));
   }
 }
 
