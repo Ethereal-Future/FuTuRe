@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Cross-border remittance platform on Stellar blockchain",
   "private": true,
+  "engines": {
+    "node": ">=20 <21"
+  },
   "workspaces": [
     "backend",
     "frontend"
