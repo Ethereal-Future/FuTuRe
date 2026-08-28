@@ -1,106 +1,109 @@
-import fs from 'fs/promises';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const METRICS_DIR = path.join(__dirname, '../../data/metrics');
+/**
+ * Event Analytics — records per-event-type metrics and aggregates them from
+ * Postgres via Prisma.  Replaces the old local-file approach that appended to
+ * JSONL metric files under backend/data/metrics/ and was not visible to other
+ * process instances.
+ *
+ * Metrics are stored as EventStore rows so that the existing schema covers the
+ * analytics use-case without an additional table.  Each recorded metric is an
+ * event of type "__metric__" whose payload carries { name, value, tags }.
+ *
+ * Migrated as part of Issue #1125.
+ */
+import prisma from '../db/client.js';
 
 class EventAnalytics {
-  async initialize() {
-    await fs.mkdir(METRICS_DIR, { recursive: true });
+  /**
+   * Record a named metric value with optional tags.
+   * @param {string} name  — metric name, e.g. "payment.processed"
+   * @param {number} value
+   * @param {object} [tags={}]
+   */
+  async recordMetric(name, value, tags = {}) {
+    await prisma.eventStore.create({
+      data: {
+        aggregateId: `metric:${name}`,
+        eventType: '__metric__',
+        payload: { name, value, tags },
+        version: 1,
+        metadata: {},
+      },
+    });
   }
 
-  async recordMetric(name, value, tags = {}) {
-    await this.initialize();
+  /**
+   * Retrieve the most recent `limit` metric entries for a named metric.
+   * @param {string} name
+   * @param {number} [limit=1000]
+   * @returns {Promise<object[]>}
+   */
+  async getMetrics(name, limit = 1000) {
+    const records = await prisma.eventStore.findMany({
+      where: {
+        aggregateId: `metric:${name}`,
+        eventType: '__metric__',
+      },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    });
 
-    const metric = {
-      name,
-      value,
-      tags,
-      timestamp: new Date().toISOString()
+    return records.map((r) => ({
+      name: r.payload.name,
+      value: r.payload.value,
+      tags: r.payload.tags,
+      timestamp: r.createdAt.toISOString(),
+    }));
+  }
+
+  /**
+   * Return aggregate analytics for all events whose aggregateId starts with
+   * the given `eventType` prefix.
+   * @param {string} eventType
+   * @returns {Promise<object|null>}
+   */
+  async getAnalytics(eventType) {
+    const records = await prisma.eventStore.findMany({
+      where: { eventType },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    const analytics = {
+      eventType,
+      totalEvents: records.length,
+      eventsByHour: {},
+      eventsByType: {},
     };
 
-    const metricsFile = path.join(METRICS_DIR, `${name}.jsonl`);
-    await fs.appendFile(metricsFile, JSON.stringify(metric) + '\n');
-  }
-
-  async getMetrics(name, limit = 1000) {
-    await this.initialize();
-
-    const metricsFile = path.join(METRICS_DIR, `${name}.jsonl`);
-    try {
-      const content = await fs.readFile(metricsFile, 'utf-8');
-      return content
-        .split('\n')
-        .filter(line => line.trim())
-        .map(line => JSON.parse(line))
-        .slice(-limit);
-    } catch (error) {
-      if (error.code === 'ENOENT') return [];
-      throw error;
+    for (const record of records) {
+      const hour = record.createdAt.toISOString().slice(0, 13);
+      analytics.eventsByHour[hour] = (analytics.eventsByHour[hour] || 0) + 1;
     }
+
+    return analytics;
   }
 
-  async getAnalytics(eventType) {
-    await this.initialize();
-
-    try {
-      const files = await fs.readdir(METRICS_DIR);
-      const typeMetrics = files.filter(f => f.startsWith(eventType));
-      const analytics = {
-        eventType,
-        totalEvents: 0,
-        eventsByHour: {},
-        eventsByType: {}
-      };
-
-      for (const file of typeMetrics) {
-        const content = await fs.readFile(path.join(METRICS_DIR, file), 'utf-8');
-        const metrics = content
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line));
-
-        for (const metric of metrics) {
-          analytics.totalEvents++;
-          const hour = new Date(metric.timestamp).toISOString().slice(0, 13);
-          analytics.eventsByHour[hour] = (analytics.eventsByHour[hour] || 0) + 1;
-        }
-      }
-
-      return analytics;
-    } catch (error) {
-      console.error('Failed to get analytics:', error);
-      return null;
-    }
-  }
-
+  /**
+   * Return a summary of all distinct event types with their count and last
+   * occurrence timestamp.
+   * @returns {Promise<object>}
+   */
   async getEventStats() {
-    await this.initialize();
+    const rows = await prisma.eventStore.groupBy({
+      by: ['eventType'],
+      _count: { id: true },
+      _max: { createdAt: true },
+      where: { eventType: { not: '__metric__' } },
+    });
 
-    try {
-      const files = await fs.readdir(METRICS_DIR);
-      const stats = {};
-
-      for (const file of files) {
-        const content = await fs.readFile(path.join(METRICS_DIR, file), 'utf-8');
-        const metrics = content
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line));
-
-        const eventType = file.replace('.jsonl', '');
-        stats[eventType] = {
-          count: metrics.length,
-          lastOccurrence: metrics[metrics.length - 1]?.timestamp
-        };
-      }
-
-      return stats;
-    } catch (error) {
-      console.error('Failed to get event stats:', error);
-      return {};
+    const stats = {};
+    for (const row of rows) {
+      stats[row.eventType] = {
+        count: row._count.id,
+        lastOccurrence: row._max.createdAt?.toISOString() ?? null,
+      };
     }
+
+    return stats;
   }
 }
 
