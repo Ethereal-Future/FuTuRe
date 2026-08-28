@@ -1,3 +1,11 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ARCHIVE_DIR = path.join(__dirname, '../../data/archive');
+const EVENTS_DIR = path.join(__dirname, '../../data/events');
 /**
  * Event Archiver — moves old events from the hot EventStore table to the
  * EventArchive table, which is backed by Postgres via Prisma.  Replaces the
@@ -26,6 +34,19 @@ class EventArchiver {
       orderBy: { createdAt: 'asc' },
     });
 
+          // Keep only recent events
+          if (recentEvents.length > 0) {
+            await fs.writeFile(eventFile, recentEvents.map(e => JSON.stringify(e) + '\n').join(''));
+          } else {
+            await fs.unlink(eventFile);
+          }
+        }
+      }
+
+      return archivedCount;
+    } catch (error) {
+      logger.error('Archive failed:', error);
+      throw error;
     if (oldEvents.length === 0) {
       return { events: 0, aggregates: 0 };
     }
@@ -61,6 +82,27 @@ class EventArchiver {
    * @returns {Promise<object[]>}
    */
   async getArchivedEvents(aggregateId) {
+    await this.initialize();
+
+    try {
+      const files = await fs.readdir(ARCHIVE_DIR);
+      const aggregateArchives = files.filter(f => f.startsWith(aggregateId));
+      const allEvents = [];
+
+      for (const file of aggregateArchives) {
+        const content = await fs.readFile(path.join(ARCHIVE_DIR, file), 'utf-8');
+        const events = content
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line));
+        allEvents.push(...events);
+      }
+
+      return allEvents.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    } catch (error) {
+      logger.error('Failed to get archived events:', error);
+      return [];
+    }
     const records = await prisma.eventArchive.findMany({
       where: { aggregateId },
       orderBy: { originalCreatedAt: 'asc' },

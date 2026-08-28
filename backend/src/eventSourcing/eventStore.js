@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
 import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,6 +17,22 @@ const SNAPSHOTS_DIR = path.join(__dirname, '../../data/snapshots');
 import prisma from '../db/client.js';
 
 class EventStore {
+  constructor() {
+    this.events = [];
+    this.initialized = false;
+  }
+
+  async initialize() {
+    try {
+      await fs.mkdir(EVENTS_DIR, { recursive: true });
+      await fs.mkdir(SNAPSHOTS_DIR, { recursive: true });
+      this.initialized = true;
+    } catch (error) {
+      logger.error('Failed to initialize event store:', error);
+      throw error;
+    }
+  }
+
   /**
    * Append a new event for an aggregate.
    * @param {string} aggregateId
@@ -87,6 +104,28 @@ class EventStore {
    * @returns {Promise<object[]>}
    */
   async getAllEvents(limit = 1000, offset = 0) {
+    if (!this.initialized) await this.initialize();
+
+    try {
+      const files = await fs.readdir(EVENTS_DIR);
+      const allEvents = [];
+
+      for (const file of files) {
+        const content = await fs.readFile(path.join(EVENTS_DIR, file), 'utf-8');
+        const events = content
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line));
+        allEvents.push(...events);
+      }
+
+      return allEvents
+        .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+        .slice(offset, offset + limit);
+    } catch (error) {
+      logger.error('Failed to get all events:', error);
+      return [];
+    }
     const records = await prisma.eventStore.findMany({
       orderBy: { createdAt: 'asc' },
       take: limit,

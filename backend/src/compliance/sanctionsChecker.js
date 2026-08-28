@@ -3,10 +3,13 @@
 // Set SANCTIONS_API_KEY and SANCTIONS_API_URL in your environment.
 
 import https from 'https';
+import logger from '../config/logger.js';
 
 const API_URL  = process.env.SANCTIONS_API_URL  ?? 'https://api.ofac-api.com/v4/search';
 const API_KEY  = process.env.SANCTIONS_API_KEY  ?? '';
 const MIN_SCORE = parseInt(process.env.SANCTIONS_MIN_SCORE ?? '85', 10);
+
+const sanctionsLogger = logger.child({ component: 'sanctions' });
 
 function httpPost(url, body, headers) {
   return new Promise((resolve, reject) => {
@@ -42,7 +45,7 @@ class SanctionsChecker {
       return this._checkViaApi(fullName, nationality);
     }
     // No API key — warn and return clear (operator must configure for production)
-    console.warn('[sanctions] SANCTIONS_API_KEY not set; screening skipped. Configure for production.');
+    sanctionsLogger.warn('SANCTIONS_API_KEY not set; screening skipped. Configure for production.');
     return { hit: false };
   }
 
@@ -57,7 +60,7 @@ class SanctionsChecker {
       const { status, body } = await httpPost(API_URL, payload, { apiKey: API_KEY });
 
       if (status !== 200) {
-        console.error('[sanctions] API error', status, body);
+        sanctionsLogger.error('API error', { status, body });
         // Fail open with a warning — operator should decide fail-closed policy
         return { hit: false, warning: `Sanctions API returned ${status}` };
       }
@@ -73,7 +76,7 @@ class SanctionsChecker {
       }
       return { hit: false };
     } catch (err) {
-      console.error('[sanctions] API call failed:', err.message);
+      sanctionsLogger.error('API call failed', { error: err.message });
       return { hit: false, warning: `Sanctions API unavailable: ${err.message}` };
     }
   }

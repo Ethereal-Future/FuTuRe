@@ -1,3 +1,10 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const METRICS_DIR = path.join(__dirname, '../../data/metrics');
 /**
  * Event Analytics — records per-event-type metrics and aggregates them from
  * Postgres via Prisma.  Replaces the old local-file approach that appended to
@@ -74,6 +81,10 @@ class EventAnalytics {
       eventsByType: {},
     };
 
+      return analytics;
+    } catch (error) {
+      logger.error('Failed to get analytics:', error);
+      return null;
     for (const record of records) {
       const hour = record.createdAt.toISOString().slice(0, 13);
       analytics.eventsByHour[hour] = (analytics.eventsByHour[hour] || 0) + 1;
@@ -88,6 +99,30 @@ class EventAnalytics {
    * @returns {Promise<object>}
    */
   async getEventStats() {
+    await this.initialize();
+
+    try {
+      const files = await fs.readdir(METRICS_DIR);
+      const stats = {};
+
+      for (const file of files) {
+        const content = await fs.readFile(path.join(METRICS_DIR, file), 'utf-8');
+        const metrics = content
+          .split('\n')
+          .filter(line => line.trim())
+          .map(line => JSON.parse(line));
+
+        const eventType = file.replace('.jsonl', '');
+        stats[eventType] = {
+          count: metrics.length,
+          lastOccurrence: metrics[metrics.length - 1]?.timestamp
+        };
+      }
+
+      return stats;
+    } catch (error) {
+      logger.error('Failed to get event stats:', error);
+      return {};
     const rows = await prisma.eventStore.groupBy({
       by: ['eventType'],
       _count: { id: true },

@@ -2,6 +2,7 @@ import eventStore from './eventStore.js';
 import eventReplayer from './eventReplayer.js';
 import projectionManager from './projectionManager.js';
 import eventAnalytics from './eventAnalytics.js';
+import logger from '../config/logger.js';
 
 class EventMonitor {
   constructor() {
@@ -33,7 +34,7 @@ class EventMonitor {
       try {
         await listener(storedEvent);
       } catch (error) {
-        console.error('Listener error:', error);
+        logger.error('Listener error:', error);
       }
     }
 
@@ -50,7 +51,7 @@ class EventMonitor {
       try {
         await projectionManager.project(name, events);
       } catch (error) {
-        console.error(`Projection update failed for ${name}:`, error);
+        logger.error(`Projection update failed for ${name}:`, error);
       }
     }
   }

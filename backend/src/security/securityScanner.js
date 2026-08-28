@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import logger from '../config/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const SCAN_DIR = path.join(__dirname, '../../data/security-scans');
@@ -104,7 +105,7 @@ class SecurityScanner {
 
       return scans.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch (error) {
-      console.error('Failed to get scans:', error);
+      logger.error('Failed to get scans:', error);
       return [];
     }
   }
