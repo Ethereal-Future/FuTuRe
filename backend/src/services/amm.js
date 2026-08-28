@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 const pools = new Map();
 const positions = new Map();
 const trades = [];
@@ -138,7 +140,7 @@ export function executeSwap({ poolId, inputAsset, amountIn, traderId = 'system',
   pool.updatedAt = nowIso();
 
   const trade = {
-    tradeId: `trade_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    tradeId: `trade_${randomUUID()}`,
     traderId,
     ...quote,
     timestamp: nowIso(),

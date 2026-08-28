@@ -11,6 +11,7 @@ import prisma from '../db/client.js';
 class ProjectionManager {
   constructor() {
     this.projections = new Map();
+    this.writeQueues = new Map();
   }
 
   registerProjection(name, handler) {
@@ -34,6 +35,21 @@ class ProjectionManager {
   }
 
   async saveProjection(name, data) {
+    if (!this.writeQueues.has(name)) {
+      this.writeQueues.set(name, Promise.resolve());
+    }
+
+    const queuePromise = this.writeQueues.get(name);
+    const newPromise = queuePromise.then(async () => {
+      const file = path.join(PROJECTIONS_DIR, `${name}.json`);
+      const tmpFile = `${file}.tmp`;
+
+      await fs.writeFile(tmpFile, JSON.stringify(data, null, 2));
+      await fs.rename(tmpFile, file);
+    });
+
+    this.writeQueues.set(name, newPromise);
+    await newPromise;
     await prisma.eventProjection.upsert({
       where: { name },
       update: { data, updatedAt: new Date() },

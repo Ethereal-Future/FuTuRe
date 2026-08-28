@@ -1,3 +1,11 @@
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const EVENTS_DIR = path.join(__dirname, '../../data/events');
+const SNAPSHOTS_DIR = path.join(__dirname, '../../data/snapshots');
 /**
  * Event Store — durable, cross-instance implementation backed by Postgres via
  * Prisma.  Replaces the old local-file JSONL approach that stored events under
@@ -15,6 +23,16 @@ class EventStore {
    * @returns {Promise<object>} the persisted event record
    */
   async append(aggregateId, event) {
+    if (!this.initialized) await this.initialize();
+
+    const eventWithMetadata = {
+      id: randomUUID(),
+      aggregateId,
+      type: event.type,
+      data: event.data,
+      version: event.version || 1,
+      timestamp: new Date().toISOString(),
+      metadata: event.metadata || {}
     const record = await prisma.eventStore.create({
       data: {
         aggregateId,

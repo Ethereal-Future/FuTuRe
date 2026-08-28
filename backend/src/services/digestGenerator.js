@@ -3,12 +3,14 @@
  */
 import * as StellarSDK from '@stellar/stellar-sdk';
 import * as StellarService from './stellar.js';
-import { callWithCircuitBreaker } from './circuitBreaker.js';
+import { createCircuitBreaker } from './circuitBreaker.js';
 import prisma from '../db/client.js';
 import { sendNotification } from '../notifications/index.js';
 import logger from '../config/logger.js';
 import { runWithConcurrency } from '../utils/concurrency.js';
 import { recordCustomMetric } from '../monitoring/metrics.js';
+
+const digestBatchBreaker = createCircuitBreaker('Horizon-Batch');
 
 const DIGEST_LOOKBACK_DAYS = 7;
 const TOP_TRANSACTIONS_COUNT = 5;
@@ -46,7 +48,7 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
         builder.cursor(cursor);
       }
 
-      const response = await callWithCircuitBreaker(() => builder.call());
+      const response = await digestBatchBreaker.call(() => builder.call());
       if (!response.records.length) break;
 
       allPayments = [...allPayments, ...response.records];
@@ -91,7 +93,7 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
     }
 
     // Get current balance
-    const account = await callWithCircuitBreaker(() => server.loadAccount(publicKey));
+    const account = await digestBatchBreaker.call(() => server.loadAccount(publicKey));
     let balance = 0;
     for (const bal of account.balances) {
       if (!bal.asset_code || bal.asset_code === 'XLM') {

@@ -1,7 +1,6 @@
 import express from 'express';
 import os from 'os';
 import * as StellarService from '../services/stellar.js';
-import { getCircuitState } from '../services/circuitBreaker.js';
 import { eventMonitor, eventStore } from '../eventSourcing/index.js';
 import { auditLogger } from '../security/index.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -48,7 +47,7 @@ function getApplicationInfo() {
 }
 
 async function checkStellarConnectivity() {
-  const circuit = getCircuitState();
+  const circuit = StellarService.getInteractiveCircuitBreakerState();
   if (circuit.state === 'OPEN') {
     return {
       status: 'unhealthy',
