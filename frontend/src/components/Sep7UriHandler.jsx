@@ -45,14 +45,17 @@ export function Sep7UriHandler({ uri, onLoad, onError, onClose }) {
       <div className="sep7-handler">
         {parsed.originDomain && (
           <div style={{
-            background: '#f0f9ff',
-            border: '1px solid #bfdbfe',
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
             borderRadius: 6,
             padding: 12,
             marginBottom: 16,
           }}>
-            <p style={{ margin: 0, fontSize: '0.9rem', color: '#1e40af' }}>
-              <strong>{t('sep7.originLabel')}</strong> {parsed.originDomain}
+            <p style={{ margin: 0, fontSize: '0.9rem', color: '#991b1b' }}>
+              <strong>{t('sep7.originLabelUnverified')}</strong> {parsed.originDomain}
+            </p>
+            <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#991b1b' }}>
+              {t('sep7.originUnverifiedWarning')}
             </p>
           </div>
         )}

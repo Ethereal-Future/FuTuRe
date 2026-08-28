@@ -4,7 +4,6 @@ import sanctionsChecker from './sanctionsChecker.js';
 // Risk scoring: produces a 0–100 score (higher = riskier).
 const RISK_WEIGHTS = {
   LARGE_TX: 30,
-  RAPID_SUCCESSION: 35,
   STRUCTURING: 40,
   VELOCITY: 30,
   NEAR_THRESHOLD: 25,

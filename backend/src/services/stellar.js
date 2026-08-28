@@ -5,11 +5,13 @@ import { getConfig } from '../config/env.js';
 import { getIssuer } from '../config/assets.js';
 import logger, { withContext } from '../config/logger.js';
 import prisma from '../db/client.js';
-import { callWithCircuitBreaker } from './circuitBreaker.js';
+import { createCircuitBreaker } from './circuitBreaker.js';
 import { getCachedBalance, invalidateBalanceCache } from '../cache/balanceCache.js';
 import { recordHorizonCall } from '../monitoring/horizonAlerter.js';
 import { withSpan } from '../config/otel.js';
 import { recordFeeSample, getSevenDayAverageFee, detectFeeSurge } from './feeSurge.js';
+
+const stellarInteractiveBreaker = createCircuitBreaker('Horizon-Interactive');
 
 /**
  * Retrieve aggregate fee-bump statistics from the database.
@@ -115,7 +117,7 @@ export function getHorizonTimeout() {
  */
 export async function withHorizonTimeout(fn) {
   const ms = getHorizonTimeout();
-  return callWithCircuitBreaker(() => {
+  return stellarInteractiveBreaker.call(() => {
     let timer;
     const timeout = new Promise((_, reject) => {
       timer = setTimeout(() => {
@@ -651,6 +653,41 @@ export async function removeTrustline(sourceSecret, assetCode) {
  */
 
 /**
+ * Map a raw Horizon transaction record into the shape returned to API
+ * consumers. Shared by {@link getTransactions} (paginated listing) and
+ * {@link getTransactionRecordByHash} (direct hash lookup), so both code
+ * paths always return an identically-shaped record.
+ * @param {import('@stellar/stellar-sdk').Horizon.ServerApi.TransactionRecord} tx
+ * @param {string} publicKey - Account the record is being rendered for (used to derive direction/counterparty)
+ */
+async function formatTransactionRecord(tx, publicKey) {
+  const ops = await tx.operations();
+  const op = ops.records[0];
+  const opType = op?.type ?? 'unknown';
+  const amount = op?.amount ?? null;
+  const asset = op?.asset_type === 'native' ? 'XLM' : op?.asset_code ? `${op.asset_code}` : null;
+  const counterparty = opType === 'payment' ? (op.from === publicKey ? op.to : op.from) : null;
+  const direction = opType === 'payment' ? (op.from === publicKey ? 'sent' : 'received') : null;
+
+  return {
+    id: tx.id,
+    hash: tx.hash,
+    type: opType,
+    direction,
+    amount,
+    asset,
+    counterparty,
+    date: tx.created_at,
+    fee: tx.fee_charged,
+    successful: tx.successful,
+    memo: tx.memo ?? null,
+    cursor: tx.paging_token,
+    ledger: tx.ledger_attr,
+    envelopeXdr: tx.envelope_xdr,
+  };
+}
+
+/**
  * Fetch paginated transaction history for an account from Stellar Horizon.
  * @param {string} publicKey - Stellar public key of the account
  * @param {object} [options={}]
@@ -671,35 +708,7 @@ export async function getTransactions(
 
   const page = await withHorizonRetry(() => builder.call());
 
-  let records = await Promise.all(
-    page.records.map(async (tx) => {
-      const ops = await tx.operations();
-      const op = ops.records[0];
-      const opType = op?.type ?? 'unknown';
-      const amount = op?.amount ?? null;
-      const asset =
-        op?.asset_type === 'native' ? 'XLM' : op?.asset_code ? `${op.asset_code}` : null;
-      const counterparty = opType === 'payment' ? (op.from === publicKey ? op.to : op.from) : null;
-      const direction = opType === 'payment' ? (op.from === publicKey ? 'sent' : 'received') : null;
-
-      return {
-        id: tx.id,
-        hash: tx.hash,
-        type: opType,
-        direction,
-        amount,
-        asset,
-        counterparty,
-        date: tx.created_at,
-        fee: tx.fee_charged,
-        successful: tx.successful,
-        memo: tx.memo ?? null,
-        cursor: tx.paging_token,
-        ledger: tx.ledger_attr,
-        envelopeXdr: tx.envelope_xdr,
-      };
-    }),
-  );
+  let records = await Promise.all(page.records.map((tx) => formatTransactionRecord(tx, publicKey)));
 
   if (type) records = records.filter((r) => r.type === type);
   if (dateFrom) records = records.filter((r) => new Date(r.date) >= new Date(dateFrom));
@@ -711,6 +720,87 @@ export async function getTransactions(
       page.records.length === limit ? page.records[page.records.length - 1].paging_token : null,
     hasMore: page.records.length === limit,
   };
+}
+
+/**
+ * Fetch a single transaction directly from Horizon by hash (issue #1122).
+ * Unlike {@link getTransactions}, this does not depend on the transaction
+ * being within the account's most recent page(s) of history — Horizon's
+ * `/transactions/{hash}` endpoint looks it up directly regardless of age.
+ * @param {string} hash - Transaction hash (hex)
+ * @returns {Promise<import('@stellar/stellar-sdk').Horizon.ServerApi.TransactionRecord>}
+ * @throws {Error} With `.response.status === 404` when Horizon has no such transaction
+ */
+export async function getTransactionByHash(hash) {
+  return withHorizonRetry(() => getHorizonServer().transactions().transaction(hash).call());
+}
+
+/**
+ * Determine whether a Horizon transaction record involves the given account,
+ * checking both the transaction's source account and every operation's
+ * relevant account fields (payment from/to, trustline holder, signer, etc.).
+ * @param {import('@stellar/stellar-sdk').Horizon.ServerApi.TransactionRecord} tx
+ * @param {string} publicKey
+ * @returns {Promise<boolean>}
+ */
+export async function transactionInvolvesAccount(tx, publicKey) {
+  if (tx.source_account === publicKey) return true;
+  try {
+    const ops = await tx.operations();
+    return ops.records.some((op) =>
+      [
+        op.source_account,
+        op.from,
+        op.to,
+        op.destination,
+        op.account,
+        op.trustor,
+        op.trustee,
+        op.signer,
+        op.into,
+        op.funder,
+      ].includes(publicKey),
+    );
+  } catch (err) {
+    logger.warn('stellar.transactionInvolvesAccount.failed', {
+      hash: tx?.hash,
+      publicKey,
+      error: err.message,
+    });
+    return false;
+  }
+}
+
+/**
+ * Look up a single transaction by hash directly from Horizon and verify it
+ * belongs to the given account before returning it (issue #1122).
+ * @param {string} hash
+ * @param {string} publicKey
+ * @returns {Promise<object>} Formatted transaction record (see {@link formatTransactionRecord})
+ * @throws {Error} `.notFoundReason === 'horizon'` if Horizon has no such transaction,
+ *   or `.notFoundReason === 'account_mismatch'` if it exists but doesn't involve `publicKey`
+ */
+export async function getTransactionRecordByHash(hash, publicKey) {
+  let tx;
+  try {
+    tx = await getTransactionByHash(hash);
+  } catch (err) {
+    if (err?.response?.status === 404) {
+      const notFound = new Error('Transaction not found');
+      notFound.notFoundReason = 'horizon';
+      throw notFound;
+    }
+    throw err;
+  }
+
+  const belongs = await transactionInvolvesAccount(tx, publicKey);
+  if (!belongs) {
+    const notFound = new Error('Transaction not found for this account');
+    notFound.notFoundReason = 'account_mismatch';
+    throw notFound;
+  }
+
+  return formatTransactionRecord(tx, publicKey);
 }
 
 /**
@@ -1190,4 +1280,8 @@ export async function buildUnsignedXdr(
   return {
     xdr: transaction.toEnvelope().toXDR('base64'),
   };
+}
+
+export function getInteractiveCircuitBreakerState() {
+  return stellarInteractiveBreaker.getState();
 }

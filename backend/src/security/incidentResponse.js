@@ -1,4 +1,7 @@
+import logger from '../config/logger.js';
 import prisma from '../db/client.js';
+
+const incidentLogger = logger.child({ component: 'incident-response' });
 
 class IncidentResponse {
   constructor() {
@@ -214,7 +217,7 @@ class IncidentResponse {
 
       return incidents.map(incident => this._formatIncident(incident));
     } catch (error) {
-      console.error('Failed to get incidents:', error);
+      incidentLogger.error('Failed to get incidents', { error: error.message });
       return [];
     }
   }

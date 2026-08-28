@@ -269,7 +269,7 @@ impl PredictionMarket {
         let mut market = Self::load_market(&env, market_id)?;
         Self::require_status(&market, &MarketStatus::Disputed)?;
         // Slash bond: add to treasury balance (tracked in market for simplicity)
-        let treasury: Address = env.storage().instance().get(&TREASURY).unwrap();
+        let _treasury: Address = env.storage().instance().get(&TREASURY).ok_or(Error::NotInitialized)?;
         let key = Self::treasury_key(&env);
         let current: i128 = env.storage().persistent().get(&key).unwrap_or(0);
         let slashed = market.dispute_bond;
@@ -280,7 +280,6 @@ impl PredictionMarket {
         market.status = MarketStatus::Closed;
         Self::save_market(&env, market_id, &market);
         Self::emit(&env, symbol_short!("rejected"), (market_id, caller, slashed));
-        let _ = treasury;
         Ok(())
     }
 

@@ -657,7 +657,7 @@ class PenetrationTester {
 
       return results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch (error) {
-      console.error('Failed to get pentest results:', error);
+      logger.error('Failed to get pentest results:', error);
       return [];
     }
   }

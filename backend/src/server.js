@@ -44,6 +44,7 @@ import accountsRoutes from './routes/accounts.js';
 import contactsRoutes from './routes/contacts.js';
 import clinicsRoutes from './routes/clinics.js';
 import adminRoutes from './routes/admin.js';
+import assetIntegrityRoutes from './routes/assetIntegrity.js';
 import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
 import { initializeCache as initIPWhitelistCache } from './security/ipWhitelist.js';
@@ -186,6 +187,11 @@ app.use('/api/v1/clinics/:id/keypair', clinicsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/stellar', stellarRoutes);
+// SRI hashes for built frontend assets (see #1121 — SRI is HTML-attribute
+// based, not header based; this manifest lets HTML templates embed a real
+// `integrity` attribute).
+app.use('/api/v1/assets', assetIntegrityRoutes);
+app.use('/api/assets', assetIntegrityRoutes);
 app.get('/.well-known/stellar.toml', (_req, res) => {
   res.type('text/plain').send(buildStellarToml());
 });

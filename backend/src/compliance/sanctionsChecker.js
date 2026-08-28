@@ -23,6 +23,8 @@ if (!API_KEY && IS_DEPLOYED) {
   );
 }
 
+const sanctionsLogger = logger.child({ component: 'sanctions' });
+
 function httpPost(url, body, headers) {
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
@@ -69,6 +71,8 @@ class SanctionsChecker {
         screeningError: true,
       };
     }
+    // No API key — warn and return clear (operator must configure for production)
+    sanctionsLogger.warn('SANCTIONS_API_KEY not set; screening skipped. Configure for production.');
     return { hit: false };
   }
 
@@ -92,6 +96,8 @@ class SanctionsChecker {
             screeningError: true,
           };
         }
+        sanctionsLogger.error('API error', { status, body });
+        // Fail open with a warning — operator should decide fail-closed policy
         return { hit: false, warning: `Sanctions API returned ${status}` };
       }
 
@@ -115,6 +121,7 @@ class SanctionsChecker {
           screeningError: true,
         };
       }
+      sanctionsLogger.error('API call failed', { error: err.message });
       return { hit: false, warning: `Sanctions API unavailable: ${err.message}` };
     }
   }

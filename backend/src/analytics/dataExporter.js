@@ -3,7 +3,13 @@ import prisma from '../db/client.js';
 function toCSV(rows) {
   if (!rows.length) return '';
   const headers = Object.keys(rows[0]);
-  const escape = v => `"${String(v).replace(/"/g, '""')}"`;
+  const escape = v => {
+    let s = String(v);
+    if (/^[=+\-@]/.test(s)) {
+      s = `'${s}`;
+    }
+    return `"${s.replace(/"/g, '""')}"`;
+  };
   return [headers.join(','), ...rows.map(r => headers.map(h => escape(r[h])).join(','))].join('\n');
 }
 
