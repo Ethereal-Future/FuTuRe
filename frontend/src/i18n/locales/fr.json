@@ -505,7 +505,9 @@
     "memo": "Memo",
     "typeLabel": "Type:",
     "assetIssuer": "Asset Issuer",
-    "prefillNotice": "ℹ️ The form will be pre-filled with this information. You can review and modify it before sending."
+    "prefillNotice": "ℹ️ The form will be pre-filled with this information. You can review and modify it before sending.",
+    "originLabelUnverified": "Unverified origin:",
+    "originUnverifiedWarning": "This domain is not cryptographically verified. Do not trust it as the source of this request."
   },
   "thresholdSettings": {
     "rangeError": "All thresholds must be between 0 and 255",

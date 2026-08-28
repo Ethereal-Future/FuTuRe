@@ -9,8 +9,16 @@ import {
   chaosTestAutomation,
   chaosReporter
 } from '../chaos/index.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
 
+// NOTE: These endpoints only record bookkeeping state (in-memory Maps/Sets in
+// backend/src/chaos/*). Nothing in real request handling (middleware, db client,
+// service calls) currently consults this state, so injections here do not affect
+// live traffic. Admin auth is still required since this is unauthenticated attack
+// surface regardless of whether it is wired up.
 const router = express.Router();
+
+router.use(requireAdmin);
 
 /**
  * @swagger
