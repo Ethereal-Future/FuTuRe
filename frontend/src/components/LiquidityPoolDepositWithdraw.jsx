@@ -57,7 +57,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
         poolId: selectedPool.poolId,
         amountA: parseFloat(amountA),
         amountB: parseFloat(amountB),
-        slippageTolerance: parseFloat(slippageTolerance),
+        slippageTolerance: parseFloat(slippageTolerance) / 100,
       });
       setFeeEstimate(data);
       setPoolRatioWarn(data.ratioShiftPct > 2);
@@ -73,7 +73,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
       const { data } = await apiClient.post('/api/stellar/amm/withdraw/estimate', {
         poolId: selectedPool.poolId,
         shares: parseFloat(shares),
-        slippageTolerance: parseFloat(slippageTolerance),
+        slippageTolerance: parseFloat(slippageTolerance) / 100,
       });
       setFeeEstimate(data);
       setPoolRatioWarn(data.ratioShiftPct > 2);
@@ -99,7 +99,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
         poolId: selectedPool.poolId,
         amountA: parseFloat(amountA),
         amountB: parseFloat(amountB),
-        slippageTolerance: parseFloat(slippageTolerance),
+        slippageTolerance: parseFloat(slippageTolerance) / 100,
       });
 
       setSuccess(`Deposit successful! Received ${data.sharesReceived} LP tokens`);
@@ -130,7 +130,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
         sourceSecret: '', // In production, this would come from the secure context
         poolId: selectedPool.poolId,
         shares: parseFloat(shares),
-        slippageTolerance: parseFloat(slippageTolerance),
+        slippageTolerance: parseFloat(slippageTolerance) / 100,
       });
 
       setSuccess(
@@ -150,8 +150,18 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
     <section className="section" aria-labelledby="pool-heading">
       <h2 id="pool-heading">Liquidity Pool Operations</h2>
 
-      {error && <StatusMessage type="error" message={error} />}
-      {success && <StatusMessage type="success" message={success} />}
+      {error && (
+        <StatusMessage
+          messages={[{ id: 'pool-error', type: 'error', message: error, icon: '⚠️' }]}
+          onRemove={() => setError('')}
+        />
+      )}
+      {success && (
+        <StatusMessage
+          messages={[{ id: 'pool-success', type: 'success', message: success, icon: '✅' }]}
+          onRemove={() => setSuccess('')}
+        />
+      )}
 
       <div style={{ marginBottom: 20 }}>
         <label htmlFor="mode-select">Operation:</label>
