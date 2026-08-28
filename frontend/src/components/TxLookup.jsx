@@ -49,14 +49,22 @@ export function TxLookup({ initialHash = '', accountPublicKey = '', onClose }) {
     setError('');
     setTx(null);
     try {
+      // A full transaction hash is looked up directly against Horizon by the
+      // backend (issue #1122) and returned as a single `transaction` object —
+      // this finds the transaction regardless of how long ago it happened,
+      // unlike scanning a page of recent history.
       const { data } = await apiClient.get(`/api/stellar/account/${trimPk}/transactions`, {
-        params: { hash: trimH, limit: 50 },
+        params: { hash: trimH },
       });
-      const found = data.records?.find((r) => r.hash?.toLowerCase() === trimH.toLowerCase());
-      if (found) {
-        setTx(found);
+      if (data.transaction) {
+        setTx(data.transaction);
       } else {
-        setError('Transaction not found for this account.');
+        const found = data.records?.find((r) => r.hash?.toLowerCase() === trimH.toLowerCase());
+        if (found) {
+          setTx(found);
+        } else {
+          setError('Transaction not found for this account.');
+        }
       }
     } catch (e) {
       setError(e?.response?.data?.error ?? e?.message ?? 'Lookup failed.');
