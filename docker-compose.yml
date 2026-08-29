@@ -93,6 +93,7 @@ services:
     environment:
       APP_ENV: development
       PORT: 3001
+      TZ: UTC
       DATABASE_URL: postgresql://future_admin:dev_password@postgres:5432/future_remittance
       REDIS_URL: redis://redis:6379
       STELLAR_NETWORK: testnet

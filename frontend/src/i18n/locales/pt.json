@@ -624,5 +624,67 @@
     "show": "👁 Show",
     "tipStrong": "Tip:",
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
+  },
+  "notifications": {
+    "transaction_received": {
+      "email": {
+        "subject": "Você recebeu {{amount}} {{asset}}",
+        "body": "Olá {{recipientName}},\n\nVocê recebeu {{amount}} {{asset}} de {{senderPublicKey}}.\n\nID da transação: {{txHash}}\n\nConsulte sua carteira para detalhes."
+      },
+      "push": { "title": "Pagamento recebido", "body": "Você recebeu {{amount}} {{asset}}" },
+      "sms": { "body": "FutureRemit: Você recebeu {{amount}} {{asset}} de {{senderPublicKey}}. Tx: {{txHash}}" },
+      "inApp": { "title": "Pagamento recebido", "body": "Você recebeu {{amount}} {{asset}} de {{senderPublicKey}}" }
+    },
+    "transaction_sent": {
+      "email": {
+        "subject": "Você enviou {{amount}} {{asset}}",
+        "body": "Olá {{senderName}},\n\nVocê enviou {{amount}} {{asset}} para {{recipientPublicKey}}.\n\nID da transação: {{txHash}}\n\nConsulte sua carteira para detalhes."
+      },
+      "push": { "title": "Pagamento enviado", "body": "Você enviou {{amount}} {{asset}} para {{recipientPublicKey}}" },
+      "sms": { "body": "FutureRemit: Você enviou {{amount}} {{asset}} para {{recipientPublicKey}}. Tx: {{txHash}}" },
+      "inApp": { "title": "Pagamento enviado", "body": "Você enviou {{amount}} {{asset}} para {{recipientPublicKey}}" }
+    },
+    "transaction_failed": {
+      "email": {
+        "subject": "Transação falhou",
+        "body": "Olá {{userName}},\n\nSua transação de {{amount}} {{asset}} falhou.\n\nMotivo: {{reason}}\n\nPor favor, tente novamente ou entre em contato com o suporte."
+      },
+      "push": { "title": "Transação falhou", "body": "Sua transação de {{amount}} {{asset}} falhou: {{reason}}" },
+      "sms": { "body": "FutureRemit: Transação de {{amount}} {{asset}} falhou. Motivo: {{reason}}" },
+      "inApp": { "title": "Transação falhou", "body": "Sua transação de {{amount}} {{asset}} falhou: {{reason}}" }
+    },
+    "login_new_device": {
+      "email": {
+        "subject": "Novo login detectado",
+        "body": "Olá {{userName}},\n\nUm novo login foi detectado em sua conta de {{deviceInfo}} às {{loginTime}}.\n\nSe não foi você, proteja sua conta imediatamente."
+      },
+      "push": { "title": "Novo login detectado", "body": "Login de {{deviceInfo}} às {{loginTime}}" },
+      "sms": { "body": "FutureRemit: Novo login de {{deviceInfo}} às {{loginTime}}. Não foi você? Proteja sua conta." },
+      "inApp": { "title": "Novo login detectado", "body": "Login de {{deviceInfo}} às {{loginTime}}" }
+    },
+    "account_created": {
+      "email": {
+        "subject": "Bem-vindo ao FutureRemit",
+        "body": "Olá {{userName}},\n\nSua conta foi criada com sucesso.\n\nSua chave pública: {{publicKey}}\n\nComece a enviar e receber pagamentos hoje."
+      },
+      "push": { "title": "Bem-vindo ao FutureRemit", "body": "Sua conta está pronta. Comece a enviar pagamentos!" },
+      "sms": { "body": "FutureRemit: Bem-vindo! Sua conta está pronta. Chave pública: {{publicKey}}" },
+      "inApp": { "title": "Conta criada", "body": "Bem-vindo ao FutureRemit! Sua conta está pronta." }
+    },
+    "weekly_digest": {
+      "email": {
+        "subject": "Seu resumo semanal ({{weekStartDay}} - {{weekEndDay}})",
+        "body": "Olá {{userName}},\n\nTransações: {{transactionCount}}\nTotal enviado: {{totalSent}} XLM\nTotal recebido: {{totalReceived}} XLM"
+      },
+      "inApp": { "title": "Resumo semanal", "body": "Você teve {{transactionCount}} transações esta semana." }
+    },
+    "low_balance_alert": {
+      "email": {
+        "subject": "Alerta de saldo: {{currentBalance}} {{asset}} abaixo de {{threshold}} {{asset}}",
+        "body": "Olá {{userName}},\n\nSeu saldo caiu para {{currentBalance}} {{asset}}, abaixo do limite de alerta de {{threshold}} {{asset}}."
+      },
+      "push": { "title": "Alerta de saldo baixo", "body": "Seu saldo de {{asset}} agora é {{currentBalance}}" },
+      "inApp": { "title": "Alerta de saldo baixo", "body": "Seu saldo de {{asset}} ({{currentBalance}}) está abaixo do limite ({{threshold}} {{asset}})" }
+    }
   }
 }

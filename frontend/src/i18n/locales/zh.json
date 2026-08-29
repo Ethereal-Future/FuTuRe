@@ -624,5 +624,67 @@
     "show": "👁 Show",
     "tipStrong": "Tip:",
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
+  },
+  "notifications": {
+    "transaction_received": {
+      "email": {
+        "subject": "您收到了 {{amount}} {{asset}}",
+        "body": "您好 {{recipientName}}，\n\n您收到了来自 {{senderPublicKey}} 的 {{amount}} {{asset}}。\n\n交易 ID：{{txHash}}\n\n请查看您的钱包了解详情。"
+      },
+      "push": { "title": "已收款", "body": "您收到了 {{amount}} {{asset}}" },
+      "sms": { "body": "FutureRemit：您收到了来自 {{senderPublicKey}} 的 {{amount}} {{asset}}。交易：{{txHash}}" },
+      "inApp": { "title": "已收款", "body": "您收到了来自 {{senderPublicKey}} 的 {{amount}} {{asset}}" }
+    },
+    "transaction_sent": {
+      "email": {
+        "subject": "您发送了 {{amount}} {{asset}}",
+        "body": "您好 {{senderName}}，\n\n您已向 {{recipientPublicKey}} 发送了 {{amount}} {{asset}}。\n\n交易 ID：{{txHash}}\n\n请查看您的钱包了解详情。"
+      },
+      "push": { "title": "已发款", "body": "您向 {{recipientPublicKey}} 发送了 {{amount}} {{asset}}" },
+      "sms": { "body": "FutureRemit：您向 {{recipientPublicKey}} 发送了 {{amount}} {{asset}}。交易：{{txHash}}" },
+      "inApp": { "title": "已发款", "body": "您向 {{recipientPublicKey}} 发送了 {{amount}} {{asset}}" }
+    },
+    "transaction_failed": {
+      "email": {
+        "subject": "交易失败",
+        "body": "您好 {{userName}}，\n\n您的 {{amount}} {{asset}} 交易失败。\n\n原因：{{reason}}\n\n请重试或联系支持。"
+      },
+      "push": { "title": "交易失败", "body": "您的 {{amount}} {{asset}} 交易失败：{{reason}}" },
+      "sms": { "body": "FutureRemit：{{amount}} {{asset}} 交易失败。原因：{{reason}}" },
+      "inApp": { "title": "交易失败", "body": "您的 {{amount}} {{asset}} 交易失败：{{reason}}" }
+    },
+    "login_new_device": {
+      "email": {
+        "subject": "检测到新登录",
+        "body": "您好 {{userName}}，\n\n检测到您的账户从 {{deviceInfo}} 于 {{loginTime}} 登录。\n\n如果不是您，请立即保护您的账户。"
+      },
+      "push": { "title": "检测到新登录", "body": "于 {{loginTime}} 从 {{deviceInfo}} 登录" },
+      "sms": { "body": "FutureRemit：于 {{loginTime}} 从 {{deviceInfo}} 登录。不是您？立即保护您的账户。" },
+      "inApp": { "title": "检测到新登录", "body": "于 {{loginTime}} 从 {{deviceInfo}} 登录" }
+    },
+    "account_created": {
+      "email": {
+        "subject": "欢迎来到 FutureRemit",
+        "body": "您好 {{userName}}，\n\n您的账户已成功创建。\n\n您的公钥：{{publicKey}}\n\n立即开始发送和接收付款。"
+      },
+      "push": { "title": "欢迎来到 FutureRemit", "body": "您的账户已准备就绪，开始发送付款！" },
+      "sms": { "body": "FutureRemit：欢迎！您的账户已就绪。公钥：{{publicKey}}" },
+      "inApp": { "title": "账户已创建", "body": "欢迎来到 FutureRemit！您的账户已准备就绪。" }
+    },
+    "weekly_digest": {
+      "email": {
+        "subject": "您的每周汇总（{{weekStartDay}} - {{weekEndDay}}）",
+        "body": "您好 {{userName}}，\n\n交易次数：{{transactionCount}}\n总发送：{{totalSent}} XLM\n总接收：{{totalReceived}} XLM"
+      },
+      "inApp": { "title": "每周汇总", "body": "本周您共有 {{transactionCount}} 笔交易。" }
+    },
+    "low_balance_alert": {
+      "email": {
+        "subject": "余额提醒：{{currentBalance}} {{asset}} 低于 {{threshold}} {{asset}}",
+        "body": "您好 {{userName}}，\n\n您的余额已降至 {{currentBalance}} {{asset}}，低于提醒阈值 {{threshold}} {{asset}}。"
+      },
+      "push": { "title": "余额不足提醒", "body": "您的 {{asset}} 余额现为 {{currentBalance}}" },
+      "inApp": { "title": "余额不足提醒", "body": "您的 {{asset}} 余额（{{currentBalance}}）低于阈值（{{threshold}} {{asset}}）" }
+    }
   }
 }

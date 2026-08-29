@@ -168,6 +168,9 @@ model NotificationPreference {
   id                        String   @id @default(uuid())
   userId                    String   @unique
   user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Locale used to render notification templates for this user (issue #1145).
+  // BCP 47 language tag, e.g. "en", "ar", "fr". Defaults to "en".
+  locale                    String   @default("en")
   emailEnabled              Boolean  @default(true)
   pushEnabled               Boolean  @default(true)
   smsEnabled                Boolean  @default(false)
@@ -702,4 +705,29 @@ model SecurityAlert {
 
   @@index([deviceId])
   @@index([createdAt])
+}
+
+// ─── Compliance Reports (#1144) ──────────────────────────────────────────────
+
+// Durable storage for FinCEN SAR/CTR and general compliance reports (issue #1144).
+// Replaces ephemeral local-disk writes so reports survive container restarts
+// and can be retained for the BSA-mandated 5-year period.
+// filingStatus distinguishes "generated" from "actually filed with FinCEN" —
+// two legally distinct states the old implementation conflated.
+model ComplianceReport {
+  id              String   @id @default(uuid())
+  reportType      String   // SAR | CTR | AML_SUMMARY | …
+  payload         Json     // full report JSON for audit trail
+  period          Json     // { from, to }
+  filingStatus    String   @default("GENERATED")  // GENERATED | FILED | MANUAL_REVIEW_REQUIRED
+  filingReference String?  // BSA e-filing reference number once filed
+  generatedBy     String?  // userId of the operator who triggered generation
+  generatedAt     DateTime @default(now())
+  filedAt         DateTime?
+  // Retention: records should NOT be deleted before retainUntil (5 years from generation).
+  retainUntil     DateTime
+
+  @@index([reportType])
+  @@index([filingStatus])
+  @@index([generatedAt])
 }

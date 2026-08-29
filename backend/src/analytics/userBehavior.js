@@ -17,9 +17,11 @@ class UserBehaviorTracker {
     const avgAmount = amounts.reduce((s, a) => s + a, 0) / amounts.length;
     const maxAmount = Math.max(...amounts);
 
-    // Hour-of-day frequency
+    // Hour-of-day frequency — use getUTCHours() for deterministic behaviour
+    // across environments regardless of the server process's local timezone,
+    // consistent with the UTC convention used in notifications/preferences.js.
     const hourFreq = Array(24).fill(0);
-    for (const tx of txs) hourFreq[tx.createdAt.getHours()]++;
+    for (const tx of txs) hourFreq[tx.createdAt.getUTCHours()]++;
     const peakHour = hourFreq.indexOf(Math.max(...hourFreq));
 
     // Top counterparties
