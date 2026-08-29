@@ -238,7 +238,11 @@ router.get('/audit', authMiddleware, async (req, res) => {
 router.post('/reports', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
   try {
     const { type, from, to } = req.body;
-    const report = await complianceReporting.generateReport(type || 'AML_SUMMARY', { from, to });
+    const report = await complianceReporting.generateReport(type || 'AML_SUMMARY', {
+      from,
+      to,
+      generatedBy: req.user.id,
+    });
     res.status(201).json(report);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -295,7 +299,11 @@ router.get('/reports', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
 router.get('/reports/sar', requireAdmin, async (req, res) => {
   try {
     const { format = 'json', from, to } = req.query;
-    const report = await complianceReporting.generateSAR({ from, to });
+    const report = await complianceReporting.generateSAR({
+      from,
+      to,
+      generatedBy: req.user.id,
+    });
 
     if (format === 'csv') {
       const csv = complianceReporting.toCsv(
@@ -342,7 +350,11 @@ router.get('/reports/sar', requireAdmin, async (req, res) => {
 router.get('/reports/ctr', requireAdmin, async (req, res) => {
   try {
     const { format = 'json', from, to } = req.query;
-    const report = await complianceReporting.generateCTR({ from, to });
+    const report = await complianceReporting.generateCTR({
+      from,
+      to,
+      generatedBy: req.user.id,
+    });
 
     if (format === 'csv') {
       const csv = complianceReporting.toCsv(
@@ -355,6 +367,69 @@ router.get('/reports/ctr', requireAdmin, async (req, res) => {
     }
 
     res.json(report);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Filing Status (Admin Only) ────────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /api/compliance/reports/{id}/file:
+ *   patch:
+ *     summary: Mark a SAR/CTR report as filed with FinCEN (admin only)
+ *     description: |
+ *       Call this endpoint after completing manual BSA E-Filing submission at
+ *       https://bsaefiling.fincen.treas.gov. Provide the filing reference number
+ *       assigned by the portal. This updates filingStatus from
+ *       MANUAL_REVIEW_REQUIRED → FILED and records the filing reference and date.
+ *     tags: [Compliance]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [filingReference]
+ *             properties:
+ *               filingReference:
+ *                 type: string
+ *                 description: BSA E-Filing reference number
+ *     responses:
+ *       200:
+ *         description: Report marked as filed
+ *       400:
+ *         description: filingReference is required
+ *       401:
+ *         description: Unauthorized
+ *       403:
+ *         description: Admin access required
+ *       500:
+ *         description: Server error
+ */
+router.patch('/reports/:id/file', requireAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { filingReference } = req.body;
+    if (!filingReference) {
+      return res.status(400).json({ error: 'filingReference is required' });
+    }
+    const record = await complianceReporting.markFiled(id, filingReference, req.user.id);
+    res.json({
+      id: record.id,
+      reportType: record.reportType,
+      filingStatus: record.filingStatus,
+      filingReference: record.filingReference,
+      filedAt: record.filedAt,
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

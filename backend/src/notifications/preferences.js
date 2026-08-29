@@ -11,6 +11,7 @@ export const DEFAULT_PREFERENCES = {
   push: true,
   sms: false,
   inApp: true,
+  locale: 'en',
   quietHoursStart: 22, // 10 PM
   quietHoursEnd: 7,    // 7 AM
   weeklyDigestEnabled: false,
@@ -58,6 +59,7 @@ export async function getPreferences(userId) {
       return {
         ...DEFAULT_PREFERENCES,
         notificationsOn,
+        locale: notificationPrefs.locale ?? 'en',
         email: notificationPrefs.emailEnabled,
         push: notificationPrefs.pushEnabled,
         sms: notificationPrefs.smsEnabled,
@@ -154,6 +156,7 @@ export async function updatePreferences(userId, updates) {
     if (typeof updates.push !== 'undefined') updateData.pushEnabled = updates.push;
     if (typeof updates.sms !== 'undefined') updateData.smsEnabled = updates.sms;
     if (typeof updates.inApp !== 'undefined') updateData.inAppEnabled = updates.inApp;
+    if (typeof updates.locale !== 'undefined') updateData.locale = updates.locale;
     if (typeof updates.quietHoursStart !== 'undefined') updateData.quietHoursStart = updates.quietHoursStart;
     if (typeof updates.quietHoursEnd !== 'undefined') updateData.quietHoursEnd = updates.quietHoursEnd;
     if (typeof updates.weeklyDigestEnabled !== 'undefined') updateData.weeklyDigestEnabled = updates.weeklyDigestEnabled;

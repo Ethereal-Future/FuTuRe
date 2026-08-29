@@ -624,5 +624,67 @@
     "show": "👁 Show",
     "tipStrong": "Tip:",
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
+  },
+  "notifications": {
+    "transaction_received": {
+      "email": {
+        "subject": "קיבלת {{amount}} {{asset}}",
+        "body": "שלום {{recipientName}},\n\nקיבלת {{amount}} {{asset}} מ-{{senderPublicKey}}.\n\nמזהה עסקה: {{txHash}}\n\nבדוק את הארנק שלך לפרטים נוספים."
+      },
+      "push": { "title": "תשלום התקבל", "body": "קיבלת {{amount}} {{asset}}" },
+      "sms": { "body": "FutureRemit: קיבלת {{amount}} {{asset}} מ-{{senderPublicKey}}. עסקה: {{txHash}}" },
+      "inApp": { "title": "תשלום התקבל", "body": "קיבלת {{amount}} {{asset}} מ-{{senderPublicKey}}" }
+    },
+    "transaction_sent": {
+      "email": {
+        "subject": "שלחת {{amount}} {{asset}}",
+        "body": "שלום {{senderName}},\n\nשלחת {{amount}} {{asset}} אל {{recipientPublicKey}}.\n\nמזהה עסקה: {{txHash}}\n\nבדוק את הארנק שלך לפרטים נוספים."
+      },
+      "push": { "title": "תשלום נשלח", "body": "שלחת {{amount}} {{asset}} אל {{recipientPublicKey}}" },
+      "sms": { "body": "FutureRemit: שלחת {{amount}} {{asset}} אל {{recipientPublicKey}}. עסקה: {{txHash}}" },
+      "inApp": { "title": "תשלום נשלח", "body": "שלחת {{amount}} {{asset}} אל {{recipientPublicKey}}" }
+    },
+    "transaction_failed": {
+      "email": {
+        "subject": "העסקה נכשלה",
+        "body": "שלום {{userName}},\n\nהעסקה שלך בסכום {{amount}} {{asset}} נכשלה.\n\nסיבה: {{reason}}\n\nנסה שוב או פנה לתמיכה."
+      },
+      "push": { "title": "העסקה נכשלה", "body": "העסקה שלך בסכום {{amount}} {{asset}} נכשלה: {{reason}}" },
+      "sms": { "body": "FutureRemit: עסקת {{amount}} {{asset}} נכשלה. סיבה: {{reason}}" },
+      "inApp": { "title": "העסקה נכשלה", "body": "העסקה שלך בסכום {{amount}} {{asset}} נכשלה: {{reason}}" }
+    },
+    "login_new_device": {
+      "email": {
+        "subject": "זוהה כניסה ממכשיר חדש",
+        "body": "שלום {{userName}},\n\nזוהתה כניסה חדשה לחשבונך מ-{{deviceInfo}} בשעה {{loginTime}}.\n\nאם זה לא היית אתה, אבטח את חשבונך מיד."
+      },
+      "push": { "title": "כניסה ממכשיר חדש", "body": "כניסה מ-{{deviceInfo}} בשעה {{loginTime}}" },
+      "sms": { "body": "FutureRemit: כניסה חדשה מ-{{deviceInfo}} בשעה {{loginTime}}. לא אתה? אבטח את חשבונך." },
+      "inApp": { "title": "כניסה ממכשיר חדש", "body": "כניסה מ-{{deviceInfo}} בשעה {{loginTime}}" }
+    },
+    "account_created": {
+      "email": {
+        "subject": "ברוך הבא ל-FutureRemit",
+        "body": "שלום {{userName}},\n\nחשבונך נוצר בהצלחה.\n\nמפתח ציבורי: {{publicKey}}\n\nהתחל לשלוח ולקבל תשלומים היום."
+      },
+      "push": { "title": "ברוך הבא ל-FutureRemit", "body": "החשבון שלך מוכן. התחל לשלוח תשלומים!" },
+      "sms": { "body": "FutureRemit: ברוך הבא! החשבון מוכן. מפתח ציבורי: {{publicKey}}" },
+      "inApp": { "title": "החשבון נוצר", "body": "ברוך הבא ל-FutureRemit! החשבון שלך מוכן." }
+    },
+    "weekly_digest": {
+      "email": {
+        "subject": "סיכום שבועי ({{weekStartDay}} - {{weekEndDay}})",
+        "body": "שלום {{userName}},\n\nעסקאות: {{transactionCount}}\nסך נשלח: {{totalSent}} XLM\nסך התקבל: {{totalReceived}} XLM"
+      },
+      "inApp": { "title": "סיכום שבועי", "body": "השבוע היו לך {{transactionCount}} עסקאות." }
+    },
+    "low_balance_alert": {
+      "email": {
+        "subject": "התראת יתרה: {{currentBalance}} {{asset}} מתחת ל-{{threshold}} {{asset}}",
+        "body": "שלום {{userName}},\n\nהיתרה ירדה ל-{{currentBalance}} {{asset}}, מתחת לסף ההתראה {{threshold}} {{asset}}."
+      },
+      "push": { "title": "התראת יתרה נמוכה", "body": "יתרת ה-{{asset}} שלך כעת {{currentBalance}}" },
+      "inApp": { "title": "התראת יתרה נמוכה", "body": "יתרת ה-{{asset}} שלך ({{currentBalance}}) מתחת לסף ({{threshold}} {{asset}})" }
+    }
   }
 }

@@ -1,130 +1,73 @@
 /**
  * Notification templates for all supported notification types.
- * Templates use {{variable}} syntax for interpolation.
+ *
+ * Issue #1145: templates are now locale-aware. Instead of hardcoded English
+ * strings, each template is resolved from the shared frontend locale files
+ * (frontend/src/i18n/locales/<locale>.json) under the "notifications" key,
+ * so the backend and frontend stay in sync with a single source of truth.
+ *
+ * Fallback chain: requested locale → 'en' → legacy hardcoded string.
+ *
+ * Template interpolation uses {{variable}} syntax (unchanged from before).
  */
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import path from 'path';
 
-export const TEMPLATES = {
-  // Transaction notifications
-  transaction_received: {
-    email: {
-      subject: 'You received {{amount}} {{asset}}',
-      body: 'Hi {{recipientName}},\n\nYou received {{amount}} {{asset}} from {{senderPublicKey}}.\n\nTransaction ID: {{txHash}}\n\nView your wallet for details.',
-    },
-    push: {
-      title: 'Payment Received',
-      body: 'You received {{amount}} {{asset}}',
-    },
-    sms: {
-      body: 'FutureRemit: You received {{amount}} {{asset}} from {{senderPublicKey}}. Tx: {{txHash}}',
-    },
-    inApp: {
-      title: 'Payment Received',
-      body: 'You received {{amount}} {{asset}} from {{senderPublicKey}}',
-    },
-  },
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-  transaction_sent: {
-    email: {
-      subject: 'You sent {{amount}} {{asset}}',
-      body: 'Hi {{senderName}},\n\nYou sent {{amount}} {{asset}} to {{recipientPublicKey}}.\n\nTransaction ID: {{txHash}}\n\nView your wallet for details.',
-    },
-    push: {
-      title: 'Payment Sent',
-      body: 'You sent {{amount}} {{asset}} to {{recipientPublicKey}}',
-    },
-    sms: {
-      body: 'FutureRemit: You sent {{amount}} {{asset}} to {{recipientPublicKey}}. Tx: {{txHash}}',
-    },
-    inApp: {
-      title: 'Payment Sent',
-      body: 'You sent {{amount}} {{asset}} to {{recipientPublicKey}}',
-    },
-  },
+// Path to the shared locale files in the frontend workspace.
+const LOCALES_DIR = path.resolve(
+  __dirname,
+  '../../../frontend/src/i18n/locales'
+);
 
-  transaction_failed: {
-    email: {
-      subject: 'Transaction failed',
-      body: 'Hi {{userName}},\n\nYour transaction of {{amount}} {{asset}} failed.\n\nReason: {{reason}}\n\nPlease try again or contact support.',
-    },
-    push: {
-      title: 'Transaction Failed',
-      body: 'Your {{amount}} {{asset}} transaction failed: {{reason}}',
-    },
-    sms: {
-      body: 'FutureRemit: Transaction of {{amount}} {{asset}} failed. Reason: {{reason}}',
-    },
-    inApp: {
-      title: 'Transaction Failed',
-      body: 'Your transaction of {{amount}} {{asset}} failed: {{reason}}',
-    },
-  },
+// Supported locales — must match frontend/src/i18n/index.js SUPPORTED_LANGUAGES.
+const SUPPORTED_LOCALES = ['en', 'ar', 'he', 'fr', 'es', 'zh', 'pt'];
 
-  // Security notifications
-  login_new_device: {
-    email: {
-      subject: 'New login detected',
-      body: 'Hi {{userName}},\n\nA new login was detected on your account from {{deviceInfo}} at {{loginTime}}.\n\nIf this was not you, please secure your account immediately.',
-    },
-    push: {
-      title: 'New Login Detected',
-      body: 'Login from {{deviceInfo}} at {{loginTime}}',
-    },
-    sms: {
-      body: 'FutureRemit: New login from {{deviceInfo}} at {{loginTime}}. Not you? Secure your account now.',
-    },
-    inApp: {
-      title: 'New Login Detected',
-      body: 'Login from {{deviceInfo}} at {{loginTime}}',
-    },
-  },
+/**
+ * Load and cache notification template strings for a given locale.
+ * Returns the "notifications" section of the locale JSON, or null if absent.
+ *
+ * @param {string} locale
+ * @returns {object|null}
+ */
+const _cache = new Map();
+function loadLocaleNotifications(locale) {
+  if (_cache.has(locale)) return _cache.get(locale);
 
-  // Account notifications
-  account_created: {
-    email: {
-      subject: 'Welcome to FutureRemit',
-      body: 'Hi {{userName}},\n\nYour account has been created successfully.\n\nYour public key: {{publicKey}}\n\nStart sending and receiving payments today.',
-    },
-    push: {
-      title: 'Welcome to FutureRemit',
-      body: 'Your account is ready. Start sending payments!',
-    },
-    sms: {
-      body: 'FutureRemit: Welcome! Your account is ready. Public key: {{publicKey}}',
-    },
-    inApp: {
-      title: 'Account Created',
-      body: 'Welcome to FutureRemit! Your account is ready.',
-    },
-  },
+  const file = path.join(LOCALES_DIR, `${locale}.json`);
+  try {
+    const json = JSON.parse(readFileSync(file, 'utf-8'));
+    const notifications = json.notifications ?? null;
+    _cache.set(locale, notifications);
+    return notifications;
+  } catch {
+    _cache.set(locale, null);
+    return null;
+  }
+}
 
-  // Weekly digest
-  weekly_digest: {
-    email: {
-      subject: 'Your Weekly Transaction Summary ({{weekStartDay}} - {{weekEndDay}})',
-      body: 'Hi {{userName}},\n\nHere\'s your weekly transaction summary:\n\nPeriod: {{weekStartDay}} to {{weekEndDay}}\n\nTransactions: {{transactionCount}}\nTotal Sent: {{totalSent}} XLM\nTotal Received: {{totalReceived}} XLM\nCurrent Balance: {{balance}} XLM\n\nTop Transactions:\n{{transactionList}}\n\nView your complete transaction history in your FutureRemit dashboard.\n\nStay secure!',
-    },
-    inApp: {
-      title: 'Weekly Summary',
-      body: 'You had {{transactionCount}} transactions this week. Total sent: {{totalSent}} XLM, received: {{totalReceived}} XLM.',
-    },
-  },
+/**
+ * Get raw (un-interpolated) template strings for a notification type and
+ * channel in the requested locale, falling back to English.
+ *
+ * @param {string} type    - e.g. 'transaction_received'
+ * @param {string} channel - 'email' | 'push' | 'sms' | 'inApp'
+ * @param {string} locale  - BCP 47 tag, e.g. 'ar', 'fr'. Defaults to 'en'.
+ * @returns {object|null}  - e.g. { subject, body } for email; { title, body } for push
+ */
+export function getRawTemplate(type, channel, locale = 'en') {
+  const normalised = SUPPORTED_LOCALES.includes(locale) ? locale : 'en';
 
-  // Low balance alert
-  low_balance_alert: {
-    email: {
-      subject: 'Balance Alert: {{currentBalance}} {{asset}} is below {{threshold}} {{asset}}',
-      body: 'Hi {{userName}},\n\nYour account balance has dropped to {{currentBalance}} {{asset}}, which is below your alert threshold of {{threshold}} {{asset}}.\n\nCurrent Balance: {{currentBalance}} {{asset}}\nThreshold: {{threshold}} {{asset}}\n\nConsider adding funds to your account if needed.\n\nView your account in FutureRemit.',
-    },
-    push: {
-      title: 'Low Balance Alert',
-      body: 'Your {{asset}} balance is now {{currentBalance}}',
-    },
-    inApp: {
-      title: 'Low Balance Alert',
-      body: 'Your {{asset}} balance ({{currentBalance}}) is below your alert threshold ({{threshold}} {{asset}})',
-    },
-  },
-};
+  // Try requested locale first, then fall back to English.
+  for (const candidate of [normalised, 'en']) {
+    const notifications = loadLocaleNotifications(candidate);
+    const tmpl = notifications?.[type]?.[channel];
+    if (tmpl) return tmpl;
+  }
+  return null;
+}
 
 /**
  * Render a template string by replacing {{key}} placeholders with data values.
@@ -137,14 +80,16 @@ export function renderTemplate(template, data = {}) {
 }
 
 /**
- * Get a rendered template for a given type and channel.
- * @param {string} type - Template key (e.g. 'transaction_received')
+ * Get a rendered template for a given type, channel, and locale.
+ *
+ * @param {string} type    - Template key (e.g. 'transaction_received')
  * @param {string} channel - 'email' | 'push' | 'sms' | 'inApp'
- * @param {Record<string, string>} data
+ * @param {Record<string, string>} data - Interpolation variables
+ * @param {string} [locale='en'] - Recipient's preferred locale
  * @returns {{ subject?: string, title?: string, body: string } | null}
  */
-export function getRenderedTemplate(type, channel, data = {}) {
-  const tmpl = TEMPLATES[type]?.[channel];
+export function getRenderedTemplate(type, channel, data = {}, locale = 'en') {
+  const tmpl = getRawTemplate(type, channel, locale);
   if (!tmpl) return null;
 
   const rendered = {};
@@ -153,3 +98,13 @@ export function getRenderedTemplate(type, channel, data = {}) {
   }
   return rendered;
 }
+
+// ---------------------------------------------------------------------------
+// Legacy TEMPLATES export — kept for backward-compatibility with any code that
+// imports this object directly. Reflects English strings only.
+// New code should use getRenderedTemplate(type, channel, data, locale).
+// ---------------------------------------------------------------------------
+export const TEMPLATES = (() => {
+  const en = loadLocaleNotifications('en');
+  return en ?? {};
+})();

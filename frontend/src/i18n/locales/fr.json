@@ -624,5 +624,116 @@
     "show": "👁 Show",
     "tipStrong": "Tip:",
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
+  },
+  "notifications": {
+    "transaction_received": {
+      "email": {
+        "subject": "Vous avez reçu {{amount}} {{asset}}",
+        "body": "Bonjour {{recipientName}},\n\nVous avez reçu {{amount}} {{asset}} de {{senderPublicKey}}.\n\nID de transaction : {{txHash}}\n\nConsultez votre portefeuille pour les détails."
+      },
+      "push": {
+        "title": "Paiement reçu",
+        "body": "Vous avez reçu {{amount}} {{asset}}"
+      },
+      "sms": {
+        "body": "FutureRemit : Vous avez reçu {{amount}} {{asset}} de {{senderPublicKey}}. Tx : {{txHash}}"
+      },
+      "inApp": {
+        "title": "Paiement reçu",
+        "body": "Vous avez reçu {{amount}} {{asset}} de {{senderPublicKey}}"
+      }
+    },
+    "transaction_sent": {
+      "email": {
+        "subject": "Vous avez envoyé {{amount}} {{asset}}",
+        "body": "Bonjour {{senderName}},\n\nVous avez envoyé {{amount}} {{asset}} à {{recipientPublicKey}}.\n\nID de transaction : {{txHash}}\n\nConsultez votre portefeuille pour les détails."
+      },
+      "push": {
+        "title": "Paiement envoyé",
+        "body": "Vous avez envoyé {{amount}} {{asset}} à {{recipientPublicKey}}"
+      },
+      "sms": {
+        "body": "FutureRemit : Vous avez envoyé {{amount}} {{asset}} à {{recipientPublicKey}}. Tx : {{txHash}}"
+      },
+      "inApp": {
+        "title": "Paiement envoyé",
+        "body": "Vous avez envoyé {{amount}} {{asset}} à {{recipientPublicKey}}"
+      }
+    },
+    "transaction_failed": {
+      "email": {
+        "subject": "Transaction échouée",
+        "body": "Bonjour {{userName}},\n\nVotre transaction de {{amount}} {{asset}} a échoué.\n\nRaison : {{reason}}\n\nVeuillez réessayer ou contacter le support."
+      },
+      "push": {
+        "title": "Transaction échouée",
+        "body": "Votre transaction de {{amount}} {{asset}} a échoué : {{reason}}"
+      },
+      "sms": {
+        "body": "FutureRemit : Transaction de {{amount}} {{asset}} échouée. Raison : {{reason}}"
+      },
+      "inApp": {
+        "title": "Transaction échouée",
+        "body": "Votre transaction de {{amount}} {{asset}} a échoué : {{reason}}"
+      }
+    },
+    "login_new_device": {
+      "email": {
+        "subject": "Nouvelle connexion détectée",
+        "body": "Bonjour {{userName}},\n\nUne nouvelle connexion a été détectée sur votre compte depuis {{deviceInfo}} à {{loginTime}}.\n\nSi ce n'était pas vous, sécurisez votre compte immédiatement."
+      },
+      "push": {
+        "title": "Nouvelle connexion détectée",
+        "body": "Connexion depuis {{deviceInfo}} à {{loginTime}}"
+      },
+      "sms": {
+        "body": "FutureRemit : Nouvelle connexion depuis {{deviceInfo}} à {{loginTime}}. Pas vous ? Sécurisez votre compte."
+      },
+      "inApp": {
+        "title": "Nouvelle connexion détectée",
+        "body": "Connexion depuis {{deviceInfo}} à {{loginTime}}"
+      }
+    },
+    "account_created": {
+      "email": {
+        "subject": "Bienvenue sur FutureRemit",
+        "body": "Bonjour {{userName}},\n\nVotre compte a été créé avec succès.\n\nVotre clé publique : {{publicKey}}\n\nCommencez à envoyer et recevoir des paiements dès aujourd'hui."
+      },
+      "push": {
+        "title": "Bienvenue sur FutureRemit",
+        "body": "Votre compte est prêt. Commencez à envoyer des paiements !"
+      },
+      "sms": {
+        "body": "FutureRemit : Bienvenue ! Votre compte est prêt. Clé publique : {{publicKey}}"
+      },
+      "inApp": {
+        "title": "Compte créé",
+        "body": "Bienvenue sur FutureRemit ! Votre compte est prêt."
+      }
+    },
+    "weekly_digest": {
+      "email": {
+        "subject": "Votre résumé hebdomadaire ({{weekStartDay}} - {{weekEndDay}})",
+        "body": "Bonjour {{userName}},\n\nVoici votre résumé de transactions hebdomadaire :\n\nPériode : {{weekStartDay}} au {{weekEndDay}}\n\nTransactions : {{transactionCount}}\nTotal envoyé : {{totalSent}} XLM\nTotal reçu : {{totalReceived}} XLM\nSolde actuel : {{balance}} XLM"
+      },
+      "inApp": {
+        "title": "Résumé hebdomadaire",
+        "body": "Vous avez effectué {{transactionCount}} transactions cette semaine. Total envoyé : {{totalSent}} XLM, reçu : {{totalReceived}} XLM."
+      }
+    },
+    "low_balance_alert": {
+      "email": {
+        "subject": "Alerte solde : {{currentBalance}} {{asset}} est en dessous de {{threshold}} {{asset}}",
+        "body": "Bonjour {{userName}},\n\nVotre solde est tombé à {{currentBalance}} {{asset}}, en dessous de votre seuil d'alerte de {{threshold}} {{asset}}."
+      },
+      "push": {
+        "title": "Alerte solde faible",
+        "body": "Votre solde {{asset}} est maintenant {{currentBalance}}"
+      },
+      "inApp": {
+        "title": "Alerte solde faible",
+        "body": "Votre solde {{asset}} ({{currentBalance}}) est en dessous du seuil d'alerte ({{threshold}} {{asset}})"
+      }
+    }
   }
 }
