@@ -35,7 +35,7 @@
     "react-dom": "^18.3.1",
     "react-i18next": "^14.1.2",
     "recharts": "^3.8.1",
-    "rollup-plugin-visualizer": "^7.0.1",
+    "rollup-plugin-visualizer": "^7.1.1",
     "web-vitals": "^5.1.0"
   },
   "devDependencies": {
