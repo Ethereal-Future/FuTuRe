@@ -1,21 +1,27 @@
 import express from 'express';
 import os from 'os';
 import * as StellarService from '../services/stellar.js';
-import { getCircuitState } from '../services/circuitBreaker.js';
 import { eventMonitor, eventStore } from '../eventSourcing/index.js';
 import { auditLogger } from '../security/index.js';
 import { requireAuth } from '../middleware/auth.js';
 import { analytics as cacheAnalytics, monitor as cacheMonitor } from '../cache/appCache.js';
-import prisma from '../db/client.js';
+import prisma, { getDBConnectionState } from '../db/client.js';
 import { getMetrics as getBackupMetrics } from '../backup/manager.js';
 import { RedisBackend } from '../cache/redis.js';
+import { redisBackend as mobileAuthRedisBackend } from '../mobile/redisStore.js';
 import { sendEmail } from '../notifications/channels/email.js';
 import logger from '../config/logger.js';
 
 const router = express.Router();
 
-// Redis backend instance for health checks
-const redisBackend = new RedisBackend(process.env.REDIS_URL || null);
+// Redis backend instance for health checks (host/AUTH/TLS via env, or REDIS_URL)
+const redisBackend = new RedisBackend();
+
+function redisTlsRequired() {
+  const raw = (process.env.APP_ENV || process.env.NODE_ENV || 'development').trim().toLowerCase();
+  const env = raw === 'prod' ? 'production' : raw === 'dev' ? 'development' : raw;
+  return env !== 'development' && env !== 'test';
+}
 
 function getSystemInfo() {
   return {
@@ -41,7 +47,7 @@ function getApplicationInfo() {
 }
 
 async function checkStellarConnectivity() {
-  const circuit = getCircuitState();
+  const circuit = StellarService.getInteractiveCircuitBreakerState();
   if (circuit.state === 'OPEN') {
     return {
       status: 'unhealthy',
@@ -78,19 +84,70 @@ async function checkRedisConnectivity() {
       return {
         status: 'unavailable',
         message: 'Redis not configured',
+        tls: false,
       };
     }
 
-    // Try to ping Redis
     const pong = await redisBackend.client.ping();
+    const tls = redisBackend.isTlsEnabled();
+    if (redisTlsRequired() && !tls) {
+      return {
+        status: 'unhealthy',
+        message: 'Redis connection is not using TLS',
+        tls: false,
+        responseTime: Date.now(),
+      };
+    }
+
     return {
       status: pong === 'PONG' ? 'healthy' : 'unhealthy',
+      tls,
       responseTime: Date.now(),
     };
   } catch (error) {
     return {
       status: 'unhealthy',
       error: error.message,
+      tls: redisBackend.isTlsEnabled(),
+      responseTime: Date.now(),
+    };
+  }
+}
+
+/**
+ * Mobile authentication (WebAuthn challenges + mobile sessions) is backed by
+ * Redis (see mobile/redisStore.js, issue #1124). This reports whether that
+ * shared storage is actually reachable — when it isn't, mobile auth silently
+ * falls back to per-instance in-memory storage, which breaks WebAuthn/session
+ * continuity across multiple server instances.
+ */
+async function checkMobileAuthConnectivity() {
+  try {
+    if (!mobileAuthRedisBackend.client) {
+      // Matches the existing 'redis' cache check's 'unavailable' semantics
+      // (excluded from the overall health score) — mobile auth still works
+      // via the in-process fallback, just not across multiple instances.
+      return {
+        status: 'unavailable',
+        message:
+          'Redis not configured — WebAuthn challenges and mobile sessions fall back to ' +
+          'per-instance in-memory storage (not safe for multi-instance deployments)',
+        backend: 'in-memory',
+      };
+    }
+
+    const pong = await mobileAuthRedisBackend.client.ping();
+    return {
+      status: pong === 'PONG' ? 'healthy' : 'unhealthy',
+      backend: 'redis',
+      tls: mobileAuthRedisBackend.isTlsEnabled(),
+      responseTime: Date.now(),
+    };
+  } catch (error) {
+    return {
+      status: 'unhealthy',
+      error: error.message,
+      backend: 'redis',
       responseTime: Date.now(),
     };
   }
@@ -169,6 +226,14 @@ async function checkDatabaseConnectivity() {
   }
 }
 
+function checkPostgresConnectivity() {
+  const { state, error } = getDBConnectionState();
+  if (state === 'connected') return { status: 'healthy', state };
+  // Reconnection is still in progress (or has not started yet) — report
+  // degraded rather than unhealthy so orchestrators don't kill the instance.
+  return { status: 'degraded', state, ...(error ? { error } : {}) };
+}
+
 async function checkDependencies() {
   const checks = [];
 
@@ -199,6 +264,22 @@ async function checkDependencies() {
   } catch (error) {
     checks.push({
       name: 'redis',
+      status: 'unhealthy',
+      error: error.message,
+    });
+  }
+
+  // Check mobile auth (Redis-backed WebAuthn challenges + sessions, #1124)
+  try {
+    const mobileAuthStatus = await checkMobileAuthConnectivity();
+    checks.push({
+      name: 'mobile-auth',
+      status: mobileAuthStatus.status,
+      version: 'redis',
+    });
+  } catch (error) {
+    checks.push({
+      name: 'mobile-auth',
       status: 'unhealthy',
       error: error.message,
     });
@@ -258,21 +339,27 @@ function calculateHealthPercentage(checks) {
 
 router.get('/health', async (req, res) => {
   try {
-    const systemInfo = getSystemInfo();
-    const appInfo = getApplicationInfo();
     const stellarCheck = await checkStellarConnectivity();
     const databaseCheck = await checkDatabaseConnectivity();
     const redisCheck = await checkRedisConnectivity();
+    const mobileAuthCheck = await checkMobileAuthConnectivity();
     const emailCheck = await checkEmailServiceConnectivity();
     const wsCheck = await checkWebSocketConnectivity();
-    const dependencyCheck = await checkDependencies();
+    const postgresCheck = checkPostgresConnectivity();
 
     const healthChecks = [
+      { name: 'stellar', status: stellarCheck.status },
+      { name: 'database', status: databaseCheck.status },
+      { name: 'redis', status: redisCheck.status },
+      { name: 'email', status: emailCheck.status },
+      { name: 'websocket', status: wsCheck.status },
       { name: 'stellar', ...stellarCheck },
       { name: 'database', ...databaseCheck },
       { name: 'redis', ...redisCheck },
+      { name: 'mobileAuth', ...mobileAuthCheck },
       { name: 'email', ...emailCheck },
       { name: 'websocket', ...wsCheck },
+      { name: 'postgres', ...postgresCheck },
     ];
 
     // Calculate overall health (exclude unavailable services)
@@ -280,7 +367,8 @@ router.get('/health', async (req, res) => {
     const healthyCount = criticalChecks.filter((c) => c.status === 'healthy').length;
     const overallHealth =
       criticalChecks.length > 0 ? Math.round((healthyCount / criticalChecks.length) * 100) : 100;
-    const status = overallHealth >= 80 ? 'healthy' : overallHealth >= 50 ? 'degraded' : 'unhealthy';
+    let status = overallHealth >= 80 ? 'healthy' : overallHealth >= 50 ? 'degraded' : 'unhealthy';
+    if (status === 'healthy' && postgresCheck.status !== 'healthy') status = 'degraded';
 
     const healthData = {
       status,
@@ -288,9 +376,6 @@ router.get('/health', async (req, res) => {
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
       checks: healthChecks,
-      dependencies: dependencyCheck,
-      system: systemInfo,
-      application: appInfo,
     };
 
     const statusCode = status === 'healthy' ? 200 : status === 'degraded' ? 200 : 503;
@@ -319,10 +404,12 @@ router.get('/health/ready', async (req, res) => {
     const stellarCheck = await checkStellarConnectivity();
     const databaseCheck = await checkDatabaseConnectivity();
     const redisCheck = await checkRedisConnectivity();
+    const mobileAuthCheck = await checkMobileAuthConnectivity();
     const emailCheck = await checkEmailServiceConnectivity();
     const wsCheck = await checkWebSocketConnectivity();
 
-    // Ready if critical services are healthy (Redis and email can be unavailable)
+    // Ready if critical services are healthy (Redis, mobile auth Redis, and
+    // email can be unavailable — each has a safe fallback / is non-critical)
     const isReady =
       stellarCheck.status === 'healthy' &&
       databaseCheck.status === 'healthy' &&
@@ -335,8 +422,10 @@ router.get('/health/ready', async (req, res) => {
         stellar: stellarCheck.status,
         database: databaseCheck.status,
         redis: redisCheck.status,
+        mobileAuth: mobileAuthCheck.status,
         email: emailCheck.status,
         websocket: wsCheck.status,
+        postgres: checkPostgresConnectivity().status,
       },
     };
 
@@ -452,6 +541,10 @@ router.get('/health/detailed', requireAuth, async (req, res) => {
       Promise.resolve(eventStore.events?.length ?? 0),
     ]);
 
+    const systemInfo = getSystemInfo();
+    const appInfo = getApplicationInfo();
+    const dependencyCheck = await checkDependencies();
+
     const cacheStats = cacheMonitor.getPerformanceStats();
     const cacheAlerts = cacheMonitor.getAlerts().slice(-5);
 
@@ -478,6 +571,9 @@ router.get('/health/detailed', requireAuth, async (req, res) => {
     res.json({
       status: overallStatus,
       timestamp: new Date().toISOString(),
+      system: systemInfo,
+      application: appInfo,
+      dependencies: dependencyCheck,
       cache: {
         status: cacheStats ? 'healthy' : 'unknown',
         performance: cacheStats,

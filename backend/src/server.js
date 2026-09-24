@@ -11,9 +11,15 @@ import swaggerUi from 'swagger-ui-express';
 import swaggerSpec from './config/swagger.js';
 import logger from './config/logger.js';
 import { requestLogger } from './middleware/requestLogger.js';
-import { connectDB, checkDBHealth, disconnectDB } from './db/client.js';
+import {
+  connectDB,
+  checkDBHealth,
+  disconnectDB,
+  DatabaseConnectionError,
+  reconnectDBInBackground,
+} from './db/client.js';
 import { runMigrations } from './db/migrate.js';
-import { startHorizonLatencyMonitor } from './services/stellar.js';
+import { startHorizonLatencyMonitor, verifyHorizonNetworkPassphrase } from './services/stellar.js';
 import stellarRoutes from './routes/stellar/index.js';
 import multiSigRoutes from './routes/multiSig.js';
 import authRoutes from './routes/auth.js';
@@ -44,6 +50,7 @@ import accountsRoutes from './routes/accounts.js';
 import contactsRoutes from './routes/contacts.js';
 import clinicsRoutes from './routes/clinics.js';
 import adminRoutes from './routes/admin.js';
+import assetIntegrityRoutes from './routes/assetIntegrity.js';
 import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
 import { initializeCache as initIPWhitelistCache } from './security/ipWhitelist.js';
@@ -61,6 +68,7 @@ import {
 import { securityMiddleware } from './middleware/securityHeaders.js';
 import { sanitizeInputs } from './middleware/sanitize.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
+import { closeAMMState } from './services/amm.js';
 import { csrfTokenMiddleware, validateCSRFMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
 import { validateEncryptionKey } from './db/encryption.js';
 
@@ -151,10 +159,20 @@ app.use(sanitizeInputs);
 
 // Initialize event sourcing
 await runMigrations();
-await connectDB();
+try {
+  await connectDB();
+} catch (err) {
+  if (!(err instanceof DatabaseConnectionError)) throw err;
+  // Don't crash-loop the container while the database recovers (RDS failover,
+  // cold boot). Serve in degraded mode — /health reports it — and keep
+  // reconnecting in the background.
+  logger.error('server.startup.db.unavailable', { error: err.message, attempts: err.attempts });
+  reconnectDBInBackground();
+}
 await eventMonitor.initialize();
 await auditLogger.initialize();
 await initIPWhitelistCache();
+await verifyHorizonNetworkPassphrase();
 
 // Swagger Documentation
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
@@ -186,6 +204,11 @@ app.use('/api/v1/clinics/:id/keypair', clinicsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/stellar', stellarRoutes);
+// SRI hashes for built frontend assets (see #1121 — SRI is HTML-attribute
+// based, not header based; this manifest lets HTML templates embed a real
+// `integrity` attribute).
+app.use('/api/v1/assets', assetIntegrityRoutes);
+app.use('/api/assets', assetIntegrityRoutes);
 app.get('/.well-known/stellar.toml', (_req, res) => {
   res.type('text/plain').send(buildStellarToml());
 });
@@ -287,6 +310,7 @@ async function shutdown(signal) {
   try {
     // 3. Stop background workers
     stopScheduler();
+    await closeAMMState();
     // 4. Close DB connection
     await disconnectDB();
     logger.info('server.shutdown.complete');

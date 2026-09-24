@@ -2,6 +2,7 @@
  * Notification delivery tracking.
  * Records every delivery attempt and its outcome.
  */
+import { randomUUID } from 'crypto';
 import logger from '../config/logger.js';
 
 // In-memory delivery log (replace with DB persistence for production)
@@ -27,7 +28,7 @@ const MAX_LOG_SIZE = 10_000;
  */
 export function recordDelivery({ userId, type, channel, status, error }) {
   const record = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
+    id: randomUUID(),
     userId,
     type,
     channel,

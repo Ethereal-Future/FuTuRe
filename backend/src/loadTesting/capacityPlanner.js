@@ -8,8 +8,10 @@ class CapacityPlanner {
     const errorRateRatio = targetErrorRate / Math.max(currentErrorRate, 0.1);
     const maxSafeThroughput = currentThroughput * errorRateRatio;
 
-    // Calculate response time headroom
-    const responseTimeHeadroom = 5000 / avgResponseTime; // 5 second max acceptable
+    // Dimensionless latency headroom vs a 5000ms (5s) max acceptable avg
+    // response time. Independent of throughput units (both this planner and
+    // LoadTestRunner/PerformanceBaseline use req/s).
+    const responseTimeHeadroom = 5000 / avgResponseTime;
 
     // Conservative estimate
     const maxCapacity = Math.min(maxSafeThroughput, currentThroughput * responseTimeHeadroom);

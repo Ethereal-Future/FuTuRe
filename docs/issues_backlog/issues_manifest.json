@@ -1,0 +1,3442 @@
+{
+  "repository": "Ethereal-Future/FuTuRe",
+  "generated_at": "2026-09-22T07:20:08Z",
+  "total_issues": 195,
+  "issues": [
+    {
+      "id": "ISSUE-001",
+      "title": "stellar-contract/lib.rs: Missing Soroban token transfer invocations in buy_yes, buy_no, and add_liquidity leave contract balance unbacked by on-chain assets",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "cryptography",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-001.md",
+      "github_issue": {
+        "number": 1248,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1248",
+        "created_at": "2026-09-22T07:12:16Z"
+      }
+    },
+    {
+      "id": "ISSUE-002",
+      "title": "stellar-contract/lib.rs: Storage entries lack Soroban State TTL extension (extend_ttl), risking permanent contract state archival and lockout",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-002.md",
+      "github_issue": {
+        "number": 1249,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1249",
+        "created_at": "2026-09-22T07:12:18Z"
+      }
+    },
+    {
+      "id": "ISSUE-003",
+      "title": "stellar-contract/lib.rs: Market struct lacks deadline and expiry validation, allowing oracle reports and resolutions at arbitrary times",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-003.md",
+      "github_issue": {
+        "number": 1250,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1250",
+        "created_at": "2026-09-22T07:12:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-004",
+      "title": "stellar-contract/lib.rs: Dispute window has no ledger sequence or timestamp enforcement, enabling immediate front-running finalize calls",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-004.md",
+      "github_issue": {
+        "number": 1251,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1251",
+        "created_at": "2026-09-22T07:12:23Z"
+      }
+    },
+    {
+      "id": "ISSUE-005",
+      "title": "stellar-contract/lib.rs: admin_uphold_dispute fails to return dispute bond to disputer, permanently trapping bond funds in storage",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-005.md",
+      "github_issue": {
+        "number": 1252,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1252",
+        "created_at": "2026-09-22T07:12:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-006",
+      "title": "stellar-contract/lib.rs: LP fee accounting in claim_lp_fees suffers from cumulative state corruption and unfair fee dilution",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-006.md",
+      "github_issue": {
+        "number": 1253,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1253",
+        "created_at": "2026-09-22T07:12:28Z"
+      }
+    },
+    {
+      "id": "ISSUE-007",
+      "title": "stellar-contract/lib.rs: calc_shares CPMM formula permits zero or negative token inputs, enabling pool draining and share fabrication",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-007.md",
+      "github_issue": {
+        "number": 1254,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1254",
+        "created_at": "2026-09-22T07:12:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-008",
+      "title": "stellar-contract/lib.rs: remove_liquidity updates lp_pool and total_lp_shares but leaves yes_pool and no_pool unadjusted, breaking pool invariant",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-008.md",
+      "github_issue": {
+        "number": 1255,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1255",
+        "created_at": "2026-09-22T07:12:33Z"
+      }
+    },
+    {
+      "id": "ISSUE-009",
+      "title": "stellar-contract/lib.rs: Missing reentrancy guards and failure to adhere to Checks-Effects-Interactions (CEI) during external contract callbacks",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-009.md",
+      "github_issue": {
+        "number": 1256,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1256",
+        "created_at": "2026-09-22T07:12:35Z"
+      }
+    },
+    {
+      "id": "ISSUE-010",
+      "title": "stellar-contract/lib.rs: Integer division truncation in redeem calculation creates accumulating dust and loss of precision in share payouts",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-010.md",
+      "github_issue": {
+        "number": 1257,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1257",
+        "created_at": "2026-09-22T07:12:38Z"
+      }
+    },
+    {
+      "id": "ISSUE-011",
+      "title": "stellar-contract/lib.rs: dispute function accepts arbitrary unbonded disputes without verifying or holding bond collateral",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-011.md",
+      "github_issue": {
+        "number": 1258,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1258",
+        "created_at": "2026-09-22T07:12:40Z"
+      }
+    },
+    {
+      "id": "ISSUE-012",
+      "title": "stellar-contract/lib.rs: Lack of emergency circuit breaker or upgradeable contract admin mechanism for security incident containment",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "security",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-012.md",
+      "github_issue": {
+        "number": 1259,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1259",
+        "created_at": "2026-09-22T07:12:43Z"
+      }
+    },
+    {
+      "id": "ISSUE-013",
+      "title": "stellar-contract/lib.rs: Split and merge functions allow unbounded position creation without corresponding collateral backing",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-013.md",
+      "github_issue": {
+        "number": 1260,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1260",
+        "created_at": "2026-09-22T07:12:45Z"
+      }
+    },
+    {
+      "id": "ISSUE-014",
+      "title": "stellar-contract/lib.rs: Batch redeem halts on memory exhaustion when iterating over large vectors of market IDs",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-014.md",
+      "github_issue": {
+        "number": 1261,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1261",
+        "created_at": "2026-09-22T07:12:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-015",
+      "title": "stellar-contract/tests: Soroban integration test suite lacks edge case coverage for concurrent disputes, integer overflow, and zero-liquidity scenarios",
+      "domain": "Soroban Smart Contracts",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "qa"
+      ],
+      "file": "docs/issues_backlog/ISSUE-015.md",
+      "github_issue": {
+        "number": 1262,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1262",
+        "created_at": "2026-09-22T07:12:50Z"
+      }
+    },
+    {
+      "id": "ISSUE-016",
+      "title": "services/stellar.js: Sequence number collision and race condition during concurrent payment submissions for identical source accounts",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "backend",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-016.md",
+      "github_issue": {
+        "number": 1263,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1263",
+        "created_at": "2026-09-22T07:12:53Z"
+      }
+    },
+    {
+      "id": "ISSUE-017",
+      "title": "services/stellar.js: withHorizonRetry retries submitTransaction without verifying on-chain ledger commitment, risking duplicate payments",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "backend",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-017.md",
+      "github_issue": {
+        "number": 1264,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1264",
+        "created_at": "2026-09-22T07:12:55Z"
+      }
+    },
+    {
+      "id": "ISSUE-018",
+      "title": "services/stellar.js: isTransientHorizonError fails to handle 504 Gateway Timeout and 502 Bad Gateway responses from Horizon reverse proxies",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "backend",
+        "reliability"
+      ],
+      "file": "docs/issues_backlog/ISSUE-018.md",
+      "github_issue": {
+        "number": 1265,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1265",
+        "created_at": "2026-09-22T07:12:57Z"
+      }
+    },
+    {
+      "id": "ISSUE-019",
+      "title": "services/stellar.js: incrementFeeBumpStats single-row JSON array accumulates unbounded public keys, causing severe PostgreSQL row lock contention",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "database",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-019.md",
+      "github_issue": {
+        "number": 1266,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1266",
+        "created_at": "2026-09-22T07:13:00Z"
+      }
+    },
+    {
+      "id": "ISSUE-020",
+      "title": "services/stellar.js: wrapWithFeeBump hardcodes BASE_FEE multiplier without dynamic surge fee adjustment during network congestion",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-020.md",
+      "github_issue": {
+        "number": 1267,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1267",
+        "created_at": "2026-09-22T07:13:02Z"
+      }
+    },
+    {
+      "id": "ISSUE-021",
+      "title": "services/stellar.js: Missing memo length and character validation in transaction builder leads to Horizon malformed transaction errors",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "backend",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-021.md",
+      "github_issue": {
+        "number": 1268,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1268",
+        "created_at": "2026-09-22T07:13:04Z"
+      }
+    },
+    {
+      "id": "ISSUE-022",
+      "title": "services/stellar.js: createAccount and fundAccount lack network isolation guards between testnet Friendbot and mainnet execution",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-022.md",
+      "github_issue": {
+        "number": 1269,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1269",
+        "created_at": "2026-09-22T07:13:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-023",
+      "title": "services/stellar.js: Account balance cache invalidation in sendPayment does not invalidate destination account cache, causing stale UI balances",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "caching",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-023.md",
+      "github_issue": {
+        "number": 1270,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1270",
+        "created_at": "2026-09-22T07:13:09Z"
+      }
+    },
+    {
+      "id": "ISSUE-024",
+      "title": "services/stellar.ts: Divergence and code duplication between stellar.js and stellar.ts services causes typing and runtime behavioral drift",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "architecture",
+        "dx"
+      ],
+      "file": "docs/issues_backlog/ISSUE-024.md",
+      "github_issue": {
+        "number": 1271,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1271",
+        "created_at": "2026-09-22T07:13:12Z"
+      }
+    },
+    {
+      "id": "ISSUE-025",
+      "title": "services/sep31.js: SSRF vulnerability in discoverReceivingAnchor and createCrossBorderTransaction via unvalidated anchor URLs",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-025.md",
+      "github_issue": {
+        "number": 1272,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1272",
+        "created_at": "2026-09-22T07:13:14Z"
+      }
+    },
+    {
+      "id": "ISSUE-026",
+      "title": "services/sep31.js: Missing SEP-10 Web Authentication integration in SEP-31 cross-border payment client",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-026.md",
+      "github_issue": {
+        "number": 1273,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1273",
+        "created_at": "2026-09-22T07:13:17Z"
+      }
+    },
+    {
+      "id": "ISSUE-027",
+      "title": "services/sep31.js: getTransactionStatus polling mechanism lacks exponential backoff and rate limit coordination with remote anchors",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "backend",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-027.md",
+      "github_issue": {
+        "number": 1274,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1274",
+        "created_at": "2026-09-22T07:13:19Z"
+      }
+    },
+    {
+      "id": "ISSUE-028",
+      "title": "services/federation.js: Federation lookup lacks DNS caching and circuit breaker protection against downstream domain outages",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-028.md",
+      "github_issue": {
+        "number": 1275,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1275",
+        "created_at": "2026-09-22T07:13:22Z"
+      }
+    },
+    {
+      "id": "ISSUE-029",
+      "title": "services/assetRegistry.js: Asset verification service does not cryptographically verify TOML signing keys against issuer home domains",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-029.md",
+      "github_issue": {
+        "number": 1276,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1276",
+        "created_at": "2026-09-22T07:13:24Z"
+      }
+    },
+    {
+      "id": "ISSUE-030",
+      "title": "services/lowBalanceMonitor.js: Balance monitoring poll loop loads unbounded accounts without keyset pagination or ledger cursor tracking",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "backend",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-030.md",
+      "github_issue": {
+        "number": 1277,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1277",
+        "created_at": "2026-09-22T07:13:27Z"
+      }
+    },
+    {
+      "id": "ISSUE-031",
+      "title": "services/multiSig.js: addSignature requires plaintext signer private key over HTTP, completely compromising multi-sig security architecture",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-031.md",
+      "github_issue": {
+        "number": 1278,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1278",
+        "created_at": "2026-09-22T07:13:29Z"
+      }
+    },
+    {
+      "id": "ISSUE-032",
+      "title": "services/multiSig.js: Lost update race condition when multiple signers concurrently sign pendingMultiSigTx via optimistic update overwrite",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "concurrency",
+        "database"
+      ],
+      "file": "docs/issues_backlog/ISSUE-032.md",
+      "github_issue": {
+        "number": 1279,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1279",
+        "created_at": "2026-09-22T07:13:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-033",
+      "title": "services/multiSig.js: Multi-sig transactions expire due to sequence number advance if source account transacts prior to final submission",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-033.md",
+      "github_issue": {
+        "number": 1280,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1280",
+        "created_at": "2026-09-22T07:13:34Z"
+      }
+    },
+    {
+      "id": "ISSUE-034",
+      "title": "services/multiSig.js: submitMultiSigTransaction fails to verify threshold weight satisfaction before Horizon submission, causing obscure errors",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "error-handling"
+      ],
+      "file": "docs/issues_backlog/ISSUE-034.md",
+      "github_issue": {
+        "number": 1281,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1281",
+        "created_at": "2026-09-22T07:13:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-035",
+      "title": "services/multiSig.js: Concurrent submitMultiSigTransaction calls cause duplicate Horizon submissions and ledger race conditions",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "concurrency",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-035.md",
+      "github_issue": {
+        "number": 1282,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1282",
+        "created_at": "2026-09-22T07:13:38Z"
+      }
+    },
+    {
+      "id": "ISSUE-036",
+      "title": "routes/multiSig.js: Endpoints lack authorization checks verifying whether caller public key belongs to the transaction's configured signers",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-036.md",
+      "github_issue": {
+        "number": 1283,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1283",
+        "created_at": "2026-09-22T07:13:41Z"
+      }
+    },
+    {
+      "id": "ISSUE-037",
+      "title": "services/multiSig.js: Missing support for pre-authorized transaction hash signers (SignerType.preAuthTx) and hash(x) signers",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-037.md",
+      "github_issue": {
+        "number": 1284,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1284",
+        "created_at": "2026-09-22T07:13:43Z"
+      }
+    },
+    {
+      "id": "ISSUE-038",
+      "title": "services/multiSig.js: Threshold configuration allows setting medThreshold or highThreshold above the sum of all signer weights, locking accounts",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "error-handling"
+      ],
+      "file": "docs/issues_backlog/ISSUE-038.md",
+      "github_issue": {
+        "number": 1285,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1285",
+        "created_at": "2026-09-22T07:13:46Z"
+      }
+    },
+    {
+      "id": "ISSUE-039",
+      "title": "services/multiSig.js: Pending multi-sig transactions lack webhook or push notification dispatch when new signatures are required or added",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "notifications"
+      ],
+      "file": "docs/issues_backlog/ISSUE-039.md",
+      "github_issue": {
+        "number": 1286,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1286",
+        "created_at": "2026-09-22T07:13:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-040",
+      "title": "services/multiSig.js: PendingMultiSigTx records lack cleanup job for expired uncollected transactions, resulting in database clutter",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "database"
+      ],
+      "file": "docs/issues_backlog/ISSUE-040.md",
+      "github_issue": {
+        "number": 1287,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1287",
+        "created_at": "2026-09-22T07:13:50Z"
+      }
+    },
+    {
+      "id": "ISSUE-041",
+      "title": "routes/multiSig.js: Missing cryptographic verification of client-signed XDR envelopes submitted via the signing API",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-041.md",
+      "github_issue": {
+        "number": 1288,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1288",
+        "created_at": "2026-09-22T07:13:53Z"
+      }
+    },
+    {
+      "id": "ISSUE-042",
+      "title": "services/multiSig.js: Master weight zeroing during conversion to multi-sig is not atomic with signer addition, risking bricked accounts",
+      "domain": "Multi-Sig & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-042.md",
+      "github_issue": {
+        "number": 1289,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1289",
+        "created_at": "2026-09-22T07:13:55Z"
+      }
+    },
+    {
+      "id": "ISSUE-043",
+      "title": "services/amm.js: AMM pool state is stored in ephemeral process memory without database persistence or distributed state synchronization",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "amm",
+        "stellar",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-043.md",
+      "github_issue": {
+        "number": 1290,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1290",
+        "created_at": "2026-09-22T07:13:57Z"
+      }
+    },
+    {
+      "id": "ISSUE-044",
+      "title": "services/pool.js, offer.js, trustline.js, feeHistory.js: Import non-existent config/stellar.js causing fatal runtime crashes on invocation",
+      "domain": "Stellar Blockchain Services",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "critical-bug",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-044.md",
+      "github_issue": {
+        "number": 1291,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1291",
+        "created_at": "2026-09-22T07:14:00Z"
+      }
+    },
+    {
+      "id": "ISSUE-045",
+      "title": "services/pathPayment.js: Path payment routing does not compute maximum send slippage (sendMax), exposing senders to unlimited price movement",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "defi",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-045.md",
+      "github_issue": {
+        "number": 1292,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1292",
+        "created_at": "2026-09-22T07:14:02Z"
+      }
+    },
+    {
+      "id": "ISSUE-046",
+      "title": "services/pathPayment.js: Lack of intermediate asset hop limits allows complex circular paths resulting in excessive ledger transaction fees",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-046.md",
+      "github_issue": {
+        "number": 1293,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1293",
+        "created_at": "2026-09-22T07:14:05Z"
+      }
+    },
+    {
+      "id": "ISSUE-047",
+      "title": "services/pool.js: estimateDepositFees and estimateWithdrawFees use floating point Math.min and division, creating financial rounding errors",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-047.md",
+      "github_issue": {
+        "number": 1294,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1294",
+        "created_at": "2026-09-22T07:14:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-048",
+      "title": "routes/stellar/amm.js: Missing validation for non-native asset issuers in AMM pool query parameters allows injection of spoofed pools",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-048.md",
+      "github_issue": {
+        "number": 1295,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1295",
+        "created_at": "2026-09-22T07:14:09Z"
+      }
+    },
+    {
+      "id": "ISSUE-049",
+      "title": "services/offer.js: Passive offer creation does not handle crossing offers against the creator's own active orderbook bids",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-049.md",
+      "github_issue": {
+        "number": 1296,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1296",
+        "created_at": "2026-09-22T07:14:12Z"
+      }
+    },
+    {
+      "id": "ISSUE-050",
+      "title": "services/amm.js: Arbitrage calculation does not account for Horizon base fees and pool deposit/withdrawal minimum fees in net profit evaluation",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "amm",
+        "stellar",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-050.md",
+      "github_issue": {
+        "number": 1297,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1297",
+        "created_at": "2026-09-22T07:14:14Z"
+      }
+    },
+    {
+      "id": "ISSUE-051",
+      "title": "services/pool.js: Liquidity pool deposit operations fail to assert trustlines for pool share assets prior to submission",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-051.md",
+      "github_issue": {
+        "number": 1298,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1298",
+        "created_at": "2026-09-22T07:14:17Z"
+      }
+    },
+    {
+      "id": "ISSUE-052",
+      "title": "services/pathPayment.js: Strict receive path payment fails to recover alternate paths when Horizon returns path_no_path error",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-052.md",
+      "github_issue": {
+        "number": 1299,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1299",
+        "created_at": "2026-09-22T07:14:19Z"
+      }
+    },
+    {
+      "id": "ISSUE-053",
+      "title": "services/assetConverter.js: Currency conversion rates use unweighted arithmetic averages across divergent liquidity pools",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "amm",
+        "analytics",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-053.md",
+      "github_issue": {
+        "number": 1300,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1300",
+        "created_at": "2026-09-22T07:14:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-054",
+      "title": "services/exchangeRate.js: Global CoinGecko rate limiting blocks concurrent queries for distinct currency pairs, throwing false failures",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "caching",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-054.md",
+      "github_issue": {
+        "number": 1301,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1301",
+        "created_at": "2026-09-22T07:14:24Z"
+      }
+    },
+    {
+      "id": "ISSUE-055",
+      "title": "routes/stellar/convert.js: Quote endpoint returns stale conversion rates during rapid market volatility without quote expiration timestamps",
+      "domain": "AMM & Liquidity Pools",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "amm",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-055.md",
+      "github_issue": {
+        "number": 1302,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1302",
+        "created_at": "2026-09-22T07:14:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-056",
+      "title": "db/client.js: Promise.race query timeout creates unbounded uncollected setTimeout timer objects, causing memory leaks under high QPS",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-056.md",
+      "github_issue": {
+        "number": 1303,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1303",
+        "created_at": "2026-09-22T07:14:29Z"
+      }
+    },
+    {
+      "id": "ISSUE-057",
+      "title": "db/client.js: PgBouncer transaction pooling mode breaks pool.on('connect') statement_timeout persistence across borrowed connections",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "infrastructure",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-057.md",
+      "github_issue": {
+        "number": 1304,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1304",
+        "created_at": "2026-09-22T07:14:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-058",
+      "title": "db/client.js: connectDB terminates the entire Node.js runtime with process.exit(1) on transient connection retry exhaustion",
+      "domain": "Database & Persistence",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "database",
+        "resilience",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-058.md",
+      "github_issue": {
+        "number": 1305,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1305",
+        "created_at": "2026-09-22T07:14:34Z"
+      }
+    },
+    {
+      "id": "ISSUE-059",
+      "title": "db/client.js: Long-running database transactions do not propagate client abort signals (AbortController), leaking DB locks on disconnected clients",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "database",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-059.md",
+      "github_issue": {
+        "number": 1306,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1306",
+        "created_at": "2026-09-22T07:14:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-060",
+      "title": "db/encryption.js: AES-256-GCM column encryption lacks key rotation metadata and initialization vector (IV) uniqueness enforcement",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-060.md",
+      "github_issue": {
+        "number": 1307,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1307",
+        "created_at": "2026-09-22T07:14:39Z"
+      }
+    },
+    {
+      "id": "ISSUE-061",
+      "title": "db/softDelete.js: Prisma soft delete middleware leaks deleted records during relation includes, raw queries, and aggregate operations",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-061.md",
+      "github_issue": {
+        "number": 1308,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1308",
+        "created_at": "2026-09-22T07:14:41Z"
+      }
+    },
+    {
+      "id": "ISSUE-062",
+      "title": "db/adminAuditLog.js: Admin audit log writes are executed outside the business logic transaction, losing audit trail on database rollbacks",
+      "domain": "Database & Persistence",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "database",
+        "compliance",
+        "audit"
+      ],
+      "file": "docs/issues_backlog/ISSUE-062.md",
+      "github_issue": {
+        "number": 1309,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1309",
+        "created_at": "2026-09-22T07:14:44Z"
+      }
+    },
+    {
+      "id": "ISSUE-063",
+      "title": "db/migrate.js: Migration framework lacks distributed migration locking (advisory locks), leading to race conditions during parallel container startups",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "infrastructure",
+        "devops"
+      ],
+      "file": "docs/issues_backlog/ISSUE-063.md",
+      "github_issue": {
+        "number": 1310,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1310",
+        "created_at": "2026-09-22T07:14:46Z"
+      }
+    },
+    {
+      "id": "ISSUE-064",
+      "title": "db/client.js: PostgreSQL connection pool size is hardcoded with no dynamic adjustment based on container CPU/memory constraints",
+      "domain": "Database & Persistence",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "database",
+        "infrastructure",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-064.md",
+      "github_issue": {
+        "number": 1311,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1311",
+        "created_at": "2026-09-22T07:14:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-065",
+      "title": "db/softDelete.js: Unique constraints on tables with soft delete (deletedAt) block re-registration of identical identifiers (usernames/emails)",
+      "domain": "Database & Persistence",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "database"
+      ],
+      "file": "docs/issues_backlog/ISSUE-065.md",
+      "github_issue": {
+        "number": 1312,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1312",
+        "created_at": "2026-09-22T07:14:51Z"
+      }
+    },
+    {
+      "id": "ISSUE-066",
+      "title": "db/encryption.js: Encrypted field search requires full-table client-side decryption due to absence of blind index or HMAC search tokens",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "database",
+        "security",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-066.md",
+      "github_issue": {
+        "number": 1313,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1313",
+        "created_at": "2026-09-22T07:14:53Z"
+      }
+    },
+    {
+      "id": "ISSUE-067",
+      "title": "migrations/data-migration.js: Large-scale data migrations perform unbounded chunk updates without batch transaction boundaries",
+      "domain": "Database & Persistence",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "database",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-067.md",
+      "github_issue": {
+        "number": 1314,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1314",
+        "created_at": "2026-09-22T07:14:55Z"
+      }
+    },
+    {
+      "id": "ISSUE-068",
+      "title": "db/client.js: Missing PostgreSQL read-replica connection routing for high-volume analytics and history queries",
+      "domain": "Database & Persistence",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "database",
+        "architecture",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-068.md",
+      "github_issue": {
+        "number": 1315,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1315",
+        "created_at": "2026-09-22T07:14:58Z"
+      }
+    },
+    {
+      "id": "ISSUE-069",
+      "title": "auth/tokens.js: Access tokens and refresh tokens share the identical symmetric JWT secret without separate rotation lifecycles",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "backend",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-069.md",
+      "github_issue": {
+        "number": 1316,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1316",
+        "created_at": "2026-09-22T07:15:00Z"
+      }
+    },
+    {
+      "id": "ISSUE-070",
+      "title": "auth/tokens.js: Refresh tokens lack unique token identifiers (jti) and token family rotation, preventing revocation of stolen tokens",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-070.md",
+      "github_issue": {
+        "number": 1317,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1317",
+        "created_at": "2026-09-22T07:15:03Z"
+      }
+    },
+    {
+      "id": "ISSUE-071",
+      "title": "auth/sessionStore.js: getActiveSession executes an unthrottled UPDATE on every HTTP request, causing severe database write amplification",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "database",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-071.md",
+      "github_issue": {
+        "number": 1318,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1318",
+        "created_at": "2026-09-22T07:15:05Z"
+      }
+    },
+    {
+      "id": "ISSUE-072",
+      "title": "auth/password.js: Syntax error from TypeScript type annotations in JavaScript file prevents module loading and server initialization",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "backend",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-072.md",
+      "github_issue": {
+        "number": 1319,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1319",
+        "created_at": "2026-09-22T07:15:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-073",
+      "title": "middleware/auth.js: JWT verification fails open or returns ambiguous error codes when authorization headers contain malformed Bearer schemes",
+      "domain": "Authentication & Tokens",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "middleware"
+      ],
+      "file": "docs/issues_backlog/ISSUE-073.md",
+      "github_issue": {
+        "number": 1320,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1320",
+        "created_at": "2026-09-22T07:15:10Z"
+      }
+    },
+    {
+      "id": "ISSUE-074",
+      "title": "middleware/csrf.js: CSRF protection is omitted on state-changing API routes that accept cookie-based credentials or session tokens",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "middleware"
+      ],
+      "file": "docs/issues_backlog/ISSUE-074.md",
+      "github_issue": {
+        "number": 1321,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1321",
+        "created_at": "2026-09-22T07:15:12Z"
+      }
+    },
+    {
+      "id": "ISSUE-075",
+      "title": "middleware/idempotency.js: JSON.stringify produces non-deterministic hashes for request bodies with unordered keys, causing false 422 errors",
+      "domain": "Authentication & Tokens",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "middleware",
+        "api"
+      ],
+      "file": "docs/issues_backlog/ISSUE-075.md",
+      "github_issue": {
+        "number": 1322,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1322",
+        "created_at": "2026-09-22T07:15:15Z"
+      }
+    },
+    {
+      "id": "ISSUE-076",
+      "title": "middleware/idempotency.js: Idempotency keys are not tenant-scoped or user-scoped, allowing cross-user cache collisions and payment data leakage",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "middleware",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-076.md",
+      "github_issue": {
+        "number": 1323,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1323",
+        "created_at": "2026-09-22T07:15:17Z"
+      }
+    },
+    {
+      "id": "ISSUE-077",
+      "title": "middleware/idempotency.js: Idempotency release on HTTP error permits duplicate submission during transient network timeouts to Horizon",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "middleware"
+      ],
+      "file": "docs/issues_backlog/ISSUE-077.md",
+      "github_issue": {
+        "number": 1324,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1324",
+        "created_at": "2026-09-22T07:15:20Z"
+      }
+    },
+    {
+      "id": "ISSUE-078",
+      "title": "middleware/rateLimiter.js: Rate limiting keys depend on spoofable X-Forwarded-For headers without validating trusted reverse proxy hops",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "rate-limiting",
+        "middleware"
+      ],
+      "file": "docs/issues_backlog/ISSUE-078.md",
+      "github_issue": {
+        "number": 1325,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1325",
+        "created_at": "2026-09-22T07:15:22Z"
+      }
+    },
+    {
+      "id": "ISSUE-079",
+      "title": "auth/userStore.js: User registration lacks email/phone verification challenge before granting active authenticated status",
+      "domain": "Authentication & Tokens",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-079.md",
+      "github_issue": {
+        "number": 1326,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1326",
+        "created_at": "2026-09-22T07:15:24Z"
+      }
+    },
+    {
+      "id": "ISSUE-080",
+      "title": "middleware/mfa.js: MFA verification middleware does not invalidate used TOTP tokens within the current time step, permitting replay attacks",
+      "domain": "Authentication & Tokens",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-080.md",
+      "github_issue": {
+        "number": 1327,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1327",
+        "created_at": "2026-09-22T07:15:27Z"
+      }
+    },
+    {
+      "id": "ISSUE-081",
+      "title": "compliance/rules.js: isStructuring rule flags normal low-value consumer transactions as high-severity structuring, causing false payment blocks",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "fraud-detection",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-081.md",
+      "github_issue": {
+        "number": 1328,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1328",
+        "created_at": "2026-09-22T07:15:29Z"
+      }
+    },
+    {
+      "id": "ISSUE-082",
+      "title": "compliance/amlMonitor.js: screenTransaction alert persistence silently swallows database errors (.catch(() => {})), dropping AML audit records",
+      "domain": "Compliance & AML",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "compliance",
+        "database",
+        "audit"
+      ],
+      "file": "docs/issues_backlog/ISSUE-082.md",
+      "github_issue": {
+        "number": 1329,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1329",
+        "created_at": "2026-09-22T07:15:32Z"
+      }
+    },
+    {
+      "id": "ISSUE-083",
+      "title": "compliance/sanctionsChecker.js: Sanctions screening fuzzy name matching lacks phonetic normalization (Double Metaphone / Levenshtein), missing aliases",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "security",
+        "legal"
+      ],
+      "file": "docs/issues_backlog/ISSUE-083.md",
+      "github_issue": {
+        "number": 1330,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1330",
+        "created_at": "2026-09-22T07:15:34Z"
+      }
+    },
+    {
+      "id": "ISSUE-084",
+      "title": "compliance/sanctionsChecker.js: OFAC SDN list updates require manual server redeploy due to absence of automated daily synchronization",
+      "domain": "Compliance & AML",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "compliance",
+        "automation",
+        "devops"
+      ],
+      "file": "docs/issues_backlog/ISSUE-084.md",
+      "github_issue": {
+        "number": 1331,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1331",
+        "created_at": "2026-09-22T07:15:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-085",
+      "title": "compliance/kycCollector.js: PII encryption at rest does not segregate KYC documents into a dedicated zero-knowledge compliance vault",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "security",
+        "privacy"
+      ],
+      "file": "docs/issues_backlog/ISSUE-085.md",
+      "github_issue": {
+        "number": 1332,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1332",
+        "created_at": "2026-09-22T07:15:39Z"
+      }
+    },
+    {
+      "id": "ISSUE-086",
+      "title": "compliance/complianceReporting.js: SAR/CTR report generation lacks automated schema validation against FinCEN electronic filing specifications",
+      "domain": "Compliance & AML",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "compliance",
+        "reporting"
+      ],
+      "file": "docs/issues_backlog/ISSUE-086.md",
+      "github_issue": {
+        "number": 1333,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1333",
+        "created_at": "2026-09-22T07:15:41Z"
+      }
+    },
+    {
+      "id": "ISSUE-087",
+      "title": "compliance/riskScorer.js: Risk scoring algorithm uses uncalibrated static weights that cannot adapt to evolving transaction patterns or regulatory tiers",
+      "domain": "Compliance & AML",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "compliance",
+        "analytics"
+      ],
+      "file": "docs/issues_backlog/ISSUE-087.md",
+      "github_issue": {
+        "number": 1334,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1334",
+        "created_at": "2026-09-22T07:15:44Z"
+      }
+    },
+    {
+      "id": "ISSUE-088",
+      "title": "compliance/identityVerifier.js: Identity document verification does not perform expiration date checks or document tampering analysis",
+      "domain": "Compliance & AML",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "compliance",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-088.md",
+      "github_issue": {
+        "number": 1335,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1335",
+        "created_at": "2026-09-22T07:15:46Z"
+      }
+    },
+    {
+      "id": "ISSUE-089",
+      "title": "compliance/complianceAudit.js: Compliance audit trails lack cryptographic hash chaining (tamper-evident Merkle tree or ledger verification)",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "compliance",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-089.md",
+      "github_issue": {
+        "number": 1336,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1336",
+        "created_at": "2026-09-22T07:15:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-090",
+      "title": "routes/compliance.js: Compliance review decisions (approve/reject/hold) lack mandatory maker-checker dual-authorization workflows",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "compliance",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-090.md",
+      "github_issue": {
+        "number": 1337,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1337",
+        "created_at": "2026-09-22T07:15:51Z"
+      }
+    },
+    {
+      "id": "ISSUE-091",
+      "title": "compliance/amlMonitor.js: holdAccountForReview does not automatically freeze open Stellar trustlines or cancel pending orders on the DEX",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "stellar",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-091.md",
+      "github_issue": {
+        "number": 1338,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1338",
+        "created_at": "2026-09-22T07:15:53Z"
+      }
+    },
+    {
+      "id": "ISSUE-092",
+      "title": "compliance/rules.js: createStreamAnalyzer maintains unbounded in-memory per-sender state maps without LRU eviction, leading to OOM",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-092.md",
+      "github_issue": {
+        "number": 1339,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1339",
+        "created_at": "2026-09-22T07:15:56Z"
+      }
+    },
+    {
+      "id": "ISSUE-093",
+      "title": "compliance/complianceReporting.js: CTR threshold calculation fails to aggregate multiple transactions across related accounts of the same beneficial owner",
+      "domain": "Compliance & AML",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "compliance",
+        "regulatory"
+      ],
+      "file": "docs/issues_backlog/ISSUE-093.md",
+      "github_issue": {
+        "number": 1340,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1340",
+        "created_at": "2026-09-22T07:15:58Z"
+      }
+    },
+    {
+      "id": "ISSUE-094",
+      "title": "webhooks/dispatcher.js: Time-of-Check to Time-of-Use (TOCTOU) DNS rebinding SSRF vulnerability in webhook delivery fetch",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "webhooks",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-094.md",
+      "github_issue": {
+        "number": 1341,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1341",
+        "created_at": "2026-09-22T07:16:01Z"
+      }
+    },
+    {
+      "id": "ISSUE-095",
+      "title": "webhooks/dispatcher.js: processDueWebhookDeliveries lacks SELECT FOR UPDATE SKIP LOCKED, causing duplicate webhook dispatches across instances",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "webhooks",
+        "concurrency",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-095.md",
+      "github_issue": {
+        "number": 1342,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1342",
+        "created_at": "2026-09-22T07:16:03Z"
+      }
+    },
+    {
+      "id": "ISSUE-096",
+      "title": "webhooks/dispatcher.js: Sequential delivery loop in processDueWebhookDeliveries blocks Node.js event loop during downstream endpoint timeouts",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "webhooks",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-096.md",
+      "github_issue": {
+        "number": 1343,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1343",
+        "created_at": "2026-09-22T07:16:06Z"
+      }
+    },
+    {
+      "id": "ISSUE-097",
+      "title": "webhooks/dispatcher.js: Webhook deliveries lack dead-letter queue (DLQ) alerting and automatic endpoint disablement after repeated failures",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "webhooks",
+        "monitoring",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-097.md",
+      "github_issue": {
+        "number": 1344,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1344",
+        "created_at": "2026-09-22T07:16:08Z"
+      }
+    },
+    {
+      "id": "ISSUE-098",
+      "title": "webhooks/verifySignature.js: Webhook signature verification uses non-constant-time string comparison, exposing endpoints to timing attacks",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "webhooks",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-098.md",
+      "github_issue": {
+        "number": 1345,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1345",
+        "created_at": "2026-09-22T07:16:11Z"
+      }
+    },
+    {
+      "id": "ISSUE-099",
+      "title": "webhooks/store.js: Webhook signing secrets are stored in plaintext in PostgreSQL instead of being hashed or encrypted at rest",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "webhooks",
+        "database"
+      ],
+      "file": "docs/issues_backlog/ISSUE-099.md",
+      "github_issue": {
+        "number": 1346,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1346",
+        "created_at": "2026-09-22T07:16:13Z"
+      }
+    },
+    {
+      "id": "ISSUE-100",
+      "title": "notifications/delivery.js: Push notifications lack exponential retry backoff and token invalidation on BadDeviceToken responses",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "notifications",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-100.md",
+      "github_issue": {
+        "number": 1347,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1347",
+        "created_at": "2026-09-22T07:16:15Z"
+      }
+    },
+    {
+      "id": "ISSUE-101",
+      "title": "notifications/webPush.js: Multi-line comment syntax error prevents module loading and web push notification dispatch",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "notifications",
+        "critical-bug",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-101.md",
+      "github_issue": {
+        "number": 1348,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1348",
+        "created_at": "2026-09-22T07:16:18Z"
+      }
+    },
+    {
+      "id": "ISSUE-102",
+      "title": "notifications/preferences.js: User notification preference updates lack validation for quiet-hour timezone offsets and channel delivery rules",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "notifications",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-102.md",
+      "github_issue": {
+        "number": 1349,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1349",
+        "created_at": "2026-09-22T07:16:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-103",
+      "title": "notifications/service.js: In-app notification delivery does not prune stale read notifications, causing unbounded growth of notification records",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "notifications",
+        "database",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-103.md",
+      "github_issue": {
+        "number": 1350,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1350",
+        "created_at": "2026-09-22T07:16:23Z"
+      }
+    },
+    {
+      "id": "ISSUE-104",
+      "title": "notifications/templates.js: Notification template interpolation uses unsafe regex replacement vulnerable to prototype pollution or injection",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "notifications"
+      ],
+      "file": "docs/issues_backlog/ISSUE-104.md",
+      "github_issue": {
+        "number": 1351,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1351",
+        "created_at": "2026-09-22T07:16:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-105",
+      "title": "notifications/channels/email.js: Email dispatch lacks DKIM signing and SPF alignment configuration, causing transactional emails to land in spam",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "notifications",
+        "email",
+        "infrastructure"
+      ],
+      "file": "docs/issues_backlog/ISSUE-105.md",
+      "github_issue": {
+        "number": 1352,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1352",
+        "created_at": "2026-09-22T07:16:28Z"
+      }
+    },
+    {
+      "id": "ISSUE-106",
+      "title": "notifications/channels/sms.js: SMS dispatch service lacks E.164 phone number normalization and carrier route failover",
+      "domain": "Webhooks & Delivery",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "notifications",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-106.md",
+      "github_issue": {
+        "number": 1353,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1353",
+        "created_at": "2026-09-22T07:16:30Z"
+      }
+    },
+    {
+      "id": "ISSUE-107",
+      "title": "eventSourcing/eventStore.js: Syntax error on line 53 from missing closing brace prevents event store module execution",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "critical-bug",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-107.md",
+      "github_issue": {
+        "number": 1354,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1354",
+        "created_at": "2026-09-22T07:16:33Z"
+      }
+    },
+    {
+      "id": "ISSUE-108",
+      "title": "eventSourcing/eventAnalytics.js: Syntax error on line 145 from malformed export prevents event analytics module initialization",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "critical-bug",
+        "analytics"
+      ],
+      "file": "docs/issues_backlog/ISSUE-108.md",
+      "github_issue": {
+        "number": 1355,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1355",
+        "created_at": "2026-09-22T07:16:35Z"
+      }
+    },
+    {
+      "id": "ISSUE-109",
+      "title": "eventSourcing/eventArchiver.js: Syntax error on line 46 from illegal return statement outside function crashes module loading",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "critical-bug",
+        "database"
+      ],
+      "file": "docs/issues_backlog/ISSUE-109.md",
+      "github_issue": {
+        "number": 1356,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1356",
+        "created_at": "2026-09-22T07:16:38Z"
+      }
+    },
+    {
+      "id": "ISSUE-110",
+      "title": "eventSourcing/eventStore.js: append method lacks optimistic concurrency check on aggregate version, causing silent lost updates during concurrent writes",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "architecture",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-110.md",
+      "github_issue": {
+        "number": 1357,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1357",
+        "created_at": "2026-09-22T07:16:40Z"
+      }
+    },
+    {
+      "id": "ISSUE-111",
+      "title": "eventSourcing/eventReplayer.js: Event replay does not enforce idempotent projection application, resulting in duplicated aggregate states",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "architecture",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-111.md",
+      "github_issue": {
+        "number": 1358,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1358",
+        "created_at": "2026-09-22T07:16:42Z"
+      }
+    },
+    {
+      "id": "ISSUE-112",
+      "title": "eventSourcing/eventSerializer.js: Event schema evolution lacks backward and forward compatibility validation against registered event schemas",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "backend",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-112.md",
+      "github_issue": {
+        "number": 1359,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1359",
+        "created_at": "2026-09-22T07:16:45Z"
+      }
+    },
+    {
+      "id": "ISSUE-113",
+      "title": "eventSourcing/eventMonitor.js: In-process event monitor listener errors are silently caught, preventing detection of broken projection updates",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "observability",
+        "error-handling"
+      ],
+      "file": "docs/issues_backlog/ISSUE-113.md",
+      "github_issue": {
+        "number": 1360,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1360",
+        "created_at": "2026-09-22T07:16:47Z"
+      }
+    },
+    {
+      "id": "ISSUE-114",
+      "title": "eventSourcing/eventArchiver.js: Cold event archival to S3 does not verify archive checksums before truncating hot database records",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "database",
+        "data-pipeline"
+      ],
+      "file": "docs/issues_backlog/ISSUE-114.md",
+      "github_issue": {
+        "number": 1361,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1361",
+        "created_at": "2026-09-22T07:16:50Z"
+      }
+    },
+    {
+      "id": "ISSUE-115",
+      "title": "eventSourcing/projectionManager.js: Projections lack snapshotting mechanism, requiring full event log replay from genesis on every cold boot",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "backend",
+        "performance",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-115.md",
+      "github_issue": {
+        "number": 1362,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1362",
+        "created_at": "2026-09-22T07:16:52Z"
+      }
+    },
+    {
+      "id": "ISSUE-116",
+      "title": "routes/events.js: Duplicate identifier requireAdmin syntax error prevents mounting of events API routes",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "critical-bug",
+        "middleware"
+      ],
+      "file": "docs/issues_backlog/ISSUE-116.md",
+      "github_issue": {
+        "number": 1363,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1363",
+        "created_at": "2026-09-22T07:16:54Z"
+      }
+    },
+    {
+      "id": "ISSUE-117",
+      "title": "eventSourcing/eventStore.js: Aggregate event queries lack pagination, causing memory exhaustion when querying high-frequency accounts",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-117.md",
+      "github_issue": {
+        "number": 1364,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1364",
+        "created_at": "2026-09-22T07:16:57Z"
+      }
+    },
+    {
+      "id": "ISSUE-118",
+      "title": "eventSourcing/projectionManager.js: Event projection processing lacks poison-pill message dead-lettering, stalling projection pipeline on unhandled errors",
+      "domain": "Event Sourcing & Projections",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "backend",
+        "resilience",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-118.md",
+      "github_issue": {
+        "number": 1365,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1365",
+        "created_at": "2026-09-22T07:16:59Z"
+      }
+    },
+    {
+      "id": "ISSUE-119",
+      "title": "services/streaming.js: processActiveStreams double-payment race condition across multi-instance ECS deployments due to lack of distributed locking",
+      "domain": "Payment Streaming",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "concurrency",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-119.md",
+      "github_issue": {
+        "number": 1366,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1366",
+        "created_at": "2026-09-22T07:17:02Z"
+      }
+    },
+    {
+      "id": "ISSUE-120",
+      "title": "services/streaming.js: Stream failure threshold discrepancy between docstring (5 retries) and implementation (3 retries) prematurely halts active streams",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "documentation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-120.md",
+      "github_issue": {
+        "number": 1367,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1367",
+        "created_at": "2026-09-22T07:17:04Z"
+      }
+    },
+    {
+      "id": "ISSUE-121",
+      "title": "services/streaming.js: Sequential stream payment execution blocks worker tick and delays subsequent stream schedules",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "performance",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-121.md",
+      "github_issue": {
+        "number": 1368,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1368",
+        "created_at": "2026-09-22T07:17:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-122",
+      "title": "services/streaming.js: Stream payment failures do not recalculate next execution time, causing rapid back-to-back failure retries on identical ticks",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-122.md",
+      "github_issue": {
+        "number": 1369,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1369",
+        "created_at": "2026-09-22T07:17:09Z"
+      }
+    },
+    {
+      "id": "ISSUE-123",
+      "title": "services/streaming.js: Storing encrypted sender secrets at rest presents permanent key theft risk; needs delegation via pre-authorized transactions",
+      "domain": "Payment Streaming",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "security",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-123.md",
+      "github_issue": {
+        "number": 1370,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1370",
+        "created_at": "2026-09-22T07:17:11Z"
+      }
+    },
+    {
+      "id": "ISSUE-124",
+      "title": "services/streaming.js: Payment stream interval execution drifts over time due to scheduling based on completion time rather than fixed intervals",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-124.md",
+      "github_issue": {
+        "number": 1371,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1371",
+        "created_at": "2026-09-22T07:17:14Z"
+      }
+    },
+    {
+      "id": "ISSUE-125",
+      "title": "routes/streaming.js: Stream pause, resume, and cancel endpoints lack ownership validation, allowing authenticated users to tamper with others' streams",
+      "domain": "Payment Streaming",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "backend"
+      ],
+      "file": "docs/issues_backlog/ISSUE-125.md",
+      "github_issue": {
+        "number": 1372,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1372",
+        "created_at": "2026-09-22T07:17:16Z"
+      }
+    },
+    {
+      "id": "ISSUE-126",
+      "title": "services/streaming.js: Stream rate amounts permit fractional micro-stroop amounts that fail Stellar SDK minimum integer amount constraints",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-126.md",
+      "github_issue": {
+        "number": 1373,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1373",
+        "created_at": "2026-09-22T07:17:19Z"
+      }
+    },
+    {
+      "id": "ISSUE-127",
+      "title": "services/streaming.js: createStream does not verify sender account balance or trustline status for streamed non-native assets prior to activation",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "stellar",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-127.md",
+      "github_issue": {
+        "number": 1374,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1374",
+        "created_at": "2026-09-22T07:17:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-128",
+      "title": "services/streaming.js: Stream cancellation does not execute a final prorated partial payment for elapsed seconds in the current active interval",
+      "domain": "Payment Streaming",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "stellar",
+        "defi"
+      ],
+      "file": "docs/issues_backlog/ISSUE-128.md",
+      "github_issue": {
+        "number": 1375,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1375",
+        "created_at": "2026-09-22T07:17:23Z"
+      }
+    },
+    {
+      "id": "ISSUE-129",
+      "title": "mobile/offlineQueue.js: Offline transaction queue lives in volatile process memory, losing queued user payments on container restarts",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "mobile",
+        "resilience",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-129.md",
+      "github_issue": {
+        "number": 1376,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1376",
+        "created_at": "2026-09-22T07:17:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-130",
+      "title": "mobile/offlineQueue.js: Queue flush does not resolve Stellar sequence number conflicts between offline-queued transactions and live account state",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "mobile",
+        "stellar",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-130.md",
+      "github_issue": {
+        "number": 1377,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1377",
+        "created_at": "2026-09-22T07:17:28Z"
+      }
+    },
+    {
+      "id": "ISSUE-131",
+      "title": "mobile/offlineQueue.js: Unbounded queue growth allows malicious users to exhaust server memory by spamming offline queue endpoints",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "mobile",
+        "security",
+        "rate-limiting"
+      ],
+      "file": "docs/issues_backlog/ISSUE-131.md",
+      "github_issue": {
+        "number": 1378,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1378",
+        "created_at": "2026-09-22T07:17:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-132",
+      "title": "mobile/webAuthn.js: WebAuthn challenge generation does not bind challenges to user sessions with short TTLs, risking replay attacks",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "mobile",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-132.md",
+      "github_issue": {
+        "number": 1379,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1379",
+        "created_at": "2026-09-22T07:17:33Z"
+      }
+    },
+    {
+      "id": "ISSUE-133",
+      "title": "mobile/webAuthn.js: Biometric key attestation does not verify authenticator data flags (User Presence and User Verification)",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "mobile",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-133.md",
+      "github_issue": {
+        "number": 1380,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1380",
+        "created_at": "2026-09-22T07:17:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-134",
+      "title": "mobile/sessions.js: Mobile session store lacks device fingerprint binding and device revocation coordination across concurrent devices",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "mobile",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-134.md",
+      "github_issue": {
+        "number": 1381,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1381",
+        "created_at": "2026-09-22T07:17:38Z"
+      }
+    },
+    {
+      "id": "ISSUE-135",
+      "title": "mobile/security.js: Mobile root/jailbreak detection payload from client is accepted without server-side cryptographic attestation (Play Integrity / App Attest)",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "mobile",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-135.md",
+      "github_issue": {
+        "number": 1382,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1382",
+        "created_at": "2026-09-22T07:17:40Z"
+      }
+    },
+    {
+      "id": "ISSUE-136",
+      "title": "mobile/auth.js: Biometric re-authentication bypass: endpoints accept cached client tokens without requiring fresh hardware-backed signatures",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "mobile",
+        "security",
+        "cryptography"
+      ],
+      "file": "docs/issues_backlog/ISSUE-136.md",
+      "github_issue": {
+        "number": 1383,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1383",
+        "created_at": "2026-09-22T07:17:43Z"
+      }
+    },
+    {
+      "id": "ISSUE-137",
+      "title": "mobile/notificationEngine.js: Notification batch dispatch to APNS/FCM does not handle expired device push registration tokens",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "mobile",
+        "notifications"
+      ],
+      "file": "docs/issues_backlog/ISSUE-137.md",
+      "github_issue": {
+        "number": 1384,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1384",
+        "created_at": "2026-09-22T07:17:45Z"
+      }
+    },
+    {
+      "id": "ISSUE-138",
+      "title": "mobile/redisStore.js: Redis connection drops cause silent mobile session authentication failures rather than graceful degradation",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "mobile",
+        "redis",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-138.md",
+      "github_issue": {
+        "number": 1385,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1385",
+        "created_at": "2026-09-22T07:17:47Z"
+      }
+    },
+    {
+      "id": "ISSUE-139",
+      "title": "mobile/analytics.js: Mobile telemetry collector logs full client request headers and device hardware identifiers without PII redaction",
+      "domain": "Mobile & Offline Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "mobile",
+        "privacy",
+        "compliance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-139.md",
+      "github_issue": {
+        "number": 1386,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1386",
+        "created_at": "2026-09-22T07:17:50Z"
+      }
+    },
+    {
+      "id": "ISSUE-140",
+      "title": "recovery/recoveryWorkflow.js: Account recovery state is stored in in-memory Maps, breaking recovery workflows across server restarts and ECS tasks",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "resilience",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-140.md",
+      "github_issue": {
+        "number": 1387,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1387",
+        "created_at": "2026-09-22T07:17:52Z"
+      }
+    },
+    {
+      "id": "ISSUE-141",
+      "title": "recovery/recoveryWorkflow.js: addApproval lacks cryptographic authentication, allowing unauthorized callers to approve recovery requests",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-141.md",
+      "github_issue": {
+        "number": 1388,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1388",
+        "created_at": "2026-09-22T07:17:54Z"
+      }
+    },
+    {
+      "id": "ISSUE-142",
+      "title": "recovery/recoveryWorkflow.js: completeRecovery updates status to completed but never executes key rotation or Stellar setOptions signer updates",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-142.md",
+      "github_issue": {
+        "number": 1389,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1389",
+        "created_at": "2026-09-22T07:17:57Z"
+      }
+    },
+    {
+      "id": "ISSUE-143",
+      "title": "recovery/recoveryPhrase.js: Mnemonic recovery phrase generation does not use PBKDF2 with 2048 iterations as required by BIP-39 specification",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "cryptography",
+        "security",
+        "stellar"
+      ],
+      "file": "docs/issues_backlog/ISSUE-143.md",
+      "github_issue": {
+        "number": 1390,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1390",
+        "created_at": "2026-09-22T07:17:59Z"
+      }
+    },
+    {
+      "id": "ISSUE-144",
+      "title": "recovery/contactManager.js: Trusted recovery contacts lack out-of-band contact verification (SMS/Email OTP challenge) prior to registration",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "security",
+        "notifications"
+      ],
+      "file": "docs/issues_backlog/ISSUE-144.md",
+      "github_issue": {
+        "number": 1391,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1391",
+        "created_at": "2026-09-22T07:18:02Z"
+      }
+    },
+    {
+      "id": "ISSUE-145",
+      "title": "recovery/recoveryWorkflow.js: Mandatory 24-hour recovery time-lock can be bypassed by manipulating server process clock or re-initiating requests",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-145.md",
+      "github_issue": {
+        "number": 1392,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1392",
+        "created_at": "2026-09-22T07:18:04Z"
+      }
+    },
+    {
+      "id": "ISSUE-146",
+      "title": "recovery/recoveryAudit.js: Recovery audit trail writes directly to unmonitored files without security team alerting for account takeovers",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "security",
+        "observability",
+        "compliance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-146.md",
+      "github_issue": {
+        "number": 1393,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1393",
+        "created_at": "2026-09-22T07:18:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-147",
+      "title": "recovery/recoveryStore.js: Sharded recovery shares (Shamir's Secret Sharing) lack threshold verification before reconstructing master secrets",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "cryptography",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-147.md",
+      "github_issue": {
+        "number": 1394,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1394",
+        "created_at": "2026-09-22T07:18:09Z"
+      }
+    },
+    {
+      "id": "ISSUE-148",
+      "title": "routes/recovery.js: Recovery request lookup exposes full list of trusted contact IDs to unauthenticated callers (PII disclosure)",
+      "domain": "Account Recovery & Custody",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "privacy"
+      ],
+      "file": "docs/issues_backlog/ISSUE-148.md",
+      "github_issue": {
+        "number": 1395,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1395",
+        "created_at": "2026-09-22T07:18:11Z"
+      }
+    },
+    {
+      "id": "ISSUE-149",
+      "title": "security/incidentResponse.js: Incident ID generation using `Date.now()` causes collisions under concurrent incident creation",
+      "domain": "Security & Incident Response",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-149.md",
+      "github_issue": {
+        "number": 1396,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1396",
+        "created_at": "2026-09-22T07:18:14Z"
+      }
+    },
+    {
+      "id": "ISSUE-150",
+      "title": "security/accountLockout.js: Read-modify-write race condition in Redis failed login tracking allows brute-force bypass",
+      "domain": "Security & Authentication",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "concurrency",
+        "auth"
+      ],
+      "file": "docs/issues_backlog/ISSUE-150.md",
+      "github_issue": {
+        "number": 1397,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1397",
+        "created_at": "2026-09-22T07:18:16Z"
+      }
+    },
+    {
+      "id": "ISSUE-151",
+      "title": "security/accountLockout.js: Unbounded `suspicious_patterns` array in Redis causes OOM and excessive latency",
+      "domain": "Security & Incident Response",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "performance",
+        "redis"
+      ],
+      "file": "docs/issues_backlog/ISSUE-151.md",
+      "github_issue": {
+        "number": 1398,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1398",
+        "created_at": "2026-09-22T07:18:18Z"
+      }
+    },
+    {
+      "id": "ISSUE-152",
+      "title": "security/ipWhitelist.js: CIDR subnet whitelisting is broken due to strict string lookup in cache Map",
+      "domain": "Security & Network",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "network"
+      ],
+      "file": "docs/issues_backlog/ISSUE-152.md",
+      "github_issue": {
+        "number": 1399,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1399",
+        "created_at": "2026-09-22T07:18:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-153",
+      "title": "security/ipWhitelist.js: In-memory cache lacks distributed invalidation across multi-task ECS cluster",
+      "domain": "Security & Architecture",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "cache",
+        "infra",
+        "redis"
+      ],
+      "file": "docs/issues_backlog/ISSUE-153.md",
+      "github_issue": {
+        "number": 1400,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1400",
+        "created_at": "2026-09-22T07:18:23Z"
+      }
+    },
+    {
+      "id": "ISSUE-154",
+      "title": "security/oauth2.js: Missing RFC 7636 PKCE (Proof Key for Code Exchange) support creates authorization code interception risk",
+      "domain": "Security & OAuth2",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "security",
+        "oauth2"
+      ],
+      "file": "docs/issues_backlog/ISSUE-154.md",
+      "github_issue": {
+        "number": 1401,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1401",
+        "created_at": "2026-09-22T07:18:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-155",
+      "title": "security/oauth2.js: Non-atomic authorization code redemption enables token replay race condition",
+      "domain": "Security & OAuth2",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "concurrency",
+        "oauth2"
+      ],
+      "file": "docs/issues_backlog/ISSUE-155.md",
+      "github_issue": {
+        "number": 1402,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1402",
+        "created_at": "2026-09-22T07:18:28Z"
+      }
+    },
+    {
+      "id": "ISSUE-156",
+      "title": "security/oauth2.js: Client secret comparison is vulnerable to timing attacks",
+      "domain": "Security & Cryptography",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "crypto"
+      ],
+      "file": "docs/issues_backlog/ISSUE-156.md",
+      "github_issue": {
+        "number": 1403,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1403",
+        "created_at": "2026-09-22T07:18:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-157",
+      "title": "security/mfa.js: Silent fallback on decryption failure corrupts MFA validation flow",
+      "domain": "Security & MFA",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "crypto"
+      ],
+      "file": "docs/issues_backlog/ISSUE-157.md",
+      "github_issue": {
+        "number": 1404,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1404",
+        "created_at": "2026-09-22T07:18:33Z"
+      }
+    },
+    {
+      "id": "ISSUE-158",
+      "title": "security/penetrationTester.js: Pen test results written to local filesystem `data/pentests/` are lost in ephemeral containers",
+      "domain": "Security & Tooling",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "infra",
+        "storage"
+      ],
+      "file": "docs/issues_backlog/ISSUE-158.md",
+      "github_issue": {
+        "number": 1405,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1405",
+        "created_at": "2026-09-22T07:18:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-159",
+      "title": "security/threatDetector.js: Sliding window memory leak from uncleaned IP request maps",
+      "domain": "Security & Memory",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "memory-leak",
+        "security"
+      ],
+      "file": "docs/issues_backlog/ISSUE-159.md",
+      "github_issue": {
+        "number": 1406,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1406",
+        "created_at": "2026-09-22T07:18:38Z"
+      }
+    },
+    {
+      "id": "ISSUE-160",
+      "title": "routes/security.js: Missing RBAC authorization check on emergency playbook trigger endpoint",
+      "domain": "Security & Authorization",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "critical-bug",
+        "auth"
+      ],
+      "file": "docs/issues_backlog/ISSUE-160.md",
+      "github_issue": {
+        "number": 1407,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1407",
+        "created_at": "2026-09-22T07:18:41Z"
+      }
+    },
+    {
+      "id": "ISSUE-161",
+      "title": "chaos/blastRadiusLimiter.js: In-memory limit tracking allows concurrent chaos experiments to breach blast radius boundaries",
+      "domain": "Chaos Engineering & Safety",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "resilience",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-161.md",
+      "github_issue": {
+        "number": 1408,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1408",
+        "created_at": "2026-09-22T07:18:43Z"
+      }
+    },
+    {
+      "id": "ISSUE-162",
+      "title": "chaos/databaseFailureSimulator.js: Lingering `setTimeout` recovery callbacks cause test hangs and unhandled rejections",
+      "domain": "Chaos Engineering & Testing",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "testing",
+        "async"
+      ],
+      "file": "docs/issues_backlog/ISSUE-162.md",
+      "github_issue": {
+        "number": 1409,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1409",
+        "created_at": "2026-09-22T07:18:45Z"
+      }
+    },
+    {
+      "id": "ISSUE-163",
+      "title": "chaos/networkPartitionSimulator.js: Global process monkey-patching corrupts unaffected test suites",
+      "domain": "Chaos Engineering & Isolation",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "testing",
+        "architecture"
+      ],
+      "file": "docs/issues_backlog/ISSUE-163.md",
+      "github_issue": {
+        "number": 1410,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1410",
+        "created_at": "2026-09-22T07:18:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-164",
+      "title": "chaos/failureInjector.js: Missing context propagation causes failure injection to leak into production traffic",
+      "domain": "Chaos Engineering & Safety",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-164.md",
+      "github_issue": {
+        "number": 1411,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1411",
+        "created_at": "2026-09-22T07:18:50Z"
+      }
+    },
+    {
+      "id": "ISSUE-165",
+      "title": "loadTesting/capacityPlanner.js: Division by zero and NaN propagation when `avgResponseTime` or `currentThroughput` is zero",
+      "domain": "Load Testing & Diagnostics",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "loadtest",
+        "math"
+      ],
+      "file": "docs/issues_backlog/ISSUE-165.md",
+      "github_issue": {
+        "number": 1412,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1412",
+        "created_at": "2026-09-22T07:18:52Z"
+      }
+    },
+    {
+      "id": "ISSUE-166",
+      "title": "loadTesting/loadTestRunner.js: Unbounded concurrency in `Promise.all` exhausts OS socket descriptors (`EMFILE`)",
+      "domain": "Load Testing & Performance",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "loadtest",
+        "concurrency",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-166.md",
+      "github_issue": {
+        "number": 1413,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1413",
+        "created_at": "2026-09-22T07:18:55Z"
+      }
+    },
+    {
+      "id": "ISSUE-167",
+      "title": "loadTesting/performanceAlerting.js: In-memory alert deduplication causes alert storms across clustered load workers",
+      "domain": "Load Testing & Alerting",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "monitoring",
+        "alerting"
+      ],
+      "file": "docs/issues_backlog/ISSUE-167.md",
+      "github_issue": {
+        "number": 1414,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1414",
+        "created_at": "2026-09-22T07:18:57Z"
+      }
+    },
+    {
+      "id": "ISSUE-168",
+      "title": "loadTesting/regressionTester.js: Rigid percentage threshold triggers false-positive CI regression failures on noisy runners",
+      "domain": "Load Testing & CI/CD",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "testing",
+        "ci-cd"
+      ],
+      "file": "docs/issues_backlog/ISSUE-168.md",
+      "github_issue": {
+        "number": 1415,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1415",
+        "created_at": "2026-09-22T07:19:00Z"
+      }
+    },
+    {
+      "id": "ISSUE-169",
+      "title": "loadTesting/bottleneckAnalyzer.js: Synchronous event-loop delay measurement introduces artificial lag",
+      "domain": "Load Testing & Profiling",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "performance",
+        "profiling"
+      ],
+      "file": "docs/issues_backlog/ISSUE-169.md",
+      "github_issue": {
+        "number": 1416,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1416",
+        "created_at": "2026-09-22T07:19:02Z"
+      }
+    },
+    {
+      "id": "ISSUE-170",
+      "title": "loadTesting/throughput.js: Precision loss and lack of windowed rate tracking in throughput calculation",
+      "domain": "Load Testing & Metrics",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "loadtest",
+        "metrics"
+      ],
+      "file": "docs/issues_backlog/ISSUE-170.md",
+      "github_issue": {
+        "number": 1417,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1417",
+        "created_at": "2026-09-22T07:19:04Z"
+      }
+    },
+    {
+      "id": "ISSUE-171",
+      "title": "frontend/App.jsx: Monolithic 2,450-line component causes catastrophic re-render cascades and state fragmentation",
+      "domain": "Frontend & Architecture",
+      "complexity": "Hard",
+      "labels": [
+        "enhancement",
+        "frontend",
+        "performance",
+        "refactor"
+      ],
+      "file": "docs/issues_backlog/ISSUE-171.md",
+      "github_issue": {
+        "number": 1418,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1418",
+        "created_at": "2026-09-22T07:19:07Z"
+      }
+    },
+    {
+      "id": "ISSUE-172",
+      "title": "frontend/api/client.js: Thundering herd of concurrent 401s breaks refresh token rotation and logs users out",
+      "domain": "Frontend & Authentication",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "frontend",
+        "auth",
+        "concurrency"
+      ],
+      "file": "docs/issues_backlog/ISSUE-172.md",
+      "github_issue": {
+        "number": 1419,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1419",
+        "created_at": "2026-09-22T07:19:09Z"
+      }
+    },
+    {
+      "id": "ISSUE-173",
+      "title": "frontend/components/QRScanner.jsx: Camera video stream tracks are not stopped on successful QR scan",
+      "domain": "Frontend & Device APIs",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "mobile",
+        "battery"
+      ],
+      "file": "docs/issues_backlog/ISSUE-173.md",
+      "github_issue": {
+        "number": 1420,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1420",
+        "created_at": "2026-09-22T07:19:12Z"
+      }
+    },
+    {
+      "id": "ISSUE-174",
+      "title": "frontend/utils/validateAmount.ts: JavaScript IEEE 754 floating-point arithmetic causes precision loss on Stellar stroop calculations",
+      "domain": "Frontend & Stellar",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "stellar",
+        "math"
+      ],
+      "file": "docs/issues_backlog/ISSUE-174.md",
+      "github_issue": {
+        "number": 1421,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1421",
+        "created_at": "2026-09-22T07:19:14Z"
+      }
+    },
+    {
+      "id": "ISSUE-175",
+      "title": "frontend/components/AmountInput.jsx: \"Max\" button fills raw available balance without deducting fee and minimum reserve",
+      "domain": "Frontend & UX",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "ux"
+      ],
+      "file": "docs/issues_backlog/ISSUE-175.md",
+      "github_issue": {
+        "number": 1422,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1422",
+        "created_at": "2026-09-22T07:19:17Z"
+      }
+    },
+    {
+      "id": "ISSUE-176",
+      "title": "frontend/components/PathPayment.jsx: Missing maximum slippage and execution deadline exposes swaps to sandwich attacks",
+      "domain": "Frontend & AMM/DEX",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "stellar",
+        "amm"
+      ],
+      "file": "docs/issues_backlog/ISSUE-176.md",
+      "github_issue": {
+        "number": 1423,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1423",
+        "created_at": "2026-09-22T07:19:19Z"
+      }
+    },
+    {
+      "id": "ISSUE-177",
+      "title": "frontend/hooks/useOfflineQueue.js: Storing offline transactions in localStorage causes silent data loss on quota exceeded",
+      "domain": "Frontend & Storage",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "mobile",
+        "storage"
+      ],
+      "file": "docs/issues_backlog/ISSUE-177.md",
+      "github_issue": {
+        "number": 1424,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1424",
+        "created_at": "2026-09-22T07:19:21Z"
+      }
+    },
+    {
+      "id": "ISSUE-178",
+      "title": "frontend/components/TransactionHistory.jsx: Missing virtualized windowing causes DOM bloat and scroll stutter on active wallets",
+      "domain": "Frontend & Performance",
+      "complexity": "Medium",
+      "labels": [
+        "performance",
+        "frontend",
+        "ui"
+      ],
+      "file": "docs/issues_backlog/ISSUE-178.md",
+      "github_issue": {
+        "number": 1425,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1425",
+        "created_at": "2026-09-22T07:19:24Z"
+      }
+    },
+    {
+      "id": "ISSUE-179",
+      "title": "frontend/components/NotificationPreferences.jsx: Unchecked optimistic UI updates leave notification toggles out of sync on API failure",
+      "domain": "Frontend & State",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "ui"
+      ],
+      "file": "docs/issues_backlog/ISSUE-179.md",
+      "github_issue": {
+        "number": 1426,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1426",
+        "created_at": "2026-09-22T07:19:26Z"
+      }
+    },
+    {
+      "id": "ISSUE-180",
+      "title": "frontend/components/AddressBook.jsx: Missing client-side Stellar address checksum validation allows saving invalid recipients",
+      "domain": "Frontend & Validation",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "stellar",
+        "validation"
+      ],
+      "file": "docs/issues_backlog/ISSUE-180.md",
+      "github_issue": {
+        "number": 1427,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1427",
+        "created_at": "2026-09-22T07:19:29Z"
+      }
+    },
+    {
+      "id": "ISSUE-181",
+      "title": "frontend/components/AccountMerge.jsx: Missing confirmation and account-existence check allows irreversible fund destruction",
+      "domain": "Frontend & Stellar Safety",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "stellar",
+        "security",
+        "data-loss"
+      ],
+      "file": "docs/issues_backlog/ISSUE-181.md",
+      "github_issue": {
+        "number": 1428,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1428",
+        "created_at": "2026-09-22T07:19:31Z"
+      }
+    },
+    {
+      "id": "ISSUE-182",
+      "title": "frontend/components/LiquidityPoolDepositWithdraw.jsx: Outdated reserve quotes cause transaction reverts on AMM deposit",
+      "domain": "Frontend & AMM",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "amm",
+        "stellar"
+      ],
+      "file": "docs/issues_backlog/ISSUE-182.md",
+      "github_issue": {
+        "number": 1429,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1429",
+        "created_at": "2026-09-22T07:19:34Z"
+      }
+    },
+    {
+      "id": "ISSUE-183",
+      "title": "frontend/components/DEXOfferManagement.jsx: Cancel order optimistic update gets out of sync with Stellar sequence",
+      "domain": "Frontend & DEX",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "stellar",
+        "dex"
+      ],
+      "file": "docs/issues_backlog/ISSUE-183.md",
+      "github_issue": {
+        "number": 1430,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1430",
+        "created_at": "2026-09-22T07:19:36Z"
+      }
+    },
+    {
+      "id": "ISSUE-184",
+      "title": "frontend/hooks/useWebSocket.js: Zombie connection state on device sleep/wake due to missing heartbeat ping/pong",
+      "domain": "Frontend & WebSockets",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "websocket",
+        "mobile"
+      ],
+      "file": "docs/issues_backlog/ISSUE-184.md",
+      "github_issue": {
+        "number": 1431,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1431",
+        "created_at": "2026-09-22T07:19:39Z"
+      }
+    },
+    {
+      "id": "ISSUE-185",
+      "title": "frontend/components/ErrorBoundary.jsx: Persistent crash loops caused by failure to reset corrupted localStorage state",
+      "domain": "Frontend & Resilience",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "frontend",
+        "resilience"
+      ],
+      "file": "docs/issues_backlog/ISSUE-185.md",
+      "github_issue": {
+        "number": 1432,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1432",
+        "created_at": "2026-09-22T07:19:41Z"
+      }
+    },
+    {
+      "id": "ISSUE-186",
+      "title": "infra/rds.tf: RDS enhanced monitoring enabled without `monitoring_role_arn` causes `terraform apply` failure",
+      "domain": "Infra & Terraform",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "infra",
+        "terraform"
+      ],
+      "file": "docs/issues_backlog/ISSUE-186.md",
+      "github_issue": {
+        "number": 1433,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1433",
+        "created_at": "2026-09-22T07:19:44Z"
+      }
+    },
+    {
+      "id": "ISSUE-187",
+      "title": "infra/secrets_rotation.py: Secret rotation Lambda overwrites JSON credentials with raw hex string, breaking database connection",
+      "domain": "Infra & Security",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "security",
+        "infra",
+        "critical-bug"
+      ],
+      "file": "docs/issues_backlog/ISSUE-187.md",
+      "github_issue": {
+        "number": 1434,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1434",
+        "created_at": "2026-09-22T07:19:46Z"
+      }
+    },
+    {
+      "id": "ISSUE-188",
+      "title": "infra/secrets-rotation.tf: Rotation Lambda missing VPC configuration cannot reach private RDS instance",
+      "domain": "Infra & Networking",
+      "complexity": "Hard",
+      "labels": [
+        "bug",
+        "infra",
+        "terraform",
+        "network"
+      ],
+      "file": "docs/issues_backlog/ISSUE-188.md",
+      "github_issue": {
+        "number": 1435,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1435",
+        "created_at": "2026-09-22T07:19:48Z"
+      }
+    },
+    {
+      "id": "ISSUE-189",
+      "title": "infra/ecs.tf: Rigid 1024 MiB task memory causes Fargate OOM crashes during ledger catchup and rehydration",
+      "domain": "Infra & Capacity",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "infra",
+        "performance"
+      ],
+      "file": "docs/issues_backlog/ISSUE-189.md",
+      "github_issue": {
+        "number": 1436,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1436",
+        "created_at": "2026-09-22T07:19:51Z"
+      }
+    },
+    {
+      "id": "ISSUE-190",
+      "title": "infra/elasticache.tf: Single-node Redis cluster lacks high availability and multi-AZ failover",
+      "domain": "Infra & High Availability",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "infra",
+        "high-availability"
+      ],
+      "file": "docs/issues_backlog/ISSUE-190.md",
+      "github_issue": {
+        "number": 1437,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1437",
+        "created_at": "2026-09-22T07:19:53Z"
+      }
+    },
+    {
+      "id": "ISSUE-191",
+      "title": "docker-compose.yml: Redis service lacks volume persistence causing session and rate-limit loss on restart",
+      "domain": "DevOps & Local Parity",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "docker",
+        "devops"
+      ],
+      "file": "docs/issues_backlog/ISSUE-191.md",
+      "github_issue": {
+        "number": 1438,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1438",
+        "created_at": "2026-09-22T07:19:56Z"
+      }
+    },
+    {
+      "id": "ISSUE-192",
+      "title": "scripts/pii-scan.mjs: Regex matches image asset suffixes (`@2x.png`, `@3x.png`) as email addresses, breaking CI",
+      "domain": "CI/CD & Pre-commit",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "ci-cd",
+        "regex"
+      ],
+      "file": "docs/issues_backlog/ISSUE-192.md",
+      "github_issue": {
+        "number": 1439,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1439",
+        "created_at": "2026-09-22T07:19:58Z"
+      }
+    },
+    {
+      "id": "ISSUE-193",
+      "title": "scripts/check-i18n-strings.mjs: Missing `acorn` dependency in root package.json causes CI job failure",
+      "domain": "CI/CD & Tooling",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "ci-cd",
+        "i18n"
+      ],
+      "file": "docs/issues_backlog/ISSUE-193.md",
+      "github_issue": {
+        "number": 1440,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1440",
+        "created_at": "2026-09-22T07:20:00Z"
+      }
+    },
+    {
+      "id": "ISSUE-194",
+      "title": "backend/Dockerfile: Container runs as root user violating container security standards",
+      "domain": "DevOps & Container Security",
+      "complexity": "Medium",
+      "labels": [
+        "enhancement",
+        "security",
+        "docker"
+      ],
+      "file": "docs/issues_backlog/ISSUE-194.md",
+      "github_issue": {
+        "number": 1441,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1441",
+        "created_at": "2026-09-22T07:20:03Z"
+      }
+    },
+    {
+      "id": "ISSUE-195",
+      "title": "infra/alb.tf: Application Load Balancer 60-second idle timeout drops long-polling Stellar Horizon payment streams",
+      "domain": "Infra & Networking",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "infra",
+        "network",
+        "stellar"
+      ],
+      "file": "docs/issues_backlog/ISSUE-195.md",
+      "github_issue": {
+        "number": 1442,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1442",
+        "created_at": "2026-09-22T07:20:05Z"
+      }
+    }
+  ]
+}

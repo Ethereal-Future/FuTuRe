@@ -14,9 +14,13 @@ Optional but recommended:
 - Docker + Docker Compose (simplifies database setup)
 - [k6](https://k6.io/docs/get-started/installation/) for load tests
 
+New to Stellar, or to remittance/compliance terminology like KYC, AML, or SAR? See the [Glossary](docs/GLOSSARY.md) before diving in.
+
 ---
 
 ## Local Setup
+
+> **Prefer zero local installs?** The repo ships a [Dev Container / GitHub Codespaces](README.md#dev-container--github-codespaces) setup that provisions Node, PostgreSQL, and Redis for you — see the README for details. The steps below are for a fully manual local setup.
 
 ### 1. Clone and install
 
@@ -47,7 +51,7 @@ Using Docker (recommended):
 
 ```bash
 # from the repo root
-docker compose up db -d
+docker compose up postgres -d
 ```
 
 Or point `DATABASE_URL` at an existing local PostgreSQL 16 instance.
@@ -83,6 +87,8 @@ This starts both servers concurrently:
 
 The backend uses `--watch` for hot-reload. The frontend uses Vite HMR.
 
+If any of the steps above fail — port conflicts, Prisma migration errors, npm workspace issues after a branch switch, or unclear `.env` errors — see the [Troubleshooting guide](docs/guides/troubleshooting.md).
+
 ---
 
 ## Running Tests
@@ -101,7 +107,7 @@ npm run test --workspace=backend
 
 ### Database integration tests
 
-Requires a running PostgreSQL instance (use `docker compose up db -d`):
+Requires a running PostgreSQL instance (use `docker compose up postgres -d`):
 
 ```bash
 npm run test:db --workspace=backend
@@ -229,7 +235,7 @@ npm install           # from the repo root
 #### 3. Start PostgreSQL
 
 ```bash
-docker compose up db -d
+docker compose up postgres -d
 ```
 
 This is required for DB integration tests (`test:db`) and for any test that uses Prisma against a real database.
@@ -679,13 +685,15 @@ npm run dev:backend
 
 See the [PR template](.github/PULL_REQUEST_TEMPLATE.md) for the full checklist that ships with every new pull request.
 
+If your PR adds a new file under `docs/`, `backend/`, or `frontend/`, register it in [`docs/README.md`](docs/README.md) so it's discoverable from the documentation index.
+
 ### First-day onboarding checklist
 
 If you are new to this project, complete these tasks before writing any code:
 
 - [ ] Install Node.js 20 and verify with `node --version`
 - [ ] Clone the repo and run `npm install`
-- [ ] Start PostgreSQL with `docker compose up db -d`
+- [ ] Start PostgreSQL with `docker compose up postgres -d`
 - [ ] Copy `backend/.env.example` to `backend/.env` and fill in required values
 - [ ] Run `npm run test:coverage` and confirm all tests pass
 - [ ] If contributing to frontend: run `cd e2e && npx playwright install` to download browser binaries
@@ -726,6 +734,7 @@ npm run format   # applies Prettier
 npm run lint     # ESLint check
 ```
 
+That covers formatting and the lint rules themselves (unused vars, no-shadow, no-console, React hooks rules, and more). It does **not** cover conventions ESLint can't check — ES-modules-only, async/await style, JSDoc on backend services, image asset naming, RTL/logical-properties CSS, backend error-handling shape, naming conventions, and Prisma query patterns. See [`docs/guides/code-style.md`](docs/guides/code-style.md) for the full guide, which explicitly separates what's tooling-enforced from what you have to remember, and [`docs/guides/i18n.md`](docs/guides/i18n.md) for the i18n/RTL workflow specifically.
 Key conventions:
 
 - ES modules (`import`/`export`) throughout — no `require()`.
@@ -733,6 +742,7 @@ Key conventions:
 - No unused variables; `_` prefix for intentionally unused parameters.
 - Keep functions small and single-purpose; avoid deeply nested callbacks.
 - All new CSS must use logical properties instead of physical directional ones, so layouts mirror correctly for RTL locales (Arabic, Hebrew). Use `margin-inline-start`/`margin-inline-end` instead of `margin-left`/`margin-right`, `padding-inline-start`/`padding-inline-end` instead of `padding-left`/`padding-right`, `text-align: start`/`end` instead of `left`/`right`, `border-inline-start`/`border-inline-end` instead of `border-left`/`border-right`, and `inset-inline-start`/`inset-inline-end` instead of positioning with `left`/`right`.
+- New user-facing JSX strings must go through the i18n module (`t('key')`), not hardcoded literals — `npm run lint:i18n` (`scripts/check-i18n-strings.mjs`) enforces this in CI. See [scripts/README.md](scripts/README.md) for what it checks and how to accept a false positive.
 
 ### JSDoc for Backend Services
 
@@ -843,6 +853,10 @@ All `uses:` references in `.github/workflows/` **must** be pinned to a full comm
 
 ## Dependency Vulnerability Management
 
+Found an actual exploitable vulnerability rather than a routine dependency alert? See [SECURITY.md](SECURITY.md) for the private disclosure process — don't open a public issue for it.
+
+Separately, every `npm test` run and every CI run scans tracked files for accidentally committed secrets/PII (Stellar secret keys, JWTs, non-example email addresses) via `scripts/pii-scan.mjs` — see [scripts/README.md](scripts/README.md#pii-scanmjs) for what it checks and how to allowlist a false positive.
+
 ### Automated scanning
 
 `npm audit --audit-level=high` runs as a blocking CI step in both `test.yml` and `security-pipeline.yml` (covering the root workspace, `backend/`, and `frontend/`). A PR cannot merge if any **high** or **critical** vulnerability is present in the dependency tree.
@@ -900,14 +914,14 @@ security advisories.
 | Major npm updates               | Separate PR per package, requires manual review     |
 | GitHub Actions                  | Weekly SHA-pin update PR                            |
 | Prisma (client + CLI + adapter) | Grouped together to keep versions in sync           |
-| `@stellar/stellar-sdk`          | Pinned exact version — update manually with care    |
+| `@stellar/stellar-sdk`          | Pinned exact version — update manually, see below   |
 | Lock-file maintenance           | Monthly PR to refresh `package-lock.json`           |
 
 ### Reviewing a Renovate PR
 
 1. Read the changelog / release notes linked in the PR body.
 2. Check the CI status — all jobs must pass before merging.
-3. For `@stellar/stellar-sdk` major bumps, test against the Stellar testnet before merging.
+3. For `@stellar/stellar-sdk` and Prisma major bumps, follow the package-specific checklist in [docs/guides/dependency-upgrades.md](docs/guides/dependency-upgrades.md) before merging — changelog review and passing CI aren't sufficient on their own for these two.
 4. Merge Renovate PRs promptly — letting them accumulate defeats the purpose of automation.
 
 ### Renovate vs Dependabot

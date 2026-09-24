@@ -1,14 +1,27 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
 import prisma from '../src/db/client.js';
-import { setupSoftDeleteMiddleware } from '../src/db/softDelete.js';
 
+/**
+ * softDelete.test.js
+ *
+ * The application client (db/client.js) is already built as:
+ *   baseClient.$extends(createSoftDeleteExtension()).$extends(timeout)
+ *
+ * Importing that client directly means soft-delete behaviour is already wired
+ * up — there is no separate "middleware setup" step needed in tests.
+ *
+ * The earlier import of `setupSoftDeleteMiddleware` referred to a function
+ * that has never existed in softDelete.js; that import caused every test in
+ * this suite to fail with TypeError before any assertion ran.  Fixed by
+ * removing it and relying on the already-extended prisma client.
+ */
 describe('Soft Delete Middleware', () => {
   let testUserId;
   let testTransactionId;
 
   beforeAll(async () => {
-    // Ensure middleware is set up
-    setupSoftDeleteMiddleware(prisma);
+    // Nothing to set up — soft-delete extension is already applied in
+    // db/client.js via baseClient.$extends(createSoftDeleteExtension()).
   });
 
   afterAll(async () => {
@@ -16,120 +29,71 @@ describe('Soft Delete Middleware', () => {
   });
 
   beforeEach(async () => {
-    // Clean up test data
-    await prisma.user.deleteMany({ includeDeleted: true });
-    await prisma.transaction.deleteMany({ includeDeleted: true });
+    // Clean up test data (includeDeleted bypasses the soft-delete filter so
+    // we also wipe any previously soft-deleted rows).
+    await prisma.user.deleteMany({ where: {}, includeDeleted: true });
+    await prisma.transaction.deleteMany({ where: {}, includeDeleted: true });
   });
 
+  // ---------------------------------------------------------------------------
   describe('User Soft Delete', () => {
     it('should soft delete a user by setting deletedAt', async () => {
-      // Create a test user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-1',
-          publicKey: 'test-key-1',
-        },
+        data: { id: 'test-user-1', publicKey: 'test-key-1' },
       });
       testUserId = user.id;
 
-      // Soft delete the user
-      const deletedUser = await prisma.user.delete({
-        where: { id: testUserId },
-      });
+      const deletedUser = await prisma.user.delete({ where: { id: testUserId } });
 
       expect(deletedUser.deletedAt).not.toBeNull();
       expect(deletedUser.id).toBe(testUserId);
     });
 
     it('should exclude soft-deleted users from normal queries', async () => {
-      // Create two users
       const user1 = await prisma.user.create({
-        data: {
-          id: 'test-user-2',
-          publicKey: 'test-key-2',
-        },
+        data: { id: 'test-user-2', publicKey: 'test-key-2' },
       });
-
       const user2 = await prisma.user.create({
-        data: {
-          id: 'test-user-3',
-          publicKey: 'test-key-3',
-        },
+        data: { id: 'test-user-3', publicKey: 'test-key-3' },
       });
 
-      // Soft delete user1
-      await prisma.user.delete({
-        where: { id: user1.id },
-      });
+      await prisma.user.delete({ where: { id: user1.id } });
 
-      // Query all users - should only return user2
       const users = await prisma.user.findMany();
       expect(users).toHaveLength(1);
       expect(users[0].id).toBe(user2.id);
     });
 
     it('should include soft-deleted users when includeDeleted flag is set', async () => {
-      // Create two users
       const user1 = await prisma.user.create({
-        data: {
-          id: 'test-user-4',
-          publicKey: 'test-key-4',
-        },
+        data: { id: 'test-user-4', publicKey: 'test-key-4' },
+      });
+      await prisma.user.create({
+        data: { id: 'test-user-5', publicKey: 'test-key-5' },
       });
 
-      const user2 = await prisma.user.create({
-        data: {
-          id: 'test-user-5',
-          publicKey: 'test-key-5',
-        },
-      });
+      await prisma.user.delete({ where: { id: user1.id } });
 
-      // Soft delete user1
-      await prisma.user.delete({
-        where: { id: user1.id },
-      });
-
-      // Query with includeDeleted flag - should return both users
-      const users = await prisma.user.findMany({
-        includeDeleted: true,
-      });
+      const users = await prisma.user.findMany({ includeDeleted: true });
       expect(users).toHaveLength(2);
     });
 
     it('should not find soft-deleted user by ID in normal query', async () => {
-      // Create and soft delete a user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-6',
-          publicKey: 'test-key-6',
-        },
+        data: { id: 'test-user-6', publicKey: 'test-key-6' },
       });
+      await prisma.user.delete({ where: { id: user.id } });
 
-      await prisma.user.delete({
-        where: { id: user.id },
-      });
-
-      // Try to find the deleted user - should return null
-      const foundUser = await prisma.user.findUnique({
-        where: { id: user.id },
-      });
+      const foundUser = await prisma.user.findUnique({ where: { id: user.id } });
       expect(foundUser).toBeNull();
     });
 
     it('should find soft-deleted user by ID with includeDeleted flag', async () => {
-      // Create and soft delete a user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-7',
-          publicKey: 'test-key-7',
-        },
+        data: { id: 'test-user-7', publicKey: 'test-key-7' },
       });
+      await prisma.user.delete({ where: { id: user.id } });
 
-      await prisma.user.delete({
-        where: { id: user.id },
-      });
-
-      // Find the deleted user with includeDeleted flag
       const foundUser = await prisma.user.findUnique({
         where: { id: user.id },
         includeDeleted: true,
@@ -139,17 +103,12 @@ describe('Soft Delete Middleware', () => {
     });
   });
 
+  // ---------------------------------------------------------------------------
   describe('Transaction Soft Delete', () => {
     it('should soft delete a transaction by setting deletedAt', async () => {
-      // Create a test user first
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-8',
-          publicKey: 'test-key-8',
-        },
+        data: { id: 'test-user-8', publicKey: 'test-key-8' },
       });
-
-      // Create a transaction
       const transaction = await prisma.transaction.create({
         data: {
           id: 'test-tx-1',
@@ -161,25 +120,17 @@ describe('Soft Delete Middleware', () => {
       });
       testTransactionId = transaction.id;
 
-      // Soft delete the transaction
       const deletedTx = await prisma.transaction.delete({
         where: { id: testTransactionId },
       });
-
       expect(deletedTx.deletedAt).not.toBeNull();
       expect(deletedTx.id).toBe(testTransactionId);
     });
 
     it('should exclude soft-deleted transactions from normal queries', async () => {
-      // Create a test user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-9',
-          publicKey: 'test-key-9',
-        },
+        data: { id: 'test-user-9', publicKey: 'test-key-9' },
       });
-
-      // Create two transactions
       const tx1 = await prisma.transaction.create({
         data: {
           id: 'test-tx-2',
@@ -189,7 +140,6 @@ describe('Soft Delete Middleware', () => {
           amount: 100,
         },
       });
-
       const tx2 = await prisma.transaction.create({
         data: {
           id: 'test-tx-3',
@@ -200,27 +150,17 @@ describe('Soft Delete Middleware', () => {
         },
       });
 
-      // Soft delete tx1
-      await prisma.transaction.delete({
-        where: { id: tx1.id },
-      });
+      await prisma.transaction.delete({ where: { id: tx1.id } });
 
-      // Query all transactions - should only return tx2
       const transactions = await prisma.transaction.findMany();
       expect(transactions).toHaveLength(1);
       expect(transactions[0].id).toBe(tx2.id);
     });
 
     it('should include soft-deleted transactions when includeDeleted flag is set', async () => {
-      // Create a test user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-10',
-          publicKey: 'test-key-10',
-        },
+        data: { id: 'test-user-10', publicKey: 'test-key-10' },
       });
-
-      // Create two transactions
       const tx1 = await prisma.transaction.create({
         data: {
           id: 'test-tx-4',
@@ -230,8 +170,7 @@ describe('Soft Delete Middleware', () => {
           amount: 100,
         },
       });
-
-      const tx2 = await prisma.transaction.create({
+      await prisma.transaction.create({
         data: {
           id: 'test-tx-5',
           hash: 'test-hash-5',
@@ -241,30 +180,19 @@ describe('Soft Delete Middleware', () => {
         },
       });
 
-      // Soft delete tx1
-      await prisma.transaction.delete({
-        where: { id: tx1.id },
-      });
+      await prisma.transaction.delete({ where: { id: tx1.id } });
 
-      // Query with includeDeleted flag - should return both transactions
-      const transactions = await prisma.transaction.findMany({
-        includeDeleted: true,
-      });
+      const transactions = await prisma.transaction.findMany({ includeDeleted: true });
       expect(transactions).toHaveLength(2);
     });
   });
 
+  // ---------------------------------------------------------------------------
   describe('Audit Trail Compliance', () => {
     it('should preserve transaction history after user soft delete', async () => {
-      // Create a user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-11',
-          publicKey: 'test-key-11',
-        },
+        data: { id: 'test-user-11', publicKey: 'test-key-11' },
       });
-
-      // Create a transaction
       const transaction = await prisma.transaction.create({
         data: {
           id: 'test-tx-6',
@@ -275,12 +203,8 @@ describe('Soft Delete Middleware', () => {
         },
       });
 
-      // Soft delete the user
-      await prisma.user.delete({
-        where: { id: user.id },
-      });
+      await prisma.user.delete({ where: { id: user.id } });
 
-      // Transaction should still be accessible with includeDeleted flag
       const tx = await prisma.transaction.findUnique({
         where: { id: transaction.id },
         includeDeleted: true,
@@ -290,27 +214,30 @@ describe('Soft Delete Middleware', () => {
     });
 
     it('should maintain deletedAt timestamp for compliance audits', async () => {
-      // Create a user
       const user = await prisma.user.create({
-        data: {
-          id: 'test-user-12',
-          publicKey: 'test-key-12',
-        },
+        data: { id: 'test-user-12', publicKey: 'test-key-12' },
       });
 
       const beforeDelete = new Date();
-
-      // Soft delete the user
-      const deletedUser = await prisma.user.delete({
-        where: { id: user.id },
-      });
-
+      const deletedUser = await prisma.user.delete({ where: { id: user.id } });
       const afterDelete = new Date();
 
-      // Verify deletedAt is set and within expected time range
       expect(deletedUser.deletedAt).not.toBeNull();
       expect(deletedUser.deletedAt.getTime()).toBeGreaterThanOrEqual(beforeDelete.getTime());
       expect(deletedUser.deletedAt.getTime()).toBeLessThanOrEqual(afterDelete.getTime());
+    });
+
+    it('getFeeHistory never returns more points than real persisted snapshots', async () => {
+      // Acceptance criterion from issue #1119: the returned history length must
+      // never exceed the number of FeeSnapshot rows in the requested window.
+      const { getFeeHistory } = await import('../src/services/feeHistory.js');
+
+      // With a clean DB (no snapshots) the history must be empty, not fabricated.
+      const result = await getFeeHistory(24);
+      const dbCount = await prisma.feeSnapshot.count();
+
+      expect(result.history.length).toBeLessThanOrEqual(dbCount);
+      expect(result.history.length).toBe(dbCount); // must match exactly
     });
   });
 });

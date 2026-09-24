@@ -10,6 +10,7 @@ import { sendEmail } from './channels/email.js';
 import { sendPush } from './channels/push.js';
 import { sendSms } from './channels/sms.js';
 import { sendInApp } from './channels/inApp.js';
+import { getSubscription, sendWebPush } from './webPush.js';
 
 const CHANNELS = ['email', 'push', 'sms', 'inApp'];
 
@@ -26,10 +27,23 @@ const CHANNELS = ['email', 'push', 'sms', 'inApp'];
  * @param {string} [params.actionUrl] - Action URL for in-app notifications
  * @param {object} [params.actionRetryParams] - Retry parameters for failed transactions
  * @param {string[]} [params.channels] - Override which channels to attempt
+ * @param {string} [params.locale] - Override locale; if omitted, read from user preferences
  * @returns {Promise<object>} Results per channel
  */
-export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS }) {
+export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
   const results = {};
+
+  // Resolve locale: caller may supply it explicitly (e.g. from a webhook
+  // payload), otherwise read it from stored user preferences.
+  let resolvedLocale = locale;
+  if (!resolvedLocale) {
+    try {
+      const prefs = await getPreferences(userId);
+      resolvedLocale = prefs.locale ?? 'en';
+    } catch {
+      resolvedLocale = 'en';
+    }
+  }
 
   await Promise.all(
     channels.map(async (channel) => {
@@ -40,7 +54,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
         return;
       }
 
-      const content = getRenderedTemplate(type, channel, data);
+      const content = getRenderedTemplate(type, channel, data, resolvedLocale);
       if (!content) {
         results[channel] = { skipped: true, reason: 'no_template' };
         recordDelivery({ userId, type, channel, status: 'skipped' });
@@ -54,9 +68,24 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
             if (!email) { results[channel] = { skipped: true, reason: 'no_email' }; return; }
             result = await sendEmail(email, content);
             break;
-          case 'push':
+          case 'push': {
             result = await sendPush(userId, content);
+            // In addition to the mobile FCM/APNs channel above, also deliver
+            // to any registered browser Web Push subscription (RFC 8291 /
+            // VAPID — see notifications/webPush.js, issue #1123). Best-effort:
+            // a missing subscription or delivery failure here must not
+            // affect the mobile push result already recorded.
+            const webSubscription = getSubscription(userId);
+            if (webSubscription) {
+              const webPushResult = await sendWebPush(webSubscription, {
+                title: content.title,
+                body: content.body,
+                data,
+              });
+              result = { ...result, webPush: webPushResult };
+            }
             break;
+          }
           case 'sms':
             if (!phone) { results[channel] = { skipped: true, reason: 'no_phone' }; return; }
             result = await sendSms(phone, content);

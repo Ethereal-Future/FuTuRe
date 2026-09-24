@@ -190,11 +190,14 @@ router.get('/users', requireAdmin, async (req, res) => {
 router.put('/kyc/:userId/approve', requireAdmin, kycActionLimiter, async (req, res) => {
   try {
     const { userId } = req.params;
-    const kyc = await prisma.kYCRecord.update({
-      where: { userId },
-      data: { status: 'APPROVED', updatedAt: new Date() },
+    const kyc = await prisma.$transaction(async (tx) => {
+      const updated = await tx.kYCRecord.update({
+        where: { userId },
+        data: { status: 'APPROVED', updatedAt: new Date() },
+      });
+      await logAdminAction(req.user.sub, 'KYC_APPROVE', 'USER', userId, {}, req, tx);
+      return updated;
     });
-    logAdminAction(req.user.sub, 'KYC_APPROVE', 'USER', userId, {}, req);
     res.json({ success: true, kyc });
   } catch (error) {
     res.status(500).json({ error: 'Failed to approve KYC' });
@@ -225,11 +228,14 @@ router.put('/kyc/:userId/approve', requireAdmin, kycActionLimiter, async (req, r
 router.put('/kyc/:userId/reject', requireAdmin, kycActionLimiter, async (req, res) => {
   try {
     const { userId } = req.params;
-    const kyc = await prisma.kYCRecord.update({
-      where: { userId },
-      data: { status: 'REJECTED', updatedAt: new Date() },
+    const kyc = await prisma.$transaction(async (tx) => {
+      const updated = await tx.kYCRecord.update({
+        where: { userId },
+        data: { status: 'REJECTED', updatedAt: new Date() },
+      });
+      await logAdminAction(req.user.sub, 'KYC_REJECT', 'USER', userId, {}, req, tx);
+      return updated;
     });
-    logAdminAction(req.user.sub, 'KYC_REJECT', 'USER', userId, {}, req);
     res.json({ success: true, kyc });
   } catch (error) {
     res.status(500).json({ error: 'Failed to reject KYC' });

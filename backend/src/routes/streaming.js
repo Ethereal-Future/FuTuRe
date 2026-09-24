@@ -4,8 +4,13 @@ import { body, param, validationResult } from 'express-validator';
 import * as StreamingService from '../services/streaming.js';
 import logger from '../config/logger.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+
+// Streaming payments are per-sender user data (the swagger spec already
+// documents 401 responses here); require a logged-in caller (#1102).
+router.use(requireAuth);
 
 function withNextPaymentAt(stream) {
   return {

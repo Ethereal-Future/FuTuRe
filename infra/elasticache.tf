@@ -26,6 +26,11 @@ resource "aws_elasticache_replication_group" "redis" {
   automatic_failover_enabled = true
   multi_az_enabled           = true
   at_rest_encryption_enabled = true
+  transit_encryption_enabled = true
+  # AUTH requires transit encryption. Token is generated in Terraform and
+  # stored in Secrets Manager (see infra/secrets.tf) — never hardcoded.
+  auth_token                 = random_password.redis_auth.result
+  auth_token_update_strategy = "SET"
 
   subnet_group_name  = aws_elasticache_subnet_group.main.name
   security_group_ids = [aws_security_group.redis.id]

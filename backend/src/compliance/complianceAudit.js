@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { randomUUID } from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const AUDIT_DIR = path.join(__dirname, '../../data/compliance-audit');
@@ -15,7 +16,7 @@ class ComplianceAudit {
     await this.initialize();
 
     const entry = {
-      id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      id: randomUUID(),
       timestamp: new Date().toISOString(),
       eventType,
       userId,

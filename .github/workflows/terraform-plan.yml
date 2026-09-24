@@ -33,9 +33,25 @@ jobs:
           role-to-assume: ${{ secrets.AWS_TERRAFORM_PLAN_ROLE_ARN }}
           aws-region: us-east-1
 
+      - name: Select environment tfvars
+        id: env
+        run: |
+          if [ "${{ github.base_ref }}" = "main" ]; then
+            echo "name=production" >> "$GITHUB_OUTPUT"
+            echo "var_file=environments/production.tfvars" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=staging" >> "$GITHUB_OUTPUT"
+            echo "var_file=environments/staging.tfvars" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Terraform Init
         id: init
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ vars.TF_STATE_REGION || 'us-east-1' }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="key=${{ steps.env.outputs.name }}/terraform.tfstate"
 
       - name: Terraform Validate
         id: validate
@@ -125,14 +141,6 @@ jobs:
       - name: Fail if tfsec found HIGH/CRITICAL issues
         if: steps.tfsec-gate.outcome == 'failure'
         run: exit 1
-      - name: Select environment tfvars
-        id: env
-        run: |
-          if [ "${{ github.base_ref }}" = "main" ]; then
-            echo "var_file=environments/production.tfvars" >> "$GITHUB_OUTPUT"
-          else
-            echo "var_file=environments/staging.tfvars" >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Terraform Plan
         id: plan

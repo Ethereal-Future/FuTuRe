@@ -18,16 +18,24 @@ function sanitize(state) {
   };
 }
 
+/**
+ * Re-apply the account allowlist to ensure only publicKey is present.
+ * Used on read to defend against localStorage corruption or injection.
+ */
+function sanitizeAccount(account) {
+  return account?.publicKey ? { publicKey: account.publicKey } : null;
+}
+
 export function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return initialState;
     const saved = JSON.parse(raw);
     if (saved._version !== STATE_VERSION) return initialState;
-    // Merge only the safe persisted fields back into initial state
+    // Re-apply the account allowlist on read to defend against any corruption or injection
     return {
       ...initialState,
-      account: saved.account ?? null,
+      account: sanitizeAccount(saved.account),
       accountLabel: saved.accountLabel ?? '',
     };
   } catch {

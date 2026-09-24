@@ -3,55 +3,24 @@ import riskScorer from './riskScorer.js';
 import complianceAudit from './complianceAudit.js';
 import kycCollector from './kycCollector.js';
 import logger from '../config/logger.js';
+import redis from '../db/redis.js';
+import {
+  THRESHOLDS,
+  PRE_SUBMISSION_RULES,
+  POST_SUBMISSION_ONLY_RULES,
+} from './rules.js';
 
 const amlLogger = logger.child({ component: 'aml' });
+const WINDOW_MS = THRESHOLDS.WINDOW_MS;
 
-// Configurable thresholds
-const LARGE_TX_THRESHOLD      = parseFloat(process.env.AML_LARGE_TX_THRESHOLD      ?? '10000');
-const STRUCTURING_THRESHOLD   = parseFloat(process.env.AML_STRUCTURING_THRESHOLD   ?? '1000');
-const STRUCTURING_COUNT       = parseInt(  process.env.AML_STRUCTURING_COUNT        ?? '3',   10);
-const VELOCITY_LIMIT          = parseFloat(process.env.AML_VELOCITY_LIMIT           ?? '10000');
-const WINDOW_MS               = 24 * 60 * 60 * 1000; // 24 hours
-
-// Pre-submission rules that block transactions
-const PRE_SUBMISSION_RULES = [
-  {
-    id: 'LARGE_TX',
-    description: 'Single transaction exceeds reporting threshold',
-    severity: 'HIGH',
-    check: (tx) => parseFloat(tx.amount) >= LARGE_TX_THRESHOLD,
-  },
-  {
-    id: 'STRUCTURING',
-    description: `More than ${STRUCTURING_COUNT} transactions below $${STRUCTURING_THRESHOLD} in 24h (structuring)`,
-    severity: 'HIGH',
-    check: (tx, history) => {
-      const windowStart = new Date(new Date(tx.createdAt) - WINDOW_MS);
-      const recent = history.filter(h =>
-        h.senderId === tx.senderId &&
-        new Date(h.createdAt) >= windowStart &&
-        parseFloat(h.amount) < STRUCTURING_THRESHOLD
-      );
-      return recent.length >= STRUCTURING_COUNT && parseFloat(tx.amount) < STRUCTURING_THRESHOLD;
-    },
-  },
-  {
-    id: 'VELOCITY',
-    description: `Total sent in 24h exceeds $${VELOCITY_LIMIT}`,
-    severity: 'HIGH',
-    check: (tx, history) => {
-      const windowStart = new Date(new Date(tx.createdAt) - WINDOW_MS);
-      const total = history
-        .filter(h => h.senderId === tx.senderId && new Date(h.createdAt) >= windowStart)
-        .reduce((sum, h) => sum + parseFloat(h.amount), 0);
-      return total + parseFloat(tx.amount) > VELOCITY_LIMIT;
-    },
-  },
-];
+// Durable Dead Letter Queue for AML alerts that fail to persist to the database.
+// BSA/AML regulations require complete, durable retention of all monitoring alerts.
+const ALERT_DLQ_KEY = 'compliance:dlq:alerts';
 
 // Post-submission rules for monitoring
 const ALL_RULES = [
   ...PRE_SUBMISSION_RULES,
+  ...POST_SUBMISSION_ONLY_RULES,
   {
     id: 'UNVERIFIED_USER',
     description: 'Transaction from unverified user',
@@ -110,7 +79,7 @@ class AMLMonitor {
               riskScore:     riskScore.score ?? 0,
               riskLevel:     riskScore.level ?? 'UNKNOWN',
             },
-          }).catch(() => {}) // don't fail the payment if alert persistence fails
+          }).catch(err => this._handleAlertPersistenceFailure(err, alert, tx, riskScore))
         ));
       }
 
@@ -122,6 +91,40 @@ class AMLMonitor {
     }
 
     return { alerts, riskScore, flagged: alerts.length > 0 };
+  }
+
+  // Handle a failed alert persistence: log, emit metric, and durably enqueue to the DLQ.
+  // Never silently drop an AML alert — BSA/AML requires durable retention.
+  async _handleAlertPersistenceFailure(err, alert, tx, riskScore) {
+    amlLogger.error(
+      { err, alert, txId: tx.id, ruleId: alert.ruleId },
+      'compliance.aml_alert.persist_failed'
+    );
+
+    if (typeof amlLogger.increment === 'function') {
+      amlLogger.increment('aml_alert_persistence_failures_total');
+    }
+
+    const record = {
+      transactionId: tx.id,
+      userId:        tx.senderId,
+      ruleId:        alert.ruleId,
+      severity:      alert.severity,
+      description:   alert.description,
+      riskScore:     riskScore.score ?? 0,
+      riskLevel:     riskScore.level ?? 'UNKNOWN',
+      failedAt:      new Date().toISOString(),
+      reason:        err?.message ?? String(err),
+    };
+
+    try {
+      await redis.rpush(ALERT_DLQ_KEY, JSON.stringify(record));
+    } catch (dlqError) {
+      amlLogger.error(
+        { err: dlqError, record },
+        'compliance.aml_alert.dlq_write_failed'
+      );
+    }
   }
 
   // Set account hold for review

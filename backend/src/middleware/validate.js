@@ -274,9 +274,22 @@ export const rules = {
   signMultiSigTx: [
     body('txId').trim().notEmpty().withMessage('txId is required'),
     body('signerSecret')
+      .if(body('signedXdr').not().exists())
       .trim()
       .matches(STELLAR_SECRET_KEY)
       .withMessage('Invalid signer secret key'),
+    body('signedXdr')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .isBase64()
+      .withMessage('signedXdr must be a base64-encoded transaction envelope'),
+    body('signerPublicKey')
+      .optional()
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid signer public key'),
   ],
 
   submitMultiSigTx: [body('txId').trim().notEmpty().withMessage('txId is required')],

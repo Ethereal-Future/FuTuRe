@@ -93,6 +93,7 @@ services:
     environment:
       APP_ENV: development
       PORT: 3001
+      TZ: UTC
       DATABASE_URL: postgresql://future_admin:dev_password@postgres:5432/future_remittance
       REDIS_URL: redis://redis:6379
       STELLAR_NETWORK: testnet
@@ -120,6 +121,8 @@ services:
     depends_on:
       - backend
     ports:
+      # Local Vite (Dockerfile.dev) listens on 3000. The production
+      # frontend/Dockerfile nginx runtime listens on 8080 as non-root.
       - "3000:3000"
     volumes:
       - ./frontend/src:/app/src

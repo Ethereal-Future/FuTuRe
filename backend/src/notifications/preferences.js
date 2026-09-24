@@ -11,6 +11,7 @@ export const DEFAULT_PREFERENCES = {
   push: true,
   sms: false,
   inApp: true,
+  locale: 'en',
   quietHoursStart: 22, // 10 PM
   quietHoursEnd: 7,    // 7 AM
   weeklyDigestEnabled: false,
@@ -37,6 +38,17 @@ const prefsStore = new Map();
  * @returns {object}
  */
 export async function getPreferences(userId) {
+  let notificationsOn = DEFAULT_PREFERENCES.notificationsOn ?? true;
+  try {
+    const setting = await prisma.setting.findUnique({
+      where: { userId },
+      select: { notificationsOn: true },
+    });
+    if (setting) notificationsOn = setting.notificationsOn;
+  } catch (err) {
+    logger.warn('notifications.preferences.settingRead.failed', { userId, error: err.message });
+  }
+
   try {
     // Fetch from database first
     const notificationPrefs = await prisma.notificationPreference.findUnique({
@@ -46,6 +58,12 @@ export async function getPreferences(userId) {
     if (notificationPrefs) {
       return {
         ...DEFAULT_PREFERENCES,
+        notificationsOn,
+        locale: notificationPrefs.locale ?? 'en',
+        email: notificationPrefs.emailEnabled,
+        push: notificationPrefs.pushEnabled,
+        sms: notificationPrefs.smsEnabled,
+        inApp: notificationPrefs.inAppEnabled,
         emailEnabled: notificationPrefs.emailEnabled,
         pushEnabled: notificationPrefs.pushEnabled,
         smsEnabled: notificationPrefs.smsEnabled,
@@ -69,6 +87,7 @@ export async function getPreferences(userId) {
   const stored = prefsStore.get(userId) ?? {};
   return {
     ...DEFAULT_PREFERENCES,
+    notificationsOn,
     ...stored,
     types: { ...DEFAULT_PREFERENCES.types, ...(stored.types ?? {}) },
   };
@@ -116,6 +135,19 @@ export async function updatePreferences(userId, updates) {
     }
   }
 
+  if (typeof updates.notificationsOn !== 'undefined') {
+    try {
+      await prisma.setting.upsert({
+        where: { userId },
+        update: { notificationsOn: updates.notificationsOn },
+        create: { userId, notificationsOn: updates.notificationsOn },
+      });
+    } catch (err) {
+      logger.error('notifications.preferences.settingWrite.failed', { userId, error: err.message });
+      throw err;
+    }
+  }
+
   try {
     // Upsert notification preferences to database
     const updateData = {};
@@ -124,6 +156,7 @@ export async function updatePreferences(userId, updates) {
     if (typeof updates.push !== 'undefined') updateData.pushEnabled = updates.push;
     if (typeof updates.sms !== 'undefined') updateData.smsEnabled = updates.sms;
     if (typeof updates.inApp !== 'undefined') updateData.inAppEnabled = updates.inApp;
+    if (typeof updates.locale !== 'undefined') updateData.locale = updates.locale;
     if (typeof updates.quietHoursStart !== 'undefined') updateData.quietHoursStart = updates.quietHoursStart;
     if (typeof updates.quietHoursEnd !== 'undefined') updateData.quietHoursEnd = updates.quietHoursEnd;
     if (typeof updates.weeklyDigestEnabled !== 'undefined') updateData.weeklyDigestEnabled = updates.weeklyDigestEnabled;

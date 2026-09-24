@@ -5,9 +5,8 @@ variable "aws_region" {
 }
 
 variable "environment" {
-  description = "Deployment environment (production, staging)."
+  description = "Deployment environment (production, staging). No default — must always be passed explicitly (e.g. via -var-file or -var) so an apply never silently provisions production-grade infrastructure (Multi-AZ RDS, deletion protection, final-snapshot requirement)."
   type        = string
-  default     = "production"
 
   validation {
     condition     = contains(["production", "staging"], var.environment)
