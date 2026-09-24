@@ -37,6 +37,71 @@ function validationError(message) {
   return err;
 }
 
+const DEFAULT_MULTISIG_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+function getMultiSigTtlSeconds() {
+  const configured = Number(process.env.MULTISIG_TX_TTL_SECONDS);
+  return Number.isFinite(configured) && configured > 0 ? Math.min(configured, 30 * 24 * 60 * 60) : DEFAULT_MULTISIG_TTL_SECONDS;
+}
+
+function conflictError(message, details = {}) {
+  const error = new Error(message);
+  error.status = 409;
+  error.code = 'MULTISIG_CONFLICT';
+  error.details = details;
+  return error;
+}
+
+function sequenceDriftError(expected, actual) {
+  const error = conflictError(`Sequence drift detected: pending transaction expects sequence ${expected}, but account is now at ${actual}. Collect fresh signatures before retrying.`, { expectedSequence: String(expected), actualSequence: String(actual) });
+  error.code = 'MULTISIG_SEQUENCE_DRIFT';
+  return error;
+}
+
+function getTransactionSequence(transaction) {
+  return typeof transaction.sequenceNumber === 'function' ? BigInt(transaction.sequenceNumber()) : null;
+}
+
+function mergeStoredSignatures(transaction, records) {
+  if (!Array.isArray(transaction.signatures)) return transaction;
+  transaction.signatures.length = 0;
+  for (const record of records) {
+    transaction.signatures.push(StellarSDK.xdr.DecoratedSignature.fromXDR(record.signature, 'base64'));
+  }
+  return transaction;
+}
+
+function getRequiredThreshold(transaction, account) {
+  if (!Array.isArray(transaction.operations)) return null;
+  const requiresHigh = transaction.operations.some((operation) => {
+    const type = operation.type || operation.body?.().switch?.()?.name;
+    return type === 'setOptions' || type === 'accountMerge' || type === 'set_options' || type === 'account_merge';
+  });
+  const threshold = requiresHigh ? account.thresholds.high_threshold : account.thresholds.med_threshold;
+  return Number(threshold ?? 0);
+}
+
+export function verifyThresholdsSatisfied(transaction, account) {
+  const requiredWeight = getRequiredThreshold(transaction, account);
+  if (requiredWeight === null) return { requiredWeight: null, totalWeight: null, remainingWeight: 0, validSigners: [] };
+  const candidates = new Map();
+  const masterWeight = Number(account.thresholds.master_key_weight ?? 0);
+  if (masterWeight > 0) candidates.set(account.accountId || account.id || account.publicKey, masterWeight);
+  for (const signer of account.signers || []) {
+    if (signer.weight > 0) candidates.set(signer.key, Number(signer.weight));
+  }
+  const validSigners = verifyTransactionSignatures(transaction, [...candidates.keys()], { networkPassphrase: getNetworkPassphrase() }).map((entry) => entry.publicKey);
+  const totalWeight = [...new Set(validSigners)].reduce((sum, key) => sum + (candidates.get(key) || 0), 0);
+  if (totalWeight < requiredWeight) {
+    const error = new Error(`InsufficientSignatures: Required weight ${requiredWeight}, but accumulated only ${totalWeight}`);
+    error.status = 400;
+    error.code = 'INSUFFICIENT_MULTISIG_WEIGHT';
+    error.details = { requiredWeight, totalWeight, remainingWeight: requiredWeight - totalWeight, validSigners };
+    throw error;
+  }
+  return { requiredWeight, totalWeight, remainingWeight: 0, validSigners };
+}
+
 /**
  * Guard against converting an account into a state where it can no longer
  * sign (#1289). Revoking the master key (masterWeight 0) is only allowed when
@@ -203,8 +268,9 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
  * @example
  * const { txId, txXdr } = await buildMultiSigTransaction('GSRC...', 'GDST...', '100', 'USDC');
  */
-export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM') {
-  const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
+export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM', options = {}) {
+  const submissionSourcePublicKey = options.channelAccount || sourcePublicKey;
+  const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(submissionSourcePublicKey));
 
   const asset =
     assetCode === 'XLM'
@@ -222,10 +288,11 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
         amount: amount.toString(),
       })
     )
-    .setTimeout(300)
+    .setTimeout(options.ttlSeconds || getMultiSigTtlSeconds())
     .build();
 
   const txXdr = transaction.toXDR();
+  const sourceSequence = getTransactionSequence(transaction);
   const txId = `multisig-${randomUUID()}`;
   const expiresAt = new Date(Date.now() + 5 * 60 * 1000);
 
@@ -233,7 +300,10 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
     data: {
       txId,
       txXdr,
+      baseTxXdr: txXdr,
       sourcePublicKey,
+      submissionSourcePublicKey,
+      ...(sourceSequence !== null && { sourceSequence }),
       destination,
       amount: amount.toString(),
       assetCode,
@@ -343,16 +413,45 @@ export async function addSignature(txId, signer) {
 
   const signedAt = new Date().toISOString();
   const updatedSignatures = [...signatures, ...addedSigners.map((publicKey) => ({ publicKey, signedAt }))];
-  const updatedXdr = transaction.toXDR();
-
-  // Compare-and-swap on the envelope so two concurrent signers can't
-  // overwrite each other's signature.
-  const { count } = await prisma.pendingMultiSigTx.updateMany({
-    where: { txId, status: 'pending', txXdr: pending.txXdr },
-    data: { txXdr: updatedXdr, signatures: updatedSignatures },
+  const newSignatureRecords = addedSigners.map((publicKey) => {
+    const index = signerKeys.indexOf(publicKey);
+    const decorated = transaction.signatures[index];
+    return { txId, signerPublicKey: publicKey, signature: decorated?.toXDR ? decorated.toXDR('base64') : transaction.toXDR() };
   });
-  if (count !== 1) {
-    throw new Error(`Transaction ${txId} was modified concurrently, please retry signing`);
+  if (prisma.multiSigSignature) {
+    try {
+      for (const record of newSignatureRecords) {
+        await prisma.multiSigSignature.create({ data: record });
+      }
+    } catch (error) {
+      if (error?.code === 'P2002') throw new Error(`Signer already signed transaction ${txId}`);
+      throw error;
+    }
+  }
+
+  // The signature table is the source of truth. Rebuild from all rows after
+  // every insert so concurrent signers cannot replace one another's XDR.
+  let compositeRecords = newSignatureRecords;
+  if (prisma.multiSigSignature) {
+    compositeRecords = await prisma.multiSigSignature.findMany({ where: { txId }, orderBy: { createdAt: 'asc' } });
+  }
+  const baseTransaction = parseTransactionXdr(pending.baseTxXdr || pending.txXdr, networkPassphrase);
+  const updatedXdr = prisma.multiSigSignature
+    ? mergeStoredSignatures(baseTransaction, compositeRecords).toXDR()
+    : transaction.toXDR();
+  const durableSignatures = compositeRecords.map((record) => ({ publicKey: record.signerPublicKey, signedAt: record.createdAt?.toISOString?.() || signedAt }));
+
+  if (!prisma.multiSigSignature) {
+    await prisma.pendingMultiSigTx.update({ where: { txId }, data: { txXdr: updatedXdr, signatures: durableSignatures } });
+  } else {
+    const { count } = await prisma.pendingMultiSigTx.updateMany({
+      where: { txId, status: 'pending', txXdr: pending.txXdr },
+      data: { txXdr: updatedXdr, signatures: durableSignatures },
+    });
+    if (count !== 1) {
+      const latest = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
+      throw conflictError(`Transaction ${txId} was modified concurrently, please retry signing`, { currentSignatures: latest?.signatures || durableSignatures });
+    }
   }
 
   for (const publicKey of addedSigners) {
@@ -386,10 +485,33 @@ export async function submitMultiSigTransaction(txId) {
   if (pending.expiresAt <= new Date()) throw new Error(`Transaction ${txId} has expired`);
 
   const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, getNetworkPassphrase());
+  const submissionSource = pending.submissionSourcePublicKey || pending.sourcePublicKey;
+  const currentAccount = prisma.multiSigSignature
+    ? await withHorizonRetry(() => getHorizonServer().loadAccount(submissionSource))
+    : null;
+  if (currentAccount && pending.sourceSequence !== null && pending.sourceSequence !== undefined) {
+    const currentSequence = BigInt(currentAccount.sequence);
+    if (currentSequence !== BigInt(pending.sourceSequence)) {
+      throw sequenceDriftError(pending.sourceSequence, currentSequence);
+    }
+  }
+  if (currentAccount) verifyThresholdsSatisfied(transaction, { ...currentAccount, accountId: submissionSource });
+
+  // Claim the row before touching Horizon. Only one request can transition a
+  // pending transaction to submitting; losers receive a deterministic 409.
+  if (prisma.multiSigSignature) {
+    const claimed = await prisma.pendingMultiSigTx.updateMany({
+      where: { txId, status: 'pending' },
+      data: { status: 'submitting' },
+    });
+    if (claimed.count !== 1) throw conflictError(`Transaction ${txId} is already being submitted or executed`);
+  }
+
   let result;
   try {
     result = await withHorizonRetry(() => getHorizonServer().submitTransaction(transaction));
   } catch (err) {
+    if (prisma.multiSigSignature) await prisma.pendingMultiSigTx.updateMany({ where: { txId, status: 'submitting' }, data: { status: 'pending' } });
     const code = extractStellarErrorCode(err);
     const { userMessage } = getStellarErrorInfo(code);
     logger.error('multiSig.submitMultiSigTransaction.failed', { txId, code, error: err.message });

@@ -269,6 +269,8 @@ export const rules = {
         return parseFloat(amount).toFixed(7);
       }),
     body('assetCode').optional().trim().matches(ASSET_CODE).withMessage('Invalid asset code'),
+    body('ttlSeconds').optional().isInt({ min: 60, max: 2592000 }).withMessage('ttlSeconds must be between 60 seconds and 30 days'),
+    body('channelAccount').optional().trim().matches(STELLAR_PUBLIC_KEY).withMessage('Invalid channel account'),
   ],
 
   signMultiSigTx: [
