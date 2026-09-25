@@ -69,7 +69,7 @@ import { securityMiddleware } from './middleware/securityHeaders.js';
 import { sanitizeInputs } from './middleware/sanitize.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { closeAMMState } from './services/amm.js';
-import { csrfTokenMiddleware, validateCSRFMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
+import { csrfTokenMiddleware, validateCSRFMiddleware, validateOriginMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
 import { validateEncryptionKey } from './db/encryption.js';
 
 dotenv.config();
@@ -110,7 +110,7 @@ app.use(
       cb(null, false);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'X-FuTuRe-Client'],
     credentials: true
   })
 );
@@ -143,6 +143,7 @@ app.use(requestIdMiddleware);
 app.use(requestLogger);
 
 // CSRF protection
+app.use(validateOriginMiddleware);
 app.use(csrfTokenMiddleware);
 app.use(validateCSRFMiddleware);
 
