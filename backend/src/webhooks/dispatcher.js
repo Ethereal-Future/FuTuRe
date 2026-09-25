@@ -1,5 +1,6 @@
 import { getWebhook, getWebhooksForAccount, signPayload } from './store.js';
 import { validateWebhookUrl } from './urlValidator.js';
+import { decrypt } from '../db/encryption.js';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
@@ -144,6 +145,19 @@ async function recordSuccess(webhook) {
   }
 }
 
+/**
+ * Resolve the plaintext signing secret for a webhook. Secrets are encrypted at
+ * rest (AES-256-GCM) and are only decrypted in-memory here, immediately before
+ * the HMAC is computed, so a database read leak never exposes usable keys.
+ */
+function resolveSigningSecret(webhook) {
+  const key = process.env.WEBHOOK_SECRET_KEY;
+  if (!key) {
+    throw new Error('WEBHOOK_SECRET_KEY is not configured');
+  }
+  return decrypt(webhook.signingSecret, key);
+}
+
 async function deliverOnce(webhook, payload) {
   // Re-check the URL at delivery time in case the resolved address changed
   // since registration (DNS rebinding into a private/internal range).
@@ -152,7 +166,7 @@ async function deliverOnce(webhook, payload) {
     throw new Error(`Webhook URL failed validation: ${validation.error}`);
   }
 
-  const signature = signPayload(webhook.signingSecret, payload);
+  const signature = signPayload(resolveSigningSecret(webhook), payload);
 
   const res = await fetch(webhook.url, {
     method: 'POST',
@@ -250,65 +264,4 @@ export async function dispatchEvent(accountId, eventType, data) {
       ),
     );
 
-    await Promise.all(
-      deliveries.map((d) =>
-        attemptDelivery(d).catch((err) => {
-          logger.error(
-            { webhookId: d.webhookId, error: err.message },
-            'Webhook delivery attempt threw',
-          );
-        }),
-      ),
-    );
-
-    return deliveries;
-  } catch (err) {
-    logger.error({ accountId, eventType, error: err.message }, 'dispatchEvent failed');
-    return [];
-  }
-}
-
-/**
- * Scheduler tick: find every delivery that is due for a retry and attempt it.
- * Replaces the previous in-process setTimeout chain so pending retries are
- * durable across restarts.
- *
- * Deliveries run with bounded parallelism (global + per-host) so slow or dead
- * subscriber endpoints no longer block healthy webhooks or the event loop.
- */
-export async function processDueWebhookDeliveries() {
-  const due = await prisma.webhookDelivery.findMany({
-    where: { status: 'PENDING', nextAttemptAt: { lte: new Date() } },
-    take: 100,
-  });
-
-  if (!due.length) return 0;
-
-  const globalLimit = createLimiter(MAX_CONCURRENT_DELIVERIES);
-  const hostLimiters = new Map();
-  const hostLimiterFor = (key) => {
-    let limiter = hostLimiters.get(key);
-    if (!limiter) {
-      limiter = createLimiter(MAX_CONCURRENT_PER_HOST);
-      hostLimiters.set(key, limiter);
-    }
-    return limiter;
-  };
-
-  await Promise.allSettled(
-    due.map((delivery) =>
-      globalLimit(async () => {
-        const webhook = await getWebhook(delivery.webhookId);
-        const hostKey = webhook ? hostKeyFor(webhook) : `delivery:${delivery.id}`;
-        return hostLimiterFor(hostKey)(() => attemptDelivery(delivery));
-      }).catch((err) => {
-        logger.error(
-          { deliveryId: delivery.id, error: err.message },
-          'Webhook delivery retry threw',
-        );
-      }),
-    ),
-  );
-
-  return due.length;
-}
+    await 
