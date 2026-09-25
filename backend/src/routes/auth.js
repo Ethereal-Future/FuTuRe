@@ -4,6 +4,9 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
+import { createUser, findUser, getUserById } from '../auth/userStore.js';
+import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../auth/tokens.js';
+import { saveRefreshToken, consumeRefreshToken, revokeFamily, revokeUserTokens } from '../auth/refreshTokenStore.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import {
   signAccessToken,
@@ -41,6 +44,12 @@ import kycCollector from '../compliance/kycCollector.js';
 import auditLogger from '../security/auditLogger.js';
 
 const router = express.Router();
+
+function issueRefreshToken(payload, familyId) {
+  const { token, jti, familyId: family, expiresAt } = signRefreshToken(payload, { familyId });
+  saveRefreshToken({ jti, familyId: family, userId: payload.sub, expiresAt });
+  return token;
+}
 
 function clearRefreshTokenCookie(res) {
   const config = getConfig();
@@ -308,6 +317,27 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
   setRefreshTokenCookie(res, refreshToken);
   res.json({
     accessToken: signAccessToken(payload),
+    refreshToken: issueRefreshToken(payload),
+  });
+});
+
+// POST /api/auth/refresh
+router.post('/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+  let claims;
+  try {
+    claims = verifyRefreshToken(refreshToken);
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired refresh token' });
+  }
+  const { sub, username, jti, familyId } = claims;
+  const result = consumeRefreshToken(jti, familyId);
+  if (!result.ok) {
+    const error = result.reason === 'replay'
+      ? 'Refresh token reuse detected; session revoked'
+      : 'Invalid or expired refresh token';
+    return res.status(401).json({ error });
     sessionId: session.id,
   });
 });
@@ -370,8 +400,24 @@ router.post('/refresh', async (req, res) => {
   } catch {
     sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Invalid or expired refresh token');
   }
+  const payload = { sub, username };
+  res.json({
+    accessToken: signAccessToken(payload),
+    refreshToken: issueRefreshToken(payload, familyId),
+  });
 });
 
+// POST /api/auth/logout — revokes the supplied refresh token family, or all user tokens if none given
+router.post('/logout', requireAuth, (req, res) => {
+  const { refreshToken } = req.body ?? {};
+  if (refreshToken) {
+    try {
+      const { familyId, sub } = verifyRefreshToken(refreshToken);
+      if (sub === req.user.sub) revokeFamily(familyId);
+    } catch { /* ignore invalid token */ }
+  } else {
+    revokeUserTokens(req.user.sub);
+  }
 /**
  * @swagger
  * /api/auth/logout:

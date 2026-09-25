@@ -844,3 +844,28 @@ model AmmTrade {
   @@index([poolId, createdAt])
   @@index([traderId])
 }
+
+model RefreshToken {
+  jti       String    @id
+  familyId  String
+  userId    String
+  isUsed    Boolean   @default(false)
+  isRevoked Boolean   @default(false)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+
+  @@index([userId])
+}

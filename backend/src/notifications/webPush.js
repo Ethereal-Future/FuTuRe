@@ -42,6 +42,7 @@ export function isVapidConfigured() {
 const byUserId = new Map();
 // publicKey -> subscription
 const byPublicKey = new Map();
+/**
  * Web Push — stores push subscriptions in Redis, keyed by
  *   webpush:user:{userId}   — full { subscription, publicKey } object
  *   webpush:key:{publicKey} — raw subscription object
@@ -52,10 +53,7 @@ const byPublicKey = new Map();
  *
  * Migrated as part of Issue #1125.
  */
-import https from 'https';
-import { URL } from 'url';
 import { RedisBackend } from '../cache/redis.js';
-import logger from '../config/logger.js';
 
 const redis = new RedisBackend();
 
@@ -112,7 +110,7 @@ export async function getSubscriptionByPublicKey(publicKey) {
  * Remove a user's push subscription from both indexes.
  * @param {string} userId
  */
-export async function removeSubscription(userId) {
+export async function removeSubscriptionForUser(userId) {
   const record = await redis.get(userKey(userId));
   if (record?.publicKey) {
     await redis.delete(publicKeyKey(record.publicKey));
@@ -159,9 +157,11 @@ export function removeSubscription(subscription) {
 export async function sendWebPush(subscription, payload, options = {}) {
   if (!subscription?.endpoint) return { sent: false, reason: 'no_subscription' };
 
-  const vapidDetails = options.vapidDetails ?? (vapidConfigured
-    ? { subject: VAPID_SUBJECT, publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY }
-    : null);
+  const vapidDetails =
+    options.vapidDetails ??
+    (vapidConfigured
+      ? { subject: VAPID_SUBJECT, publicKey: VAPID_PUBLIC_KEY, privateKey: VAPID_PRIVATE_KEY }
+      : null);
 
   if (!vapidDetails) {
     logger.warn('webpush.skipped.vapidNotConfigured', { endpoint: subscription.endpoint });

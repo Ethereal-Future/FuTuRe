@@ -1,3 +1,57 @@
+/**
+ * PostgreSQL connection pool with bounded sizing and metrics (ISSUE-064)
+ *
+ * poolMax = floor(RDS_MAX_CONNECTIONS * 0.7 / MAX_ECS_TASKS), capped by CPU count.
+ * In production, DATABASE_URL should point at PgBouncer (see infra/pgbouncer).
+ */
+import os from 'os';
+
+const RESERVED_RATIO = 0.7;
+export const POOL_WAIT_ALERT_THRESHOLD = 5;
+
+export function computePoolMax(env = process.env) {
+  const dbMax = parseInt(env.RDS_MAX_CONNECTIONS, 10) || 100;
+  const tasks = parseInt(env.MAX_ECS_TASKS, 10) || 10;
+  const cpuCap = Math.max(2, os.cpus().length * 4);
+  const safeMax = Math.max(1, Math.min(Math.floor((dbMax * RESERVED_RATIO) / tasks), cpuCap));
+  const requested = parseInt(env.DB_POOL_MAX, 10);
+  if (requested > 0) {
+    if (requested > safeMax) {
+      console.warn(`[db] DB_POOL_MAX=${requested} exceeds safe bound ${safeMax}; clamping`);
+      return safeMax;
+    }
+    return requested;
+  }
+  return safeMax;
+}
+
+/** Create a pool using an injected Pool class (e.g. from `pg`). */
+export function createPool(Pool, env = process.env) {
+  return new Pool({
+    connectionString: env.DATABASE_URL,
+    max: computePoolMax(env),
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+  });
+}
+
+/** Prometheus-style metrics for a pg Pool. */
+export function getPoolMetrics(pool) {
+  const total = pool.totalCount ?? 0;
+  const idle = pool.idleCount ?? 0;
+  const waiting = pool.waitingCount ?? 0;
+  return {
+    pg_pool_active_connections: total - idle,
+    pg_pool_idle_connections: idle,
+    pg_pool_waiting_queries: waiting,
+    alert: waiting > POOL_WAIT_ALERT_THRESHOLD,
+  };
+}
+
+export function formatPoolMetrics(pool) {
+  const { alert, ...m } = getPoolMetrics(pool);
+  return Object.entries(m).map(([k, v]) => `${k} ${v}`).join('\n') + '\n';
+}
 import pg from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import pkg from '@prisma/client';
@@ -57,6 +111,99 @@ const pool = new Pool({
   connectionTimeoutMillis: 5_000,
 });
 
+// Optional read-replica pool (e.g. RDS reader endpoint). Falls back to primary.
+const readUrl = process.env.DATABASE_READ_URL;
+const hasReplica = Boolean(readUrl) && readUrl !== process.env.DATABASE_URL;
+const readPool = hasReplica
+  ? new Pool({ connectionString: readUrl, max: 10, idleTimeoutMillis: 30_000, connectionTimeoutMillis: 5_000 })
+  : null;
+
+const READ_OPS = new Set(['findUnique', 'findUniqueOrThrow', 'findFirst', 'findFirstOrThrow', 'findMany', 'count', 'aggregate', 'groupBy']);
+
+// Latency metrics: primary vs replica
+export const dbMetrics = {
+  primary: { count: 0, totalMs: 0 },
+  replica: { count: 0, totalMs: 0 },
+};
+
+function createClient(p, target) {
+  const client = new PrismaClient({
+    adapter: new PrismaPg(p),
+    log: [
+      { emit: 'event', level: 'error' },
+      { emit: 'event', level: 'warn' },
+    ],
+  });
+  client.$on('error', (e) => logger.error('db.error', { target, message: e.message }));
+  client.$on('warn',  (e) => logger.warn('db.warn',  { target, message: e.message }));
+  return client.$extends({
+    query: {
+      async $allOperations({ args, query }) {
+        const start = performance.now();
+        try {
+          return await query(args);
+        } finally {
+          const m = dbMetrics[target];
+          m.count += 1;
+          m.totalMs += performance.now() - start;
+        }
+      },
+    },
+  });
+}
+
+const prismaWrite = createClient(pool, 'primary');
+const prismaRead = readPool ? createClient(readPool, 'replica') : prismaWrite;
+
+// Primary client that transparently routes read-only model queries to the replica.
+// Writes and interactive $transaction always hit the primary. Use `withPrimary()`
+// (or prismaWrite directly) for read-your-own-writes flows.
+let forcePrimaryDepth = 0;
+const prisma = readPool
+  ? prismaWrite.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ model, operation, args, query }) {
+            if (forcePrimaryDepth === 0 && READ_OPS.has(operation)) {
+              const delegate = prismaRead[model.charAt(0).toLowerCase() + model.slice(1)];
+              return delegate[operation](args);
+            }
+            return query(args);
+          },
+        },
+      },
+    })
+  : prismaWrite;
+
+/** Run fn with all queries pinned to the primary (read-your-own-writes). */
+export async function withPrimary(fn) {
+  forcePrimaryDepth += 1;
+  try {
+    return await fn(prismaWrite);
+  } finally {
+    forcePrimaryDepth -= 1;
+  }
+}
+
+export function getDBMetrics() {
+  const avg = ({ count, totalMs }) => ({ count, avgMs: count ? totalMs / count : 0 });
+  return { replicaEnabled: Boolean(readPool), primary: avg(dbMetrics.primary), replica: avg(dbMetrics.replica) };
+}
+
+export { prismaRead, prismaWrite };
+
+export async function connectDB() {
+  await prismaWrite.$connect();
+  if (readPool) await prismaRead.$connect();
+  logger.info('db.connected', { replica: Boolean(readPool) });
+}
+
+export async function disconnectDB() {
+  await prismaWrite.$disconnect();
+  if (readPool) {
+    await prismaRead.$disconnect();
+    await readPool.end();
+  }
 // Layer 1 — PostgreSQL server-side timeout.
 // Primary enforcement is the startup `options` parameter set in
 // buildConnectionString. The session-level SET below is only a fallback for

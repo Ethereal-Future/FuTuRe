@@ -364,6 +364,16 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
     }
   }
 
+  // Separate access/refresh secrets allow independent rotation; fall back to JWT_SECRET.
+  const jwtAccessSecret =
+    maybeDecryptEnvValue(env.JWT_ACCESS_SECRET, encryptionKey, { envVarName: 'JWT_ACCESS_SECRET' }) || jwtSecret;
+  const jwtRefreshSecret =
+    maybeDecryptEnvValue(env.JWT_REFRESH_SECRET, encryptionKey, { envVarName: 'JWT_REFRESH_SECRET' }) ||
+    (jwtSecret ? `${jwtSecret}:refresh` : jwtSecret);
+  if (resolvedAppEnv === 'production' && env.JWT_ACCESS_SECRET && env.JWT_ACCESS_SECRET === env.JWT_REFRESH_SECRET) {
+    throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must differ');
+  }
+
   const watchFlag = parseBoolean(env.CONFIG_WATCH);
   const watchEnabled = resolvedAppEnv !== 'test' && watchFlag;
 
@@ -419,6 +429,12 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
     },
     security: {
       jwtSecret,
+      jwtAccessSecret,
+      jwtRefreshSecret,
+    },
+    database: {
+      url: env.DATABASE_URL,
+      readUrl: env.DATABASE_READ_URL || env.DATABASE_URL,
       biometricReauthThresholdXLM,
     },
     database: {

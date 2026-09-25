@@ -7,6 +7,9 @@ import { getIssuer } from '../config/assets.js';
 import logger from '../config/logger.js';
 import { getHorizonServer, withHorizonRetry } from './stellar.js';
 import { extractStellarErrorCode, getStellarErrorInfo } from '../utils/stellarErrors.js';
+import { sendNotification } from '../notifications/service.js';
+import { dispatchEvent } from '../webhooks/dispatcher.js';
+import { normalizeSigner, validateThresholds } from './multiSigValidation.js';
 import {
   InvalidSignatureError,
   parseTransactionXdr,
@@ -22,11 +25,83 @@ function getNetworkPassphrase() {
   return isTestnet() ? StellarSDK.Networks.TESTNET : StellarSDK.Networks.PUBLIC;
 }
 
+export async function getAuthenticatedPublicKey(userId) {
+  if (!userId) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { publicKey: true } });
+  return user?.publicKey ?? null;
+}
+
+export async function isAuthorizedSigner(sourcePublicKey, callerPublicKey) {
+  if (!sourcePublicKey || !callerPublicKey) return false;
+  if (sourcePublicKey === callerPublicKey) return true;
+  try {
+    const account = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
+    return account.signers.some((signer) => signer.key === callerPublicKey && signer.weight > 0);
 function isValidStellarAddress(address) {
   try {
     return StellarSDK.StrKey.isValidEd25519PublicKey(address);
   } catch {
     return false;
+  }
+}
+
+export async function authorizePendingTransaction(txId, callerPublicKey) {
+  const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
+  if (!pending) return { pending: null, authorized: false };
+  return {
+    pending,
+    authorized: await isAuthorizedSigner(pending.sourcePublicKey, callerPublicKey),
+  };
+}
+
+export async function assertSourceSecretOwner(sourceSecret, callerPublicKey) {
+  let sourcePublicKey;
+  try {
+    sourcePublicKey = StellarSDK.Keypair.fromSecret(sourceSecret).publicKey();
+  } catch {
+    throw new Error('Invalid source secret');
+  }
+  if (sourcePublicKey !== callerPublicKey)
+    throw new Error('Authenticated user does not own the source account');
+  return sourcePublicKey;
+}
+
+export async function assertSignerSecretOwner(signerSecret, callerPublicKey) {
+  let signerPublicKey;
+  try {
+    signerPublicKey = StellarSDK.Keypair.fromSecret(signerSecret).publicKey();
+  } catch {
+    throw new Error('Invalid signer secret');
+  }
+  if (signerPublicKey !== callerPublicKey)
+    throw new Error('Authenticated user does not own the signer secret');
+  return signerPublicKey;
+}
+
+async function notifyRequiredSigners(sourcePublicKey, data, excludedPublicKeys = []) {
+  try {
+    const account = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
+    const signerKeys = account.signers
+      .filter((signer) => signer.weight > 0 && !excludedPublicKeys.includes(signer.key))
+      .map((signer) => signer.key);
+    if (!signerKeys.length) return;
+    const users = await prisma.user.findMany({
+      where: { publicKey: { in: signerKeys } },
+      select: { id: true, publicKey: true },
+    });
+    await Promise.allSettled(
+      users.flatMap((user) => [
+        sendNotification({
+          userId: user.id,
+          type: 'multisig_signature_required',
+          data,
+          publicKey: user.publicKey,
+        }),
+        dispatchEvent(user.id, 'MultiSigSignatureRequired', data),
+      ]),
+    );
+  } catch (error) {
+    logger.warn('multiSig.notifyRequiredSigners.failed', { sourcePublicKey, error: error.message });
   }
 }
 
@@ -205,6 +280,19 @@ export function buildMultiSigConversionOperations(signers, thresholds, masterWei
  */
 export async function createMultiSigAccount(sourceSecret, signers, thresholds, masterWeight = 1) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+  if (!Number.isInteger(masterWeight) || masterWeight < 0 || masterWeight > 255) {
+    throw new Error('Master weight must be an integer between 0 and 255');
+  }
+  if (!Array.isArray(signers) || signers.length === 0)
+    throw new Error('At least one signer is required');
+  const normalizedSigners = signers.map(normalizeSigner);
+  validateThresholds(
+    thresholds,
+    masterWeight + signers.reduce((total, signer) => total + signer.weight, 0),
+  );
+  const sourceAccount = await withHorizonRetry(() =>
+    getHorizonServer().loadAccount(sourceKeypair.publicKey()),
+  );
   validateMultiSigConversion(sourceKeypair.publicKey(), signers, thresholds, masterWeight);
 
   const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourceKeypair.publicKey()));
@@ -212,6 +300,22 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: getNetworkPassphrase(),
   });
+  txBuilder.addOperation(
+    StellarSDK.Operation.setOptions({
+      masterWeight,
+      lowThreshold: thresholds.low,
+      medThreshold: thresholds.medium,
+      highThreshold: thresholds.high,
+    }),
+  );
+
+  // Add each signer
+  for (const { signer } of normalizedSigners) {
+    txBuilder.addOperation(
+      StellarSDK.Operation.setOptions({
+        signer,
+      }),
+    );
 
   // Signers first, thresholds second, master weight last — so the master key
   // is never revoked before its replacements exist in the account.
@@ -227,7 +331,11 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
   } catch (err) {
     const code = extractStellarErrorCode(err);
     const { userMessage } = getStellarErrorInfo(code);
-    logger.error('multiSig.createMultiSigAccount.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    logger.error('multiSig.createMultiSigAccount.failed', {
+      publicKey: sourceKeypair.publicKey(),
+      code,
+      error: err.message,
+    });
     const mapped = new Error(userMessage);
     mapped.code = code;
     mapped.original = err;
@@ -271,6 +379,15 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
 export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM', options = {}) {
   const submissionSourcePublicKey = options.channelAccount || sourcePublicKey;
   const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(submissionSourcePublicKey));
+export async function buildMultiSigTransaction(
+  sourcePublicKey,
+  destination,
+  amount,
+  assetCode = 'XLM',
+) {
+  const sourceAccount = await withHorizonRetry(() =>
+    getHorizonServer().loadAccount(sourcePublicKey),
+  );
 
   const asset =
     assetCode === 'XLM'
@@ -286,7 +403,7 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
         destination,
         asset,
         amount: amount.toString(),
-      })
+      }),
     )
     .setTimeout(options.ttlSeconds || getMultiSigTtlSeconds())
     .build();
@@ -317,6 +434,14 @@ export async function buildMultiSigTransaction(sourcePublicKey, destination, amo
     type: 'MultiSigTransactionBuilt',
     data: { txId, destination, amount, assetCode },
     version: 1,
+  });
+  await notifyRequiredSigners(sourcePublicKey, {
+    txId,
+    sourcePublicKey,
+    destination,
+    amount: amount.toString(),
+    assetCode,
+    reason: 'A multi-signature transaction is waiting for your signature.',
   });
 
   return { txId, txXdr };
@@ -355,7 +480,8 @@ export async function addSignature(txId, signer) {
 
   const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
   if (!pending) throw new Error(`Transaction ${txId} not found`);
-  if (pending.status !== 'pending') throw new Error(`Transaction ${txId} is already ${pending.status}`);
+  if (pending.status !== 'pending')
+    throw new Error(`Transaction ${txId} is already ${pending.status}`);
   if (pending.expiresAt <= new Date()) throw new Error(`Transaction ${txId} has expired`);
 
   const networkPassphrase = getNetworkPassphrase();
@@ -411,6 +537,10 @@ export async function addSignature(txId, signer) {
     );
   }
 
+  const updatedSignatures = [
+    ...signatures,
+    { publicKey: signerPublicKey, signedAt: new Date().toISOString() },
+  ];
   const signedAt = new Date().toISOString();
   const updatedSignatures = [...signatures, ...addedSigners.map((publicKey) => ({ publicKey, signedAt }))];
   const newSignatureRecords = addedSigners.map((publicKey) => {
@@ -454,6 +584,24 @@ export async function addSignature(txId, signer) {
     }
   }
 
+  await eventMonitor.publishEvent(pending.sourcePublicKey, {
+    type: 'MultiSigTransactionSigned',
+    data: { txId, signerPublicKey, totalSignatures: updatedSignatures.length },
+    version: 1,
+  });
+  await notifyRequiredSigners(
+    pending.sourcePublicKey,
+    {
+      txId,
+      sourcePublicKey: pending.sourcePublicKey,
+      destination: pending.destination,
+      amount: pending.amount,
+      assetCode: pending.assetCode,
+      signerPublicKey,
+      reason: 'A new signature was added; your signature may still be required.',
+    },
+    [signerPublicKey],
+  );
   for (const publicKey of addedSigners) {
     await eventMonitor.publishEvent(pending.sourcePublicKey, {
       type: 'MultiSigTransactionSigned',
@@ -481,7 +629,8 @@ export async function addSignature(txId, signer) {
 export async function submitMultiSigTransaction(txId) {
   const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
   if (!pending) throw new Error(`Transaction ${txId} not found`);
-  if (pending.status !== 'pending') throw new Error(`Transaction ${txId} is already ${pending.status}`);
+  if (pending.status !== 'pending')
+    throw new Error(`Transaction ${txId} is already ${pending.status}`);
   if (pending.expiresAt <= new Date()) throw new Error(`Transaction ${txId} has expired`);
 
   const transaction = StellarSDK.TransactionBuilder.fromXDR(pending.txXdr, getNetworkPassphrase());
@@ -651,22 +800,65 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
   const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
   let sourceAccount;
   try {
-    sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(sourceKeypair.publicKey()));
+    sourceAccount = await withHorizonRetry(() =>
+      getHorizonServer().loadAccount(sourceKeypair.publicKey()),
+    );
   } catch (err) {
     const code = extractStellarErrorCode(err);
     const { userMessage } = getStellarErrorInfo(code);
-    logger.error('multiSig.updateMultiSigConfig.loadAccount.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    logger.error('multiSig.updateMultiSigConfig.loadAccount.failed', {
+      publicKey: sourceKeypair.publicKey(),
+      code,
+      error: err.message,
+    });
     const mapped = new Error(userMessage);
     mapped.code = code;
     mapped.original = err;
     throw mapped;
   }
 
+  const removed = new Set(updates.removeSigners ?? []);
+  const replacements = new Map(
+    (updates.addSigners ?? []).map((signer) => [signer.publicKey, signer.weight]),
+  );
+  const signerWeight =
+    sourceAccount.signers
+      .filter((signer) => signer.key !== sourceKeypair.publicKey())
+      .reduce((total, signer) => {
+        if (removed.has(signer.key)) return total;
+        return (
+          total + (replacements.has(signer.key) ? replacements.get(signer.key) : signer.weight)
+        );
+      }, 0) +
+    [...replacements.entries()]
+      .filter(([publicKey]) => !sourceAccount.signers.some((signer) => signer.key === publicKey))
+      .reduce((total, [, weight]) => total + weight, 0);
+  const nextThresholds = {
+    low: updates.thresholds?.low ?? sourceAccount.thresholds.low_threshold,
+    medium: updates.thresholds?.medium ?? sourceAccount.thresholds.med_threshold,
+    high: updates.thresholds?.high ?? sourceAccount.thresholds.high_threshold,
+  };
+  validateThresholds(
+    nextThresholds,
+    signerWeight + (updates.masterWeight ?? sourceAccount.thresholds.master_key_weight),
+  );
+
   const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: getNetworkPassphrase(),
   });
 
+  if (updates.thresholds || updates.masterWeight !== undefined) {
+    txBuilder.addOperation(
+      StellarSDK.Operation.setOptions({
+        ...(updates.masterWeight !== undefined && { masterWeight: updates.masterWeight }),
+        ...(updates.thresholds?.low !== undefined && { lowThreshold: updates.thresholds.low }),
+        ...(updates.thresholds?.medium !== undefined && {
+          medThreshold: updates.thresholds.medium,
+        }),
+        ...(updates.thresholds?.high !== undefined && { highThreshold: updates.thresholds.high }),
+      }),
+    );
   for (const signer of updates.addSigners || []) {
     if (!isValidStellarAddress(signer?.publicKey)) {
       throw validationError(`Invalid signer public key: ${signer?.publicKey}`);
@@ -685,7 +877,7 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
       txBuilder.addOperation(
         StellarSDK.Operation.setOptions({
           signer: { ed25519PublicKey: signer.publicKey, weight: signer.weight },
-        })
+        }),
       );
     }
   }
@@ -695,7 +887,7 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
       txBuilder.addOperation(
         StellarSDK.Operation.setOptions({
           signer: { ed25519PublicKey: publicKey, weight: 0 },
-        })
+        }),
       );
     }
   }
@@ -722,7 +914,11 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
   } catch (err) {
     const code = extractStellarErrorCode(err);
     const { userMessage } = getStellarErrorInfo(code);
-    logger.error('multiSig.updateMultiSigConfig.failed', { publicKey: sourceKeypair.publicKey(), code, error: err.message });
+    logger.error('multiSig.updateMultiSigConfig.failed', {
+      publicKey: sourceKeypair.publicKey(),
+      code,
+      error: err.message,
+    });
     const mapped = new Error(userMessage);
     mapped.code = code;
     mapped.original = err;
@@ -744,6 +940,15 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
  * @returns {Promise<Array<{txId: string, destination: string, amount: string, assetCode: string, signatures: object[], status: string, expiresAt: Date, createdAt: Date}>>}
  */
 export async function getPendingTransactions(sourcePublicKey) {
+  const rows = await prisma.pendingMultiSigTx.findMany({ where: { sourcePublicKey } });
+  return rows.map(({ txId, destination, amount, assetCode, signatures, status, createdAt }) => ({
+    txId,
+    destination,
+    amount,
+    assetCode,
+    signatures,
+    status,
+    createdAt,
   const rows = await prisma.pendingMultiSigTx.findMany({
     where: { sourcePublicKey, status: 'pending', expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
@@ -829,6 +1034,12 @@ export async function getExpiredTransactions(sourcePublicKey) {
   if (sourcePublicKey) where.sourcePublicKey = sourcePublicKey;
   const rows = await prisma.pendingMultiSigTx.findMany({ where });
   return rows.map(({ txId, destination, amount, assetCode, signatures, expiresAt, createdAt }) => ({
-    txId, destination, amount, assetCode, signatures, expiresAt, createdAt,
+    txId,
+    destination,
+    amount,
+    assetCode,
+    signatures,
+    expiresAt,
+    createdAt,
   }));
 }

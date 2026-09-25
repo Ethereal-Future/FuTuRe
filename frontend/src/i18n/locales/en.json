@@ -626,6 +626,23 @@
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
   },
   "notifications": {
+    "multisig_signature_required": {
+      "email": {
+        "subject": "Signature required for {{amount}} {{assetCode}} payment",
+        "body": "A multi-signature payment from {{sourcePublicKey}} to {{destination}} requires your signature.\n\nAmount: {{amount}} {{assetCode}}\nTransaction: {{txId}}\n\nSign it before it expires."
+      },
+      "push": {
+        "title": "Multi-signature approval required",
+        "body": "Your signature is required for a {{amount}} {{assetCode}} payment."
+      },
+      "sms": {
+        "body": "FutureRemit: Your signature is required for {{amount}} {{assetCode}}. Transaction: {{txId}}"
+      },
+      "inApp": {
+        "title": "Signature required",
+        "body": "Your signature is required for a {{amount}} {{assetCode}} payment."
+      }
+    },
     "transaction_received": {
       "email": {
         "subject": "You received {{amount}} {{asset}}",
