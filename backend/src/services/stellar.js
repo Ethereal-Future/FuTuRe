@@ -710,6 +710,7 @@ export async function sendPayment(
     data: {
       destination,
       amount,
+      asset: assetCode || 'XLM',
       hash: result.hash,
       feeBump: usedFeeBump,
       memo,

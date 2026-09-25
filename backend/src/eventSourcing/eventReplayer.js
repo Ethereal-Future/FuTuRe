@@ -1,20 +1,38 @@
 import eventStore from './eventStore.js';
 
+/**
+ * Bump whenever `applyEvent` changes how state is folded. Snapshots taken by an
+ * older reducer are then ignored and the aggregate is rebuilt from events.
+ */
+export const REDUCER_VERSION = 1;
+
 class EventReplayer {
+  /**
+   * Rebuild aggregate state from the latest snapshot at or below `toVersion`
+   * plus the events after it (#1362).
+   */
   async replay(aggregateId, toVersion = null) {
-    const snapshot = await eventStore.getSnapshot(aggregateId);
+    const snapshot = await eventStore.getSnapshot(aggregateId, {
+      maxVersion: toVersion,
+      reducerVersion: REDUCER_VERSION,
+    });
     let state = snapshot ? snapshot.state : {};
-    let fromVersion = snapshot ? snapshot.version : 0;
+    const fromVersion = snapshot ? snapshot.version : 0;
 
-    const events = await eventStore.getEvents(aggregateId, fromVersion);
-    const filteredEvents = toVersion 
-      ? events.filter(e => e.version <= toVersion)
-      : events;
-
-    for (const event of filteredEvents) {
+    const events = await eventStore.getEvents(aggregateId, fromVersion, toVersion);
+    for (const event of events) {
       state = this.applyEvent(state, event);
     }
 
+    return state;
+  }
+
+  /**
+   * Fold the aggregate up to `version` and persist the result as a snapshot.
+   */
+  async createSnapshot(aggregateId, version) {
+    const state = await this.replay(aggregateId, version);
+    await eventStore.saveSnapshot(aggregateId, state, version, REDUCER_VERSION);
     return state;
   }
 
@@ -49,7 +67,9 @@ class EventReplayer {
             destination: event.data.destination,
             amount: event.data.amount,
             hash: event.data.hash,
-            asset: event.data.asset ?? 'XLM',
+            asset: event.data.asset,
+            feeBump: event.data.feeBump,
+            memoType: event.data.memoType,
             timestamp: event.timestamp
           }
         };
@@ -62,7 +82,7 @@ class EventReplayer {
   async replayToPoint(aggregateId, timestamp) {
     const events = await eventStore.getEvents(aggregateId);
     const pointEvents = events.filter(e => new Date(e.timestamp) <= new Date(timestamp));
-    
+
     let state = {};
     for (const event of pointEvents) {
       state = this.applyEvent(state, event);

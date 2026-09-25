@@ -614,13 +614,17 @@ model EventStore {
 // Aggregate snapshots – replaces the per-aggregate JSON files written to
 // backend/data/snapshots/ by eventStore.js.
 model EventSnapshot {
-  id          String   @id @default(uuid())
-  aggregateId String   @unique
-  state       Json
-  version     Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  aggregateId    String
+  state          Json
+  version        Int
+  // Version of the replayer fold logic that produced `state`; snapshots from
+  // another reducer version are ignored.
+  reducerVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@unique([aggregateId, version])
   @@index([aggregateId])
 }
 
@@ -635,6 +639,9 @@ model EventArchive {
   metadata    Json     @default("{}")
   originalCreatedAt DateTime
   archivedAt  DateTime @default(now())
+  // S3 object holding the verified cold copy of this row's batch, if any (#1361)
+  archiveKey    String?
+  archiveSha256 String?
 
   @@index([aggregateId])
   @@index([archivedAt])
@@ -650,6 +657,38 @@ model EventProjection {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+// Sync health per projection/listener, updated on every delivery (#1360).
+model ProjectionStatus {
+  name          String    @id
+  lastEventId   String?
+  lastEventAt   DateTime?
+  lastSuccessAt DateTime?
+  lastErrorAt   DateTime?
+  lastError     String?
+  failureCount  Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+}
+
+// Dead-letter queue (projection:dlq:<projection>) for events a projection or
+// listener failed to apply. Unresolved rows block later events for that
+// projection so it never folds out of order (#1360).
+model ProjectionDeadLetter {
+  id            String    @id @default(uuid())
+  projection    String
+  eventId       String
+  aggregateId   String
+  eventType     String
+  event         Json
+  error         String
+  attempts      Int       @default(1)
+  createdAt     DateTime  @default(now())
+  lastAttemptAt DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  @@unique([projection, eventId])
+  @@index([projection, resolvedAt, createdAt])
 }
 
 // ─── Load Testing (#1125) ────────────────────────────────────────────────────

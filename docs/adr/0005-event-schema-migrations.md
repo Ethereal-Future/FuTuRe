@@ -27,8 +27,10 @@ Chosen option: **fail closed**. `migrateEvent` throws if any step between `fromV
 ### How to add a migration
 
 1. Increment `SCHEMA_VERSIONS[type].current` in `backend/src/eventSourcing/eventSerializer.js`.
-2. Add an instance method named `{Type}_v{from}_to_v{to}` that returns the transformed event. See `PaymentSent_v1_to_v2` as the working example (v1 events gain `data.asset = 'XLM'`).
-3. Add a deserialize test that asserts the new fields.
+2. Register an upcaster for the previous version: `registerUpcaster(type, fromVersion, (data) => newData)`.
+3. Update `EVENT_SCHEMAS[type]` (Zod) to describe the new latest payload shape.
+
+> **Update (#1359):** the `{Type}_vN_to_vN+1` instance methods were replaced by an `UpcasterRegistry`. The fail-closed rule is unchanged: a missing step throws `Missing schema migration {Type}_vN_to_vN+1`. The event store now persists each event's `schemaVersion` in `metadata` (rows without one are read as v1) and upcasts and Zod-validates every event on read, so projections and the replayer only see the latest shape while stored rows stay untouched. `PaymentSent` is at v3: v1→v2 adds `asset` (default `XLM`), v2→v3 adds `feeBump` (default `false`), `memo` and `memoType` (default `null`).
 
 Audit note: `SCHEMA_VERSIONS` values were all `1` from introduction until this ADR. No stored event was ever silently relabeled, so no backfill is required. The first real bump is `PaymentSent` 1 → 2, covered by `PaymentSent_v1_to_v2`.
 

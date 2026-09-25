@@ -18,38 +18,41 @@ class ProjectionManager {
     this.projections.set(name, handler);
   }
 
+  hasProjection(name) {
+    return this.projections.has(name);
+  }
+
+  getProjectionNames() {
+    return [...this.projections.keys()];
+  }
+
+  /**
+   * Fold `events` into the stored projection. Load→fold→save is serialized per
+   * projection within this process so concurrent publishes cannot lose updates.
+   */
   async project(name, events) {
     const handler = this.projections.get(name);
     if (!handler) {
       throw new Error(`Projection handler not found: ${name}`);
     }
 
-    let projection = (await this.loadProjection(name)) || {};
+    const previous = this.writeQueues.get(name) ?? Promise.resolve();
+    const run = previous.catch(() => {}).then(async () => {
+      let projection = (await this.loadProjection(name)) || {};
 
-    for (const event of events) {
-      projection = handler(projection, event);
-    }
+      for (const event of events) {
+        projection = handler(projection, event);
+      }
 
-    await this.saveProjection(name, projection);
-    return projection;
+      await this.saveProjection(name, projection);
+      return projection;
+    });
+
+    this.writeQueues.set(name, run);
+    return run;
   }
 
   async saveProjection(name, data) {
-    if (!this.writeQueues.has(name)) {
-      this.writeQueues.set(name, Promise.resolve());
-    }
-
-    const queuePromise = this.writeQueues.get(name);
-    const newPromise = queuePromise.then(async () => {
-      const file = path.join(PROJECTIONS_DIR, `${name}.json`);
-      const tmpFile = `${file}.tmp`;
-
-      await fs.writeFile(tmpFile, JSON.stringify(data, null, 2));
-      await fs.rename(tmpFile, file);
-    });
-
-    this.writeQueues.set(name, newPromise);
-    await newPromise;
     await prisma.eventProjection.upsert({
       where: { name },
       update: { data, updatedAt: new Date() },
@@ -109,7 +112,10 @@ projectionManager.registerProjection('payment-history', (projection, event) => {
       aggregateId: event.aggregateId,
       destination: event.data.destination,
       amount: event.data.amount,
+      asset: event.data.asset,
       hash: event.data.hash,
+      feeBump: event.data.feeBump,
+      memoType: event.data.memoType,
       timestamp: event.timestamp,
     });
   }
