@@ -62,7 +62,8 @@ export async function cleanupStaleNotifications({ now = new Date() } = {}) {
  * @param {string} params.type - Template key (e.g. 'transaction_received')
  * @param {object} params.data - Template interpolation data
  * @param {string} [params.email] - User's email address (for email channel)
- * @param {string} [params.phone] - User's phone number in E.164 (for SMS channel)
+ * @param {string} [params.phone] - User's phone number, E.164 preferred (for SMS channel)
+ * @param {string} [params.phoneRegion] - ISO 3166-1 alpha-2 region used to normalize a national-format phone
  * @param {string} [params.publicKey] - Stellar public key (for in-app WebSocket broadcast)
  * @param {string} [params.actionUrl] - Action URL for in-app notifications
  * @param {object} [params.actionRetryParams] - Retry parameters for failed transactions
@@ -70,6 +71,7 @@ export async function cleanupStaleNotifications({ now = new Date() } = {}) {
  * @param {string} [params.locale] - Override locale; if omitted, read from user preferences
  * @returns {Promise<object>} Results per channel
  */
+export async function sendNotification({ userId, type, data = {}, email, phone, phoneRegion, publicKey, actionUrl, actionRetryParams, channels = CHANNELS }) {
 export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
   const results = {};
 
@@ -128,7 +130,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
           }
           case 'sms':
             if (!phone) { results[channel] = { skipped: true, reason: 'no_phone' }; return; }
-            result = await sendSms(phone, content);
+            result = await sendSms(phone, content, { defaultRegion: phoneRegion });
             break;
           case 'inApp':
             result = await sendInApp(userId, publicKey, { ...content, type, actionUrl, actionRetryParams });

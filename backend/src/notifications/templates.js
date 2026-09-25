@@ -10,6 +10,7 @@
  *
  * Template interpolation uses {{variable}} syntax (unchanged from before).
  */
+import { escapeHtml } from '../utils/sanitize.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
@@ -71,15 +72,46 @@ export function getRawTemplate(type, channel, locale = 'en') {
 
 /**
  * Render a template string by replacing {{key}} placeholders with data values.
+ * Only own properties of `data` are resolved, so keys such as {{toString}},
+ * {{constructor}} or {{__proto__}} never pick up inherited prototype members.
+ * @param {string} template
+ * @param {Record<string, string>} data
+ * @param {{ escape?: (value: string) => string }} [options] - Encoder applied to every interpolated value
+ * @returns {string}
+ */
+export function renderTemplate(template, data = {}, { escape } = {}) {
+  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => {
+    if (data == null || !Object.prototype.hasOwnProperty.call(data, key)) return '';
+    const value = data[key];
+    if (value === undefined || value === null) return '';
+    const str = String(value);
+    return escape ? escape(str) : str;
+  });
+}
+
+/**
+ * Render a template as an HTML fragment. Static template text and every
+ * interpolated value are HTML-entity encoded; newlines become <br>.
  * @param {string} template
  * @param {Record<string, string>} data
  * @returns {string}
  */
-export function renderTemplate(template, data = {}) {
-  return template.replace(/\{\{(\w+)\}\}/g, (_, key) => data[key] ?? '');
+export function renderHtmlTemplate(template, data = {}) {
+  return renderTemplate(escapeHtml(template), data, { escape: escapeHtml }).replace(/\n/g, '<br>\n');
 }
 
 /**
+ * Get a rendered template for a given type and channel.
+ * Email templates are rendered as both plain text (`body`) and HTML (`html`).
+ * The subject is a plain-text header and is never HTML-encoded.
+ * @param {string} type - Template key (e.g. 'transaction_received')
+ * @param {string} channel - 'email' | 'push' | 'sms' | 'inApp'
+ * @param {Record<string, string>} data
+ * @returns {{ subject?: string, title?: string, body: string, html?: string } | null}
+ */
+export function getRenderedTemplate(type, channel, data = {}) {
+  if (!Object.prototype.hasOwnProperty.call(TEMPLATES, type)) return null;
+  const tmpl = Object.prototype.hasOwnProperty.call(TEMPLATES[type], channel) ? TEMPLATES[type][channel] : null;
  * Get a rendered template for a given type, channel, and locale.
  *
  * @param {string} type    - Template key (e.g. 'transaction_received')
@@ -95,6 +127,9 @@ export function getRenderedTemplate(type, channel, data = {}, locale = 'en') {
   const rendered = {};
   for (const [k, v] of Object.entries(tmpl)) {
     rendered[k] = renderTemplate(v, data);
+  }
+  if (channel === 'email' && tmpl.body) {
+    rendered.html = renderHtmlTemplate(tmpl.body, data);
   }
   return rendered;
 }

@@ -146,3 +146,54 @@ variable "log_archive_expiration_days" {
   default     = 2555 # ~7 years, matching typical financial recordkeeping requirements
 }
 }
+
+# ── Email (SES / DKIM) ────────────────────────────────────────────────────────
+
+variable "email_domain" {
+  description = "Transactional sending domain verified in SES (e.g. futureremit.app). Leave empty to skip SES/DNS provisioning."
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for email_domain, where DKIM/SPF/DMARC records are published."
+  type        = string
+  default     = ""
+}
+
+variable "email_mail_from_subdomain" {
+  description = "Subdomain of email_domain used as the SES custom MAIL FROM (envelope sender) domain."
+  type        = string
+  default     = "mail"
+}
+
+variable "dkim_key_selector" {
+  description = "DKIM selector for app-level signing via a non-SES SMTP relay. When set, a dkim-private-key secret is created and DKIM_* env vars are passed to the backend. Leave empty when sending through SES (Easy DKIM)."
+  type        = string
+  default     = ""
+}
+
+variable "dmarc_policy" {
+  description = "DMARC policy for email_domain. Start with 'none' or 'quarantine' while monitoring, then move to 'reject'."
+  type        = string
+  default     = "reject"
+
+  validation {
+    condition     = contains(["none", "quarantine", "reject"], var.dmarc_policy)
+    error_message = "dmarc_policy must be 'none', 'quarantine' or 'reject'."
+  }
+}
+
+variable "dmarc_report_email" {
+  description = "Mailbox that receives DMARC aggregate (rua) reports. Leave empty to omit."
+  type        = string
+  default     = ""
+}
+
+# ── SMS ───────────────────────────────────────────────────────────────────────
+
+variable "sms_sns_failover_enabled" {
+  description = "Use AWS SNS as the secondary SMS carrier when Twilio fails. Grants the ECS task sns:Publish and sets SMS_FAILOVER_PROVIDER=sns."
+  type        = bool
+  default     = false
+}
