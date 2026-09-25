@@ -7,13 +7,6 @@ import {
   eventArchiver,
   eventAnalytics
 } from '../eventSourcing/index.js';
-import { requireAdmin } from '../middleware/adminAuth.js';
-
-const router = express.Router();
-
-// Event-sourcing internals (replay, projections, archival) are an
-// engineering/ops surface, not user-facing, so they are admin-only (#1102).
-router.use(requireAdmin);
 import { requireAuth, requireAdmin, requireOwnAccount } from '../middleware/auth.js';
 
 const router = express.Router();
@@ -115,6 +108,50 @@ router.get('/projection/:name', requireAdmin, async (req, res) => {
   try {
     const projection = await eventMonitor.getProjection(req.params.name);
     res.json({ name: req.params.name, projection });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/events/projections/status:
+ *   get:
+ *     summary: Projection sync health
+ *     description: Per-projection dead-letter backlog, last processed event, lag and last error. Returns 503 when any projection has undelivered events.
+ *     tags: [Events]
+ *     responses:
+ *       200:
+ *         description: All projections are in sync
+ *       503:
+ *         description: One or more projections have pending dead letters
+ */
+router.get('/projections/status', requireAdmin, async (req, res) => {
+  try {
+    const status = await eventMonitor.getProjectionStatus();
+    res.status(status.healthy ? 200 : 503).json(status);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/events/projections/{name}/retry:
+ *   post:
+ *     summary: Re-deliver a projection's dead-lettered events in order
+ *     tags: [Events]
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema:
+ *           type: string
+ */
+router.post('/projections/:name/retry', requireAdmin, async (req, res) => {
+  try {
+    const result = await eventMonitor.retryDeadLetters(req.params.name);
+    res.status(result.remaining === 0 ? 200 : 409).json({ name: req.params.name, ...result });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
