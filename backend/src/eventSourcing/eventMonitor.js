@@ -70,9 +70,10 @@ class EventMonitor {
    * GET /api/v1/events/projections/status instead.
    */
   async publishEvent(aggregateId, event) {
+  async publishEvent(aggregateId, event, expectedVersion) {
     if (!this.initialized) await this.initialize();
 
-    const storedEvent = await eventStore.append(aggregateId, event);
+    const storedEvent = await eventStore.append(aggregateId, event, expectedVersion);
 
     try {
       await eventAnalytics.recordMetric(`event_${event.type}`, 1, { aggregateId });

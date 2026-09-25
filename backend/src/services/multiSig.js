@@ -9,7 +9,7 @@ import { getHorizonServer, withHorizonRetry } from './stellar.js';
 import { extractStellarErrorCode, getStellarErrorInfo } from '../utils/stellarErrors.js';
 import { sendNotification } from '../notifications/service.js';
 import { dispatchEvent } from '../webhooks/dispatcher.js';
-import { normalizeSigner, validateThresholds } from './multiSigValidation.js';
+import { validateThresholds } from './multiSigValidation.js';
 import {
   InvalidSignatureError,
   parseTransactionXdr,
@@ -37,6 +37,11 @@ export async function isAuthorizedSigner(sourcePublicKey, callerPublicKey) {
   try {
     const account = await withHorizonRetry(() => getHorizonServer().loadAccount(sourcePublicKey));
     return account.signers.some((signer) => signer.key === callerPublicKey && signer.weight > 0);
+  } catch {
+    return false;
+  }
+}
+
 function isValidStellarAddress(address) {
   try {
     return StellarSDK.StrKey.isValidEd25519PublicKey(address);
@@ -285,13 +290,9 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
   }
   if (!Array.isArray(signers) || signers.length === 0)
     throw new Error('At least one signer is required');
-  const normalizedSigners = signers.map(normalizeSigner);
   validateThresholds(
     thresholds,
     masterWeight + signers.reduce((total, signer) => total + signer.weight, 0),
-  );
-  const sourceAccount = await withHorizonRetry(() =>
-    getHorizonServer().loadAccount(sourceKeypair.publicKey()),
   );
   validateMultiSigConversion(sourceKeypair.publicKey(), signers, thresholds, masterWeight);
 
@@ -300,23 +301,6 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
     fee: StellarSDK.BASE_FEE,
     networkPassphrase: getNetworkPassphrase(),
   });
-  txBuilder.addOperation(
-    StellarSDK.Operation.setOptions({
-      masterWeight,
-      lowThreshold: thresholds.low,
-      medThreshold: thresholds.medium,
-      highThreshold: thresholds.high,
-    }),
-  );
-
-  // Add each signer
-  for (const { signer } of normalizedSigners) {
-    txBuilder.addOperation(
-      StellarSDK.Operation.setOptions({
-        signer,
-      }),
-    );
-
   // Signers first, thresholds second, master weight last — so the master key
   // is never revoked before its replacements exist in the account.
   for (const operation of buildMultiSigConversionOperations(signers, thresholds, masterWeight)) {
@@ -460,23 +444,20 @@ async function loadAccountSignerKeys(publicKey) {
 }
 
 /**
- * Add signature(s) to a pending multi-sig transaction. Accepts either a signer
- * secret (the server signs) or a client-signed envelope. Every signature on
- * the resulting envelope is cryptographically verified against the
- * transaction hash for the configured network before anything is persisted
- * (#1288). Prevents duplicate signatures.
+ * Add signature(s) to a pending multi-sig transaction from a client-signed
+ * envelope. Private keys never enter the backend. Every signature on the
+ * resulting envelope is cryptographically verified against the transaction
+ * hash for the configured network before anything is persisted (#1288).
+ * Prevents duplicate signatures.
  * @param {string} txId - The pending transaction ID returned by {@link buildMultiSigTransaction}
- * @param {string|{signerSecret?: string, signedXdr?: string, signerPublicKey?: string}} signer -
- *   A signer secret key, or an object with either `signerSecret` or a client-signed `signedXdr`
- *   (optionally with the expected `signerPublicKey`)
+ * @param {{signedXdr: string, signerPublicKey?: string}} signer - Client-signed envelope,
+ *   optionally with the expected signer public key
  * @returns {Promise<{txId: string, signerPublicKey: string, addedSigners: string[], totalSignatures: number, signatures: Array<{publicKey: string, signedAt: string}>, txXdr: string}>}
  * @throws {InvalidSignatureError} If any signature fails verification or the envelope doesn't match the pending transaction
  * @throws {Error} If the transaction is not found, is not pending, has expired, or if the signer already signed
  */
-export async function addSignature(txId, signer) {
-  const { signerSecret, signedXdr, signerPublicKey: expectedSigner } =
-    typeof signer === 'string' ? { signerSecret: signer } : (signer || {});
-  if (!signerSecret && !signedXdr) throw validationError('signerSecret or signedXdr is required');
+export async function addSignature(txId, { signedXdr, signerPublicKey: expectedSigner } = {}) {
+  if (!signedXdr) throw validationError('signedXdr is required; sign the transaction on the client');
 
   const pending = await prisma.pendingMultiSigTx.findUnique({ where: { txId } });
   if (!pending) throw new Error(`Transaction ${txId} not found`);
@@ -489,30 +470,17 @@ export async function addSignature(txId, signer) {
   const recordedSigners = signatures.map((s) => s.publicKey);
   const pendingTx = parseTransactionXdr(pending.txXdr, networkPassphrase);
 
-  let transaction;
-  let candidates;
-  if (signerSecret) {
-    const signerKeypair = StellarSDK.Keypair.fromSecret(signerSecret);
-    const signerPublicKey = signerKeypair.publicKey();
-    if (recordedSigners.includes(signerPublicKey)) {
-      throw new Error(`Signer ${signerPublicKey} has already signed this transaction`);
-    }
-    transaction = pendingTx;
-    transaction.sign(signerKeypair);
-    candidates = [...recordedSigners, signerPublicKey];
-  } else {
-    transaction = parseTransactionXdr(signedXdr, networkPassphrase);
-    if (!Buffer.from(transaction.hash()).equals(Buffer.from(pendingTx.hash()))) {
-      throw new InvalidSignatureError(
-        `InvalidSignature: submitted envelope does not match pending transaction ${txId} (different transaction or network)`
-      );
-    }
-    candidates = [
-      ...recordedSigners,
-      ...(await loadAccountSignerKeys(pending.sourcePublicKey)),
-      ...(expectedSigner ? [expectedSigner] : []),
-    ];
+  const transaction = parseTransactionXdr(signedXdr, networkPassphrase);
+  if (!Buffer.from(transaction.hash()).equals(Buffer.from(pendingTx.hash()))) {
+    throw new InvalidSignatureError(
+      `InvalidSignature: submitted envelope does not match pending transaction ${txId} (different transaction or network)`
+    );
   }
+  const candidates = [
+    ...recordedSigners,
+    ...(await loadAccountSignerKeys(pending.sourcePublicKey)),
+    ...(expectedSigner ? [expectedSigner] : []),
+  ];
 
   const verified = verifyTransactionSignatures(transaction, candidates, { networkPassphrase });
   const signerKeys = verified.map((v) => v.publicKey);
@@ -537,10 +505,6 @@ export async function addSignature(txId, signer) {
     );
   }
 
-  const updatedSignatures = [
-    ...signatures,
-    { publicKey: signerPublicKey, signedAt: new Date().toISOString() },
-  ];
   const signedAt = new Date().toISOString();
   const updatedSignatures = [...signatures, ...addedSigners.map((publicKey) => ({ publicKey, signedAt }))];
   const newSignatureRecords = addedSigners.map((publicKey) => {
@@ -586,7 +550,7 @@ export async function addSignature(txId, signer) {
 
   await eventMonitor.publishEvent(pending.sourcePublicKey, {
     type: 'MultiSigTransactionSigned',
-    data: { txId, signerPublicKey, totalSignatures: updatedSignatures.length },
+    data: { txId, signerPublicKey: addedSigners[0], totalSignatures: updatedSignatures.length },
     version: 1,
   });
   await notifyRequiredSigners(
@@ -597,10 +561,10 @@ export async function addSignature(txId, signer) {
       destination: pending.destination,
       amount: pending.amount,
       assetCode: pending.assetCode,
-      signerPublicKey,
+      signerPublicKey: addedSigners[0],
       reason: 'A new signature was added; your signature may still be required.',
     },
-    [signerPublicKey],
+    addedSigners,
   );
   for (const publicKey of addedSigners) {
     await eventMonitor.publishEvent(pending.sourcePublicKey, {
@@ -859,6 +823,7 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
         ...(updates.thresholds?.high !== undefined && { highThreshold: updates.thresholds.high }),
       }),
     );
+  }
   for (const signer of updates.addSigners || []) {
     if (!isValidStellarAddress(signer?.publicKey)) {
       throw validationError(`Invalid signer public key: ${signer?.publicKey}`);
@@ -940,15 +905,6 @@ export async function updateMultiSigConfig(sourceSecret, updates) {
  * @returns {Promise<Array<{txId: string, destination: string, amount: string, assetCode: string, signatures: object[], status: string, expiresAt: Date, createdAt: Date}>>}
  */
 export async function getPendingTransactions(sourcePublicKey) {
-  const rows = await prisma.pendingMultiSigTx.findMany({ where: { sourcePublicKey } });
-  return rows.map(({ txId, destination, amount, assetCode, signatures, status, createdAt }) => ({
-    txId,
-    destination,
-    amount,
-    assetCode,
-    signatures,
-    status,
-    createdAt,
   const rows = await prisma.pendingMultiSigTx.findMany({
     where: { sourcePublicKey, status: 'pending', expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },

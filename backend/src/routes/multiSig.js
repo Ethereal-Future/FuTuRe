@@ -341,12 +341,9 @@ router.post(
  *             properties:
  *               txId:
  *                 type: string
- *               signerSecret:
- *                 type: string
- *                 description: Signer secret (server signs). Required unless signedXdr is provided.
  *               signedXdr:
  *                 type: string
- *                 description: Client-signed transaction envelope. Every signature is verified against the transaction hash for the configured network.
+ *                 description: Client-signed transaction envelope. Private keys must never be sent to the backend.
  *               signerPublicKey:
  *                 type: string
  *                 description: Optional public key the client-signed envelope must contain a valid signature from.
@@ -360,50 +357,22 @@ router.post(
  *       500:
  *         description: Server error
  */
-router.post(
-  '/transaction/sign',
-  rules.signMultiSigTx,
-  validate,
-  requirePendingSigner,
-  async (req, res, next) => {
-    try {
-      const { txId, signerSecret } = req.body;
-      if (req.user?.role !== 'ADMIN') {
-        const publicKey = await callerPublicKey(req);
-        await MultiSigService.assertSignerSecretOwner(signerSecret, publicKey);
-      }
-      const result = await MultiSigService.addSignature(txId, signerSecret);
-      res.json(result);
-    } catch (error) {
-      if (error.message?.includes('expired')) {
-        return next(new AppError(error.message, 410, ErrorCodes.CONFLICT));
-      }
-      if (error.message?.includes('not found')) {
-        return next(new AppError(error.message, 404, ErrorCodes.NOT_FOUND));
-      }
-      logError(req, error, { txId: req.body.txId });
-      next(error);
-router.post('/transaction/sign', rules.signMultiSigTx, validate, async (req, res, next) => {
+router.post('/transaction/sign', rules.signMultiSigTx, validate, requirePendingSigner, async (req, res, next) => {
   try {
-    const { txId, signerSecret, signedXdr, signerPublicKey } = req.body;
-    const result = await MultiSigService.addSignature(
-      txId,
-      signedXdr ? { signedXdr, signerPublicKey } : { signerSecret }
-    );
+    const { txId, signedXdr, signerPublicKey } = req.body;
+    const result = await MultiSigService.addSignature(txId, { signedXdr, signerPublicKey });
     res.json(result);
   } catch (error) {
     if (error.name === 'InvalidSignatureError' || error.status === 400) {
       logger.warn('multisig.signature.rejected', { txId: req.body.txId, error: error.message, details: error.details });
       return next(new AppError(error.message, 400, ErrorCodes.VALIDATION_ERROR, error.details));
     }
-    if (error.message?.includes('expired')) {
-      return next(new AppError(error.message, 410, ErrorCodes.CONFLICT));
-    }
-    if (error.message?.includes('not found')) {
-      return next(new AppError(error.message, 404, ErrorCodes.NOT_FOUND));
-    }
-  },
-);
+    if (error.message?.includes('expired')) return next(new AppError(error.message, 410, ErrorCodes.CONFLICT));
+    if (error.message?.includes('not found')) return next(new AppError(error.message, 404, ErrorCodes.NOT_FOUND));
+    logError(req, error, { txId: req.body.txId });
+    next(error);
+  }
+});
 
 /**
  * @swagger
