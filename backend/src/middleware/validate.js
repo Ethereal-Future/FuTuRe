@@ -324,13 +324,8 @@ export const rules = {
 
   signMultiSigTx: [
     body('txId').trim().notEmpty().withMessage('txId is required'),
-    body('signerSecret')
-      .if(body('signedXdr').not().exists())
-      .trim()
-      .matches(STELLAR_SECRET_KEY)
-      .withMessage('Invalid signer secret key'),
     body('signedXdr')
-      .optional()
+      .exists()
       .isString()
       .trim()
       .notEmpty()

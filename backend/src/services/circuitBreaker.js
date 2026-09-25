@@ -26,7 +26,9 @@ const STATE = { CLOSED: 'CLOSED', OPEN: 'OPEN', HALF: 'HALF_OPEN' };
  * @param {string} [name='service'] - Used only in the thrown "circuit open" error message.
  * @returns {{ call: (fn: () => Promise) => Promise, getState: () => object, reset: () => void }}
  */
-export function createCircuitBreaker(name = 'service') {
+export function createCircuitBreaker(name = 'service', options = {}) {
+  const failureThreshold = options.failureThreshold ?? FAILURE_THRESHOLD;
+  const probeIntervalMs = options.probeIntervalMs ?? PROBE_INTERVAL_MS;
   let state = STATE.CLOSED;
   let failures = 0;
   let windowStart = Date.now();
@@ -37,7 +39,7 @@ export function createCircuitBreaker(name = 'service') {
     clearTimeout(probeTimer);
     probeTimer = setTimeout(() => {
       state = STATE.HALF;
-    }, PROBE_INTERVAL_MS);
+    }, probeIntervalMs);
     // Don't keep the process alive just for the probe
     if (probeTimer.unref) probeTimer.unref();
   }
@@ -59,7 +61,7 @@ export function createCircuitBreaker(name = 'service') {
       return;
     }
     failures += 1;
-    if (failures >= FAILURE_THRESHOLD) {
+    if (failures >= failureThreshold) {
       state = STATE.OPEN;
       openedAt = now;
       scheduleProbe();

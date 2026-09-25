@@ -9,8 +9,9 @@ import { runWithConcurrency } from '../utils/concurrency.js';
 import { recordCustomMetric } from '../monitoring/metrics.js';
 
 const ALERT_RECHECK_INTERVAL_HOURS = 24; // Re-alert every 24 hours if still below threshold
-const BALANCE_CHECK_PAGE_SIZE = 200;
-const BALANCE_CHECK_CONCURRENCY = 15;
+const BALANCE_CHECK_PAGE_SIZE = 100;
+const BALANCE_CHECK_CONCURRENCY = 5;
+const ACTIVE_ACCOUNT_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
 let balanceCheckRunning = false;
 
@@ -153,10 +154,23 @@ export async function checkAllUserBalances() {
     let checksFailed = 0;
     let usersChecked = 0;
     let cursor = null;
+    const checkedBefore = new Date(Date.now() - ACTIVE_ACCOUNT_WINDOW_MS);
 
     for (;;) {
       const page = await prisma.notificationPreference.findMany({
-        where: { lowBalanceAlertEnabled: true },
+        where: {
+          lowBalanceAlertEnabled: true,
+          user: {
+            OR: [
+              { sentTxs: { some: { createdAt: { gte: checkedBefore } } } },
+              { receivedTxs: { some: { createdAt: { gte: checkedBefore } } } },
+            ],
+          },
+          OR: [
+            { lastBalanceCheckedAt: null },
+            { lastBalanceCheckedAt: { lt: checkedBefore } },
+          ],
+        },
         select: { id: true, userId: true },
         orderBy: { id: 'asc' },
         take: BALANCE_CHECK_PAGE_SIZE,
@@ -169,6 +183,10 @@ export async function checkAllUserBalances() {
         page,
         async (userPref) => {
           try {
+            await prisma.notificationPreference.update({
+              where: { id: userPref.id },
+              data: { lastBalanceCheckedAt: new Date() },
+            });
             const sent = await checkAndAlertBalance(userPref.userId);
             if (sent) alertsSent++;
           } catch (error) {

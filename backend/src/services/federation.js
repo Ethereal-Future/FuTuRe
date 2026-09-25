@@ -1,8 +1,63 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
 import prisma from '../db/client.js';
 import { getConfig } from '../config/env.js';
+import { RedisBackend } from '../cache/redis.js';
+import { createCircuitBreaker } from './circuitBreaker.js';
 
 const DEFAULT_FEDERATION_DOMAIN = 'futureremit.app';
+const FEDERATION_TOML_TTL_SECONDS = 24 * 60 * 60;
+const FEDERATION_RESULT_TTL_SECONDS = 5 * 60;
+const FEDERATION_NEGATIVE_TTL_SECONDS = 30;
+const FEDERATION_TIMEOUT_MS = 10_000;
+const federationEndpointCache = new Map();
+const federationResultCache = new Map();
+const federationBreakers = new Map();
+const federationRedis = new RedisBackend();
+
+function getFederationBreaker(domain) {
+  if (!federationBreakers.has(domain)) {
+    federationBreakers.set(domain, createCircuitBreaker(`Federation-${domain}`, {
+      failureThreshold: 3,
+      probeIntervalMs: 60_000,
+    }));
+  }
+  return federationBreakers.get(domain);
+}
+
+function parseTomlField(toml, field) {
+  const match = String(toml).match(new RegExp(`^\\s*${field}\\s*=\\s*["']([^"']+)["']`, 'mi'));
+  return match?.[1]?.trim() || null;
+}
+
+async function fetchWithTimeout(url) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FEDERATION_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { signal: controller.signal, headers: { accept: 'application/json,text/plain' } });
+    if (!response.ok) throw new Error(`Federation upstream returned ${response.status}`);
+    return response;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function getCached(key, localCache) {
+  const local = localCache.get(key);
+  if (local && local.expiresAt > Date.now()) return local.value;
+  if (local) localCache.delete(key);
+  const remote = await federationRedis.get(key);
+  if (remote?.value && remote.expiresAt > Date.now()) {
+    localCache.set(key, remote);
+    return remote.value;
+  }
+  return null;
+}
+
+async function setCached(key, value, ttlSeconds, localCache) {
+  const record = { value, expiresAt: Date.now() + ttlSeconds * 1000 };
+  localCache.set(key, record);
+  await federationRedis.set(key, record, ttlSeconds);
+}
 
 /**
  * Get the domain this platform serves federation lookups for.
@@ -46,9 +101,54 @@ export async function resolveFederationAddress(address) {
 
   const [, domain] = normalized.split('*');
   if (domain !== getFederationDomain().toLowerCase()) {
-    const error = new Error('Federation domain is not served by this platform');
-    error.status = 404;
-    throw error;
+    const resultKey = `federation:result:${normalized}`;
+    const cachedResult = await getCached(resultKey, federationResultCache);
+    if (cachedResult) {
+      if (cachedResult.notFound) {
+        const error = new Error('Federation address not found');
+        error.status = 404;
+        throw error;
+      }
+      return cachedResult;
+    }
+
+    try {
+      const breaker = getFederationBreaker(domain);
+      const endpointKey = `federation:endpoint:${domain}`;
+      let federationServer = await getCached(endpointKey, federationEndpointCache);
+      if (!federationServer) {
+        federationServer = await breaker.call(async () => {
+          const tomlResponse = await fetchWithTimeout(`https://${domain}/.well-known/stellar.toml`);
+          const endpoint = parseTomlField(await tomlResponse.text(), 'FEDERATION_SERVER');
+          if (!endpoint) throw new Error(`No FEDERATION_SERVER advertised by ${domain}`);
+          return endpoint;
+        });
+        await setCached(endpointKey, federationServer, FEDERATION_TOML_TTL_SECONDS, federationEndpointCache);
+      }
+
+      const url = new URL(federationServer);
+      url.searchParams.set('q', normalized.split('*')[0]);
+      url.searchParams.set('type', 'name');
+      const response = await breaker.call(() => fetchWithTimeout(url.toString()));
+      const result = await response.json();
+      if (!result?.account_id) {
+        await setCached(resultKey, { notFound: true }, FEDERATION_NEGATIVE_TTL_SECONDS, federationResultCache);
+        const error = new Error('Federation address not found');
+        error.status = 404;
+        throw error;
+      }
+      const resolved = {
+        stellar_address: result.stellar_address || normalized,
+        account_id: result.account_id,
+        memo_type: result.memo_type || 'none',
+        ...(result.memo ? { memo: result.memo } : {}),
+      };
+      await setCached(resultKey, resolved, FEDERATION_RESULT_TTL_SECONDS, federationResultCache);
+      return resolved;
+    } catch (error) {
+      if (error.status === 404) throw error;
+      throw Object.assign(new Error('Federation service unavailable'), { status: 503, cause: error });
+    }
   }
 
   const setting = await prisma.setting.findFirst({
