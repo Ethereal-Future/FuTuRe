@@ -5,8 +5,52 @@ import { eventMonitor } from '../eventSourcing/index.js';
 import logger, { withContext } from '../config/logger.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 import { getSubscriptionByPublicKey, sendWebPush } from '../notifications/webPush.js';
+import { createRedisBackend } from '../cache/redis.js';
+import { incrementCounter } from '../monitoring/metrics.js';
 
 export { prisma };
+
+const STREAM_LOCK_TTL_SECONDS = 30;
+const redisLock = createRedisBackend(process.env.REDIS_URL);
+let redisLockConnecting = null;
+
+/**
+ * Best-effort cross-instance lock for a stream's payment tick. Fails open when
+ * Redis is absent or erroring: the atomic lastProcessedAt claim in
+ * claimStreamInterval is the authoritative guard against double payment.
+ */
+async function acquireStreamLock(streamId, owner) {
+  try {
+    redisLockConnecting ??= redisLock.connect();
+    await redisLockConnecting;
+    return await redisLock.setNX(`stream:lock:${streamId}`, owner, STREAM_LOCK_TTL_SECONDS);
+  } catch (err) {
+    logger.warn('streaming.lock.redis_unavailable', { streamId, error: err.message });
+    return true;
+  }
+}
+
+async function releaseStreamLock(streamId) {
+  await redisLock.delete(`stream:lock:${streamId}`);
+}
+
+/**
+ * Atomically claim the current interval by advancing lastProcessedAt, but only
+ * if no other worker has advanced it since we read the stream. Exactly one
+ * concurrent caller can win this compare-and-set.
+ * @returns {Promise<boolean>} true if this worker owns the interval
+ */
+async function claimStreamInterval(stream, now) {
+  const claimed = await prisma.paymentStream.updateMany({
+    where: {
+      id: stream.id,
+      status: 'ACTIVE',
+      lastProcessedAt: stream.lastProcessedAt,
+    },
+    data: { lastProcessedAt: now },
+  });
+  return claimed.count === 1;
+}
 
 /**
  * Per-stream secret encryption/decryption
@@ -285,7 +329,26 @@ export async function processActiveStreams() {
     const lastProcessed = new Date(stream.lastProcessedAt);
     const secondsSinceLast = (now - lastProcessed) / 1000;
 
-    if (secondsSinceLast >= stream.intervalSeconds) {
+    if (secondsSinceLast < stream.intervalSeconds) continue;
+
+    const lockOwner = `${process.pid}:${now.getTime()}`;
+    if (!(await acquireStreamLock(stream.id, lockOwner))) {
+      incrementCounter('stream_payment_claim_conflicts_total');
+      logger.debug('streaming.process.locked', { streamId: stream.id });
+      continue;
+    }
+
+    try {
+       // Claim before paying. The claim is deliberately not reverted on failure:
+       // a submission error can be ambiguous (the tx may have landed), so the
+       // retry waits for the next interval rather than risking a double send.
+       // Failures are still recorded and the stream halts after 3 in a row.
+       if (!(await claimStreamInterval(stream, now))) {
+         incrementCounter('stream_payment_claim_conflicts_total');
+         logger.debug('streaming.process.already_claimed', { streamId: stream.id });
+         continue;
+       }
+
        try {
          if (!stream.senderSecret) {
            throw new Error('Stream has no senderSecret — cannot sign transaction');
@@ -304,7 +367,6 @@ export async function processActiveStreams() {
            await prisma.paymentStream.update({
              where: { id: stream.id },
              data: {
-               lastProcessedAt: now,
                totalStreamed: { increment: stream.rateAmount },
                failureCount: 0,
              },
@@ -356,6 +418,8 @@ export async function processActiveStreams() {
            withContext(logger, { action: 'processStream', correlationId: stream.id }).error('streaming.stream.halted', { streamId: stream.id, reason: err.message });
          }
        }
+    } finally {
+      await releaseStreamLock(stream.id);
     }
   }
 }

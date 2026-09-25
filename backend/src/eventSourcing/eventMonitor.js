@@ -55,8 +55,8 @@ class EventMonitor {
     }
   }
 
-  async getEventHistory(aggregateId) {
-    return eventStore.getEvents(aggregateId);
+  async getEventHistory(aggregateId, options = {}) {
+    return eventStore.getEvents(aggregateId, options);
   }
 
   async getAggregateState(aggregateId) {

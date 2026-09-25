@@ -6,12 +6,8 @@ class EventReplayer {
     let state = snapshot ? snapshot.state : {};
     let fromVersion = snapshot ? snapshot.version : 0;
 
-    const events = await eventStore.getEvents(aggregateId, fromVersion);
-    const filteredEvents = toVersion 
-      ? events.filter(e => e.version <= toVersion)
-      : events;
-
-    for (const event of filteredEvents) {
+    for await (const event of eventStore.streamEvents(aggregateId, { fromVersion })) {
+      if (toVersion && event.version > toVersion) continue;
       state = this.applyEvent(state, event);
     }
 
@@ -59,11 +55,11 @@ class EventReplayer {
   }
 
   async replayToPoint(aggregateId, timestamp) {
-    const events = await eventStore.getEvents(aggregateId);
-    const pointEvents = events.filter(e => new Date(e.timestamp) <= new Date(timestamp));
-    
+    const point = new Date(timestamp);
+
     let state = {};
-    for (const event of pointEvents) {
+    for await (const event of eventStore.streamEvents(aggregateId)) {
+      if (new Date(event.timestamp) > point) continue;
       state = this.applyEvent(state, event);
     }
 

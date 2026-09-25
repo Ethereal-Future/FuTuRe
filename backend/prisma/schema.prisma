@@ -546,3 +546,25 @@ model Sep31Transaction {
   @@unique([anchorUrl, externalId])
   @@index([status])
 }
+
+// Events that repeatedly failed projection processing and were quarantined
+// so the rest of the projection pipeline can keep moving. Admins repair and
+// replay them via POST /api/v1/events/poison-pills/:id/retry. See issue #1365.
+model ProjectionPoisonPill {
+  id             String    @id @default(uuid())
+  projectionName String
+  eventId        String
+  aggregateId    String
+  eventType      String
+  event          Json
+  errorMessage   String
+  errorStack     String?
+  retryCount     Int       @default(0)
+  status         String    @default("QUARANTINED")
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([projectionName, eventId])
+  @@index([status])
+}
