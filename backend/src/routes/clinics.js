@@ -3,8 +3,13 @@ import { body } from 'express-validator';
 import { validate } from '../../middleware/validate.js';
 import { rotateKeypair } from '../../services/keypairRotation.js';
 import logger from '../../config/logger.js';
+import { requireAuth } from '../../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
+
+// Keypair rotation moves the account's full balance, so it requires an
+// authenticated caller (#1102).
+router.use(requireAuth);
 
 /**
  * @swagger

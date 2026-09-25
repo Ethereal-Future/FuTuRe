@@ -32,16 +32,6 @@ exclude:
   # above. Suppressed 2026-08-26.
   - aws-elb-alb-not-public
 
-  # aws_elasticache_replication_group.redis (infra/elasticache.tf) does not
-  # yet enable transit_encryption_enabled. The ECS task definition
-  # (infra/ecs.tf) does not currently wire a REDIS_URL/TLS configuration
-  # into the backend container, so flipping this on here would have no
-  # effect without a corresponding application-level change (ioredis TLS via
-  # a rediss:// URL). Tracked as a follow-up; at-rest encryption (a
-  # transparent, client-side-no-op change) is already enabled. Suppressed
-  # 2026-08-26.
-  - aws-elasticache-enable-in-transit-encryption
-
   # aws_db_instance.postgres (infra/rds.tf) has Performance Insights enabled
   # without an explicit customer-managed KMS key. AWS encrypts Performance
   # Insights data with an AWS-managed key by default, so data is already

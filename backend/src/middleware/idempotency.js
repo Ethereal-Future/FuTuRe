@@ -1,10 +1,12 @@
 import crypto from 'crypto';
 import { createRedisBackend } from '../cache/redis.js';
 import logger from '../config/logger.js';
+import { canonicalJson } from '../utils/canonicalJson.js';
 import { incrementCounter } from '../monitoring/metrics.js';
 
 const IDEMPOTENCY_TTL = 24 * 60 * 60; // 24 hours in seconds
 const IN_PROGRESS_TTL = 30; // seconds a claim is held while the handler runs
+const UNCERTAIN_TTL = 60; // seconds an ambiguous upstream failure is remembered
 const POLL_INTERVAL_MS = 200;
 const POLL_TIMEOUT_MS = 5000;
 
@@ -44,6 +46,10 @@ async function waitForResult(cacheKey, bodyHash) {
  * runs, so concurrent duplicate requests can't both slip past the cache-miss
  * check. A request that loses the claim polls for the in-flight request's
  * result and returns it, or 409s if it's still processing.
+ *
+ * Cache keys are scoped to the authenticated user and route so that keys
+ * cannot collide across users, tenants, or endpoints. This middleware must
+ * run AFTER requireAuth so req.user.id is available.
  */
 export const idempotencyMiddleware = async (req, res, next) => {
   const idempotencyKey = req.headers['idempotency-key'];
@@ -58,8 +64,16 @@ export const idempotencyMiddleware = async (req, res, next) => {
     return res.status(400).json({ error: 'Invalid Idempotency-Key format' });
   }
 
-  const cacheKey = `idempotency:${idempotencyKey}`;
-  const bodyHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
+  // Idempotency keys on private endpoints require an authenticated user so
+  // that keys are strictly scoped per user and cannot leak across accounts.
+  const userId = req.user?.id;
+  if (!userId) {
+    return res.status(401).json({ error: 'Authentication required to use Idempotency-Key' });
+  }
+
+  const route = req.baseUrl + req.path;
+  const cacheKey = `idempotency:${userId}:${route}:${idempotencyKey}`;
+  const bodyHash = crypto.createHash('sha256').update(canonicalJson(req.body)).digest('hex');
 
   try {
     const claimed = await redisBackend.setNX(cacheKey, { bodyHash, status: 'in-progress' }, IN_PROGRESS_TTL);
@@ -88,11 +102,24 @@ export const idempotencyMiddleware = async (req, res, next) => {
           .catch((error) => {
             logger.warn({ err: error?.message, idempotencyKey }, 'Failed to persist idempotent response to cache');
           });
-      } else {
-        // Release the claim so a retry after a failed attempt isn't stuck behind it
+      } else if (statusCode >= 400 && statusCode < 500) {
+        // Unambiguous client-side error: no on-chain transaction could have
+        // been generated, so release the claim to allow an immediate retry.
         redisBackend.delete(cacheKey).catch((error) => {
-          logger.warn({ err: error?.message, idempotencyKey }, 'Failed to release idempotency claim after error response');
+          logger.warn({ err: error?.message, idempotencyKey }, 'Failed to release idempotency claim after client error response');
         });
+      } else {
+        // 5xx / upstream failures (e.g. Horizon 504 timeouts, connection
+        // resets) are ambiguous: the transaction may already have reached the
+        // ledger. Keep the claim as 'failed' with a short TTL instead of
+        // deleting it, so an immediate retry with the same Idempotency-Key
+        // cannot trigger a duplicate submission.
+        const errorCode = data?.code || data?.error || 'upstream_error';
+        redisBackend
+          .set(cacheKey, { bodyHash, status: 'failed', statusCode, errorCode, response: data }, UNCERTAIN_TTL)
+          .catch((error) => {
+            logger.warn({ err: error?.message, idempotencyKey }, 'Failed to persist uncertain idempotency state after upstream error');
+          });
       }
 
       return originalJson(data);

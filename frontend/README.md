@@ -29,10 +29,10 @@ docker build --build-arg VITE_API_URL=https://api.example.com -t stellar-fronten
 ### Run
 
 ```bash
-docker run -p 80:80 stellar-frontend
+docker run -p 8080:8080 stellar-frontend
 ```
 
-The container serves the compiled SPA via Nginx on port `80`.
+The container serves the compiled SPA via Nginx on port `8080` as the unprivileged `nginx` user (port 80 requires root).
 
 ### Docker Compose example
 
@@ -44,7 +44,7 @@ services:
       args:
         VITE_API_URL: https://api.example.com
     ports:
-      - "80:80"
+      - "8080:8080"
 ```
 
 ## Nginx

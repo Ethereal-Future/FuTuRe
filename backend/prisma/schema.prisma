@@ -19,6 +19,7 @@ model User {
   amlStatus              String                  @default("CLEAR")  // CLEAR, HELD_FOR_REVIEW, BLOCKED
   amlHoldReason          String?                 // Reason why account is held
   amlHoldDate            DateTime?               // When the hold was placed
+  stellarAccountStatus   String                  @default("ACTIVE") // ACTIVE, PENDING_ACTIVATION
   settings               Setting?
   sentTxs                Transaction[]           @relation("sender")
   receivedTxs            Transaction[]           @relation("recipient")
@@ -38,6 +39,7 @@ model User {
 
   @@index([deletedAt])
   @@index([amlStatus])
+  @@index([stellarAccountStatus])
 }
 
 model Transaction {
@@ -168,6 +170,9 @@ model NotificationPreference {
   id                        String   @id @default(uuid())
   userId                    String   @unique
   user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Locale used to render notification templates for this user (issue #1145).
+  // BCP 47 language tag, e.g. "en", "ar", "fr". Defaults to "en".
+  locale                    String   @default("en")
   emailEnabled              Boolean  @default(true)
   pushEnabled               Boolean  @default(true)
   smsEnabled                Boolean  @default(false)
@@ -524,6 +529,8 @@ model IPWhitelist {
 
   @@index([ipAddress])
   @@index([createdAt])
+}
+
 // Tracks a SEP-0031 cross-border direct payment handed off to a receiving
 // anchor. One row per transaction created via POST /transactions against an
 // anchor's DIRECT_PAYMENT_SERVER; status is refreshed by polling
@@ -533,6 +540,10 @@ model Sep31Transaction {
   anchorUrl         String
   externalId        String
   status            String   @default("pending_sender")
+  pollCount         Int      @default(0)
+  pollingActive     Boolean  @default(true)
+  terminalState     Boolean  @default(false)
+  nextPollAt        DateTime?
   amount            String
   assetCode         String?
   senderPublicKey   String?
@@ -545,6 +556,318 @@ model Sep31Transaction {
 
   @@unique([anchorUrl, externalId])
   @@index([status])
+  @@index([pollingActive, nextPollAt])
+}
+
+// Unique accounts that have received fee-bump sponsorship at least once.
+model FeeBumpAccount {
+  publicKey   String   @id
+  firstUsedAt DateTime @default(now())
+}
+
+// Date-partitioned aggregate counters for fee-bump activity.
+model FeeBumpSummary {
+  date            DateTime @id @db.Date
+  total           Int      @default(0)
+  totalFeeStroops BigInt   @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+
+// Real Horizon fee-stats snapshots persisted by the scheduler every 5 minutes.
+// getFeeHistory() queries this table instead of generating synthetic data.
+// See issue #1119.
+model FeeSnapshot {
+  id         String   @id @default(uuid())
+  capturedAt DateTime @default(now())
+  baseFee    Int      // last_ledger_base_fee (stroops)
+  p10        Int      // fee_charged.p10
+  p50        Int      // fee_charged.p50
+  p75        Int      // fee_charged.p75
+  p90        Int      // fee_charged.p90
+  p99        Int      // fee_charged.p99
+  peakFee    Int      // peak_fee.p99
+
+  @@index([capturedAt])
+}
+
+// ─── Event Sourcing (#1125) ───────────────────────────────────────────────────
+
+// Immutable event log – replaces the per-aggregate JSONL files that were
+// written to backend/data/events/ by eventStore.js.
+model EventStore {
+  id          String   @id @default(uuid())
+  aggregateId String
+  eventType   String
+  payload     Json
+  version     Int      @default(1)
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([aggregateId])
+  @@index([aggregateId, version])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// Aggregate snapshots – replaces the per-aggregate JSON files written to
+// backend/data/snapshots/ by eventStore.js.
+model EventSnapshot {
+  id          String   @id @default(uuid())
+  aggregateId String   @unique
+  state       Json
+  version     Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([aggregateId])
+}
+
+// Long-term event archive – replaces the archive files written to
+// backend/data/archive/ by eventArchiver.js.
+model EventArchive {
+  id          String   @id @default(uuid())
+  aggregateId String
+  eventType   String
+  payload     Json
+  version     Int      @default(1)
+  metadata    Json     @default("{}")
+  originalCreatedAt DateTime
+  archivedAt  DateTime @default(now())
+
+  @@index([aggregateId])
+  @@index([archivedAt])
+}
+
+// Read-model projections – replaces the per-projection JSON files written to
+// backend/data/projections/ by projectionManager.js.
+model EventProjection {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  data      Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ─── Load Testing (#1125) ────────────────────────────────────────────────────
+
+// Full result set for a single load-test run – replaces the per-run JSON files
+// written to backend/data/load-tests/results/ by loadTestRunner.js.
+model LoadTestResult {
+  id        String   @id @default(uuid())
+  testName  String
+  metrics   Json
+  createdAt DateTime @default(now())
+
+  @@index([testName])
+  @@index([testName, createdAt])
+}
+
+// Named performance baselines – replaces the per-baseline JSON files written
+// to backend/data/load-tests/baselines/ by performanceBaseline.js.
+model PerformanceBaseline {
+  id             String   @id @default(uuid())
+  name           String
+  schemaVersion  Int      @default(2)
+  executionModel String   @default("concurrent")
+  metrics        Json
+  createdAt      DateTime @default(now())
+
+  @@index([name])
+  @@index([name, createdAt])
+}
+
+// Performance threshold violation alerts – replaces the per-run alert JSON
+// files written to backend/data/load-tests/alerts/ by performanceAlerting.js.
+model PerformanceAlert {
+  id        String   @id @default(uuid())
+  testName  String?
+  alertType String
+  severity  String
+  metric    String
+  message   String
+  value     Float
+  threshold Float
+  createdAt DateTime @default(now())
+
+  @@index([severity])
+  @@index([createdAt])
+}
+
+// ─── Mobile Security (#1125) ─────────────────────────────────────────────────
+
+// Per-device fingerprint, cert-pin, and jailbreak state – replaces the
+// in-process Map (this.devices) in mobile/security.js.
+model DeviceRegistry {
+  id           String   @id @default(uuid())
+  deviceId     String   @unique
+  fingerprint  String
+  certHash     String?
+  isJailbroken Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  alerts SecurityAlert[]
+
+  @@index([deviceId])
+}
+
+// Suspicious-event log – replaces the in-process array (this.alerts) in
+// mobile/security.js.
+model SecurityAlert {
+  id         String         @id @default(uuid())
+  deviceId   String
+  device     DeviceRegistry @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  severity   String         @default("medium")
+  details    String
+  createdAt  DateTime       @default(now())
+
+  @@index([deviceId])
+  @@index([createdAt])
+}
+
+// ─── Compliance Reports (#1144) ──────────────────────────────────────────────
+
+// Durable storage for FinCEN SAR/CTR and general compliance reports (issue #1144).
+// Replaces ephemeral local-disk writes so reports survive container restarts
+// and can be retained for the BSA-mandated 5-year period.
+// filingStatus distinguishes "generated" from "actually filed with FinCEN" —
+// two legally distinct states the old implementation conflated.
+model ComplianceReport {
+  id              String   @id @default(uuid())
+  reportType      String   // SAR | CTR | AML_SUMMARY | …
+  payload         Json     // full report JSON for audit trail
+  period          Json     // { from, to }
+  filingStatus    String   @default("GENERATED")  // GENERATED | FILED | MANUAL_REVIEW_REQUIRED
+  filingReference String?  // BSA e-filing reference number once filed
+  generatedBy     String?  // userId of the operator who triggered generation
+  generatedAt     DateTime @default(now())
+  filedAt         DateTime?
+  // Retention: records should NOT be deleted before retainUntil (5 years from generation).
+  retainUntil     DateTime
+
+  @@index([reportType])
+  @@index([filingStatus])
+  @@index([generatedAt])
+}
+
+// ─── Multi-Sig Pending Transactions (#1287) ──────────────────────────────────
+
+// Envelopes awaiting signatures from multiple signers. Rows past expiresAt are
+// transitioned to status 'expired' by the scheduler so active listings only
+// return executable transactions.
+model PendingMultiSigTx {
+  txId            String   @id
+  txXdr           String
+  baseTxXdr       String?
+  sourcePublicKey String
+  submissionSourcePublicKey String?
+  sourceSequence  BigInt?
+  destination     String
+  amount          String
+  assetCode       String   @default("XLM")
+  signatures      Json     @default("[]")
+  status          String   @default("pending") // pending | submitting | submitted | failed | expired
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  signaturesByKey MultiSigSignature[]
+
+  @@index([status, expiresAt])
+  @@index([sourcePublicKey, status])
+}
+
+model MultiSigSignature {
+  id              String           @id @default(uuid())
+  txId            String
+  signerPublicKey String
+  signature       String
+  createdAt       DateTime         @default(now())
+  pending         PendingMultiSigTx @relation(fields: [txId], references: [txId], onDelete: Cascade)
+
+  @@unique([txId, signerPublicKey])
+  @@index([txId])
+}
+
+// ─── AMM Pools (#1290) ───────────────────────────────────────────────────────
+
+// Durable, shared AMM state. Replaces the per-process Maps in services/amm.js
+// so every ECS task sees the same reserves. `version` is an optimistic-lock
+// counter: every reserve mutation is `UPDATE ... WHERE poolId = ? AND version = ?`.
+model AmmPool {
+  poolId    String        @id
+  assetA    String
+  assetB    String
+  reserveA  Decimal       @db.Decimal(38, 18)
+  reserveB  Decimal       @db.Decimal(38, 18)
+  feeBps    Int           @default(30)
+  version   Int           @default(0)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+  positions AmmPosition[]
+  trades    AmmTrade[]
+
+  @@index([assetA, assetB])
+}
+
+model AmmPosition {
+  id         String   @id @default(uuid())
+  providerId String
+  poolId     String
+  pool       AmmPool  @relation(fields: [poolId], references: [poolId], onDelete: Cascade)
+  shares     Decimal  @db.Decimal(38, 18)
+  depositedA Decimal  @db.Decimal(38, 18)
+  depositedB Decimal  @db.Decimal(38, 18)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([providerId, poolId])
+  @@index([poolId])
+}
+
+model AmmTrade {
+  tradeId     String   @id
+  poolId      String
+  pool        AmmPool  @relation(fields: [poolId], references: [poolId], onDelete: Cascade)
+  traderId    String
+  inputAsset  String
+  outputAsset String
+  amountIn    Decimal  @db.Decimal(38, 18)
+  amountOut   Decimal  @db.Decimal(38, 18)
+  feePaid     Decimal  @db.Decimal(38, 18)
+  priceImpact Decimal  @db.Decimal(38, 18)
+  createdAt   DateTime @default(now())
+
+  @@index([poolId, createdAt])
+  @@index([traderId])
+}
+
+model RefreshToken {
+  jti       String    @id
+  familyId  String
+  userId    String
+  isUsed    Boolean   @default(false)
+  isRevoked Boolean   @default(false)
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  @@index([familyId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Session {
+  id           String    @id @default(uuid())
+  userId       String
+  createdAt    DateTime  @default(now())
+  lastActiveAt DateTime  @default(now())
+  expiresAt    DateTime
+  revokedAt    DateTime?
+
+  @@index([userId])
 }
 
 // Events that repeatedly failed projection processing and were quarantined

@@ -214,6 +214,36 @@ export async function cancelStream(id) {
 }
 
 /**
+ * Cancel every active or paused payment stream originating from a sender account.
+ * Used by compliance holds to immediately halt outgoing capital flow.
+ * @param {string} senderPublicKey - Stellar public key of the stream sender
+ * @returns {Promise<{cancelled: number, streamIds: number[]}>} Summary of cancelled streams
+ */
+export async function cancelStreamsForSender(senderPublicKey) {
+  if (!senderPublicKey) return { cancelled: 0, streamIds: [] };
+
+  const sender = await prisma.user.findUnique({ where: { publicKey: senderPublicKey } });
+  if (!sender) return { cancelled: 0, streamIds: [] };
+
+  const streams = await prisma.paymentStream.findMany({
+    where: { senderId: sender.id, status: { in: ['ACTIVE', 'PAUSED'] } },
+    select: { id: true },
+  });
+
+  const streamIds = [];
+  for (const { id } of streams) {
+    try {
+      await cancelStream(id);
+      streamIds.push(id);
+    } catch (err) {
+      logger.error(`Failed to cancel stream ${id} for compliance hold`, { error: err.message, senderPublicKey });
+    }
+  }
+
+  return { cancelled: streamIds.length, streamIds };
+}
+
+/**
  * Update mutable fields of an active or paused stream.
  * @param {number} id - Primary key of the PaymentStream record
  * @param {object} updates
@@ -258,70 +288,7 @@ export async function updateStream(id, updates) {
  * Return aggregate analytics across all payment streams.
  * @returns {Promise<{totalVolume: string, activeStreams: number, pausedStreams: number, failedStreams: number, completedStreams: number, cancelledStreams: number, totalStreams: number, topAssets: Array<{assetCode: string, count: number}>}>}
  */
-export async function getStreamAnalytics() {
-  const [statusCounts, totalVolumeResult, assets] = await Promise.all([
-    prisma.paymentStream.groupBy({
-      by: ['status'],
-      _count: true,
-    }),
-    prisma.paymentStream.aggregate({
-      _sum: { totalStreamed: true },
-    }),
-    prisma.paymentStream.groupBy({
-      by: ['assetCode'],
-      _count: true,
-      orderBy: { _count: { assetCode: 'desc' } },
-      take: 10,
-    }),
-  ]);
-
-  const statusMap = statusCounts.reduce((acc, { status, _count }) => {
-    acc[status] = _count;
-    return acc;
-  }, {});
-
-  return {
-    totalVolume: (totalVolumeResult._sum.totalStreamed || 0).toFixed(7),
-    activeStreams: statusMap.ACTIVE || 0,
-    pausedStreams: statusMap.PAUSED || 0,
-    failedStreams: statusMap.FAILED || 0,
-    completedStreams: statusMap.COMPLETED || 0,
-    cancelledStreams: statusMap.CANCELLED || 0,
-    totalStreams: Object.values(statusMap).reduce((a, b) => a + b, 0),
-    topAssets: assets.map(a => ({ assetCode: a.assetCode, count: a._count })),
-  };
-}
-
-/**
- * Return the failure history for a given stream, most recent first.
- * @param {string} id - Primary key of the PaymentStream record
- * @returns {Promise<Array<{id: string, streamId: string, reason: string, createdAt: Date}>>}
- */
-export async function getStreamFailures(id) {
-  return prisma.streamFailure.findMany({
-    where: { streamId: id },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-/**
- * Worker tick: find all ACTIVE streams whose interval has elapsed and execute the next payment.
- * Streams that fail 5 consecutive times are automatically set to FAILED status.
- * Intended to be called by a scheduled job (e.g. every 10–30 seconds).
- * @returns {Promise<void>}
- */
-export async function processActiveStreams() {
-  const now = new Date();
-  const activeStreams = await prisma.paymentStream.findMany({
-    where: {
-      status: 'ACTIVE',
-      OR: [
-        { endTime: null },
-        { endTime: { gt: now } },
-      ],
-    },
-    include: { sender: true, recipient: true },
-  });
+exp
 
   logger.debug('streaming.worker.tick', { activeCount: activeStreams.length });
 
@@ -423,3 +390,4 @@ export async function processActiveStreams() {
     }
   }
 }
+/* … truncated 5126 chars — edit only what you need near the top … */

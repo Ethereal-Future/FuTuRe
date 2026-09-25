@@ -9,6 +9,13 @@ import {
   createTrustline as stellarCreateTrustline,
   getTrustlines as stellarGetTrustlines,
 } from '../services/stellar.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
+
+// Reads (discovery, portfolio, trustlines, price) are intentionally public —
+// they operate on Stellar public keys, which are themselves public ledger
+// data, matching the existing routes/stellar/* pattern. Trustline/convert
+// mutations are gated by possession of `sourceSecret`, the same Stellar
+// secret-key model used throughout routes/stellar/*. See #1102.
 
 const ASSET_CODE_REGEX = /^[A-Z0-9]{1,12}$/;
 const STELLAR_PUBLIC_KEY_REGEX = /^G[A-Z2-7]{55}$/;
@@ -43,8 +50,10 @@ const publicKeyParam = (field) =>
 /**
  * @route POST /api/assets/register
  * @desc Register a new asset
+ * Adds a globally-visible entry to the shared asset registry (not scoped to
+ * a caller-owned key), so this is an admin-only config action (#1102).
  */
-router.post('/register', async (req, res) => {
+router.post('/register', requireAdmin, async (req, res) => {
   try {
     const asset = await assetRegistry.registerAsset(req.body);
     res.json(asset);

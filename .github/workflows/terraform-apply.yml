@@ -53,7 +53,12 @@ jobs:
           echo "frontend_image=ghcr.io/${{ github.repository }}/frontend:${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ vars.TF_STATE_REGION || 'us-east-1' }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="key=production/terraform.tfstate"
 
       - name: Terraform Plan
         id: plan
@@ -62,6 +67,7 @@ jobs:
             -no-color \
             -input=false \
             -out=tfplan \
+            -var-file=environments/production.tfvars \
             -var="backend_image=${{ steps.images.outputs.backend_image }}" \
             -var="frontend_image=${{ steps.images.outputs.frontend_image }}" \
             2>&1 | tee /tmp/plan_output.txt
@@ -148,7 +154,12 @@ jobs:
           aws-region: us-east-1
 
       - name: Terraform Init
-        run: terraform init -input=false
+        run: |
+          terraform init -input=false \
+            -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+            -backend-config="region=${{ vars.TF_STATE_REGION || 'us-east-1' }}" \
+            -backend-config="dynamodb_table=${{ vars.TF_STATE_DYNAMODB_TABLE }}" \
+            -backend-config="key=production/terraform.tfstate"
 
       - name: Download plan artifact
         uses: actions/download-artifact@v4

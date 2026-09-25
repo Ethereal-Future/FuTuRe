@@ -2,6 +2,10 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Pin timezone to UTC so Date arithmetic (e.g. peakHour in userBehavior.js)
+# is deterministic regardless of the host/container's default TZ setting.
+ENV TZ=UTC
+
 # Install dependencies first (cached layer)
 COPY package.json package-lock.json* ./
 RUN npm install

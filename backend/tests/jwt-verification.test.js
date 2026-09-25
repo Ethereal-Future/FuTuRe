@@ -13,7 +13,7 @@ import {
 
 vi.mock('../src/config/env.js', () => ({
   getConfig: () => ({
-    auth: { jwtSecret: 'test-secret-key' },
+    security: { jwtSecret: 'test-secret-key' },
   }),
 }));
 

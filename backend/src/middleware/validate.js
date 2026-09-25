@@ -182,9 +182,60 @@ export const rules = {
       .withMessage('Invalid Stellar secret key'),
     body('signers').isArray({ min: 1 }).withMessage('signers must be a non-empty array'),
     body('signers.*.publicKey')
+      .optional()
       .trim()
       .matches(STELLAR_PUBLIC_KEY)
       .withMessage('Invalid signer public key'),
+    body('signers.*.type')
+      .optional()
+      .isIn(['ed25519PublicKey', 'preAuthTx', 'sha256Hash', 'hash'])
+      .withMessage('Unsupported signer type'),
+    body('signers.*.signerType')
+      .optional()
+      .isIn(['ed25519PublicKey', 'preAuthTx', 'sha256Hash', 'hash'])
+      .withMessage('Unsupported signer type'),
+    body('signers.*.preAuthTx')
+      .optional()
+      .isHexadecimal()
+      .isLength({ min: 64, max: 64 })
+      .withMessage('preAuthTx must be a 32-byte hexadecimal hash'),
+    body('signers.*.preAuthTxHash')
+      .optional()
+      .isHexadecimal()
+      .isLength({ min: 64, max: 64 })
+      .withMessage('preAuthTxHash must be a 32-byte hexadecimal hash'),
+    body('signers.*.sha256Hash')
+      .optional()
+      .isHexadecimal()
+      .isLength({ min: 64, max: 64 })
+      .withMessage('sha256Hash must be a 32-byte hexadecimal hash'),
+    body('signers.*.hashX')
+      .optional()
+      .isHexadecimal()
+      .isLength({ min: 64, max: 64 })
+      .withMessage('hashX must be a 32-byte hexadecimal hash'),
+    body('signers.*.hash')
+      .optional()
+      .isHexadecimal()
+      .isLength({ min: 64, max: 64 })
+      .withMessage('hash must be a 32-byte hexadecimal hash'),
+    body('signers').custom((signers) => {
+      for (const signer of signers) {
+        const type = signer.type ?? signer.signerType ?? 'ed25519PublicKey';
+        if (type === 'ed25519PublicKey' && !signer.publicKey)
+          throw new Error('publicKey is required for ed25519PublicKey signers');
+        if (type === 'preAuthTx' && !signer.preAuthTx && !signer.preAuthTxHash && !signer.hash)
+          throw new Error('preAuthTx is required for preAuthTx signers');
+        if (
+          (type === 'sha256Hash' || type === 'hash') &&
+          !signer.sha256Hash &&
+          !signer.hashX &&
+          !signer.hash
+        )
+          throw new Error('sha256Hash is required for hash signers');
+      }
+      return true;
+    }),
     body('signers.*.weight').isInt({ min: 0, max: 255 }).withMessage('Signer weight must be 0-255'),
     body('thresholds.low').isInt({ min: 0, max: 255 }).withMessage('Low threshold must be 0-255'),
     body('thresholds.medium')
@@ -269,14 +320,29 @@ export const rules = {
         return parseFloat(amount).toFixed(7);
       }),
     body('assetCode').optional().trim().matches(ASSET_CODE).withMessage('Invalid asset code'),
+    body('ttlSeconds').optional().isInt({ min: 60, max: 2592000 }).withMessage('ttlSeconds must be between 60 seconds and 30 days'),
+    body('channelAccount').optional().trim().matches(STELLAR_PUBLIC_KEY).withMessage('Invalid channel account'),
   ],
 
   signMultiSigTx: [
     body('txId').trim().notEmpty().withMessage('txId is required'),
     body('signerSecret')
+      .if(body('signedXdr').not().exists())
       .trim()
       .matches(STELLAR_SECRET_KEY)
       .withMessage('Invalid signer secret key'),
+    body('signedXdr')
+      .optional()
+      .isString()
+      .trim()
+      .notEmpty()
+      .isBase64()
+      .withMessage('signedXdr must be a base64-encoded transaction envelope'),
+    body('signerPublicKey')
+      .optional()
+      .trim()
+      .matches(STELLAR_PUBLIC_KEY)
+      .withMessage('Invalid signer public key'),
   ],
 
   submitMultiSigTx: [body('txId').trim().notEmpty().withMessage('txId is required')],

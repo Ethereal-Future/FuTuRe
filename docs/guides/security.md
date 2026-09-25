@@ -218,6 +218,39 @@ const rows = await prisma.$queryRaw(`SELECT * FROM "User" WHERE id = '${userId}'
 
 ---
 
+## Identity Verification (KYC)
+
+`backend/src/compliance/identityVerifier.js` does not integrate a real document-verification
+provider (e.g. Jumio, Onfido). Its `_callProvider` step is a placeholder that only checks that a
+submitted document number string is present and at least 5 characters — it cannot verify that a
+document is genuine or belongs to the submitter.
+
+To prevent that placeholder from masking real compliance signals:
+
+- It refuses to run at all in `production` and `staging` (`APP_ENV`/`NODE_ENV`), so a deployed
+  environment cannot silently rely on it.
+- In other environments, a passing result is routed to `UNDER_REVIEW` (manual review) rather than
+  auto-approved.
+- Sanctions screening (`sanctionsChecker.js`) fails **closed**: an unconfigured or unreachable
+  sanctions API is treated as a screening hit requiring manual review, not a clean pass, and
+  production/staging refuse to start without `SANCTIONS_API_KEY` configured. See
+  `SANCTIONS_FAIL_MODE` in `.env.example`.
+
+Before enabling automated KYC approval in a deployed environment, integrate a real provider in
+`_callProvider` and remove the manual-review gate for its passing results.
+
+---
+
 ## Reporting Vulnerabilities
 
 If you discover a security issue, please report it privately to the maintainers before public disclosure. Open a GitHub Security Advisory rather than a public issue so the team can coordinate a fix.
+
+---
+
+## GDPR Erasure and Compliance-Record Retention
+
+Account deletion anonymises the user and KYC record and removes personal transaction memos. **AML alerts and security audit logs are retained** because they support legally required anti-money-laundering reporting and security incident response. Retention is an exception to erasure only for the documented compliance purpose and should be bounded by the organisation’s approved retention schedule; the exact statutory window requires legal/compliance ownership and is not hard-coded here.
+
+As part of the same account-deletion transaction, the service scrubs free-text and network-identifying data from retained records. AML alerts remain linked to the anonymised user and transaction for regulatory traceability, but their description is replaced with an account-deletion marker. Audit logs retain their event type, timestamp, severity, and anonymised user linkage while replacing `details` with a minimal retention marker and clearing `ipAddress`, `userAgent`, and `resourceId`. The deletion itself creates an `ACCOUNT_DELETION` audit event that records only that retained records were scrubbed for compliance.
+
+Operators must maintain a scheduled retention job to permanently remove AML alerts and audit logs once their approved legal retention window expires. Do not re-identify retained records or add raw KYC, address, IP, user-agent, or free-text transaction context after erasure. See the implementation in `backend/src/routes/auth.js` and the audit-event contract in `backend/src/security/auditLogger.js`.

@@ -5,8 +5,10 @@
  *   - modifyTrustlineLimit  → stellar.updateTrustlineLimit(sourceSecret, assetCode, issuer, newLimit)
  * This module will be removed in the next major release.
  */
-import StellarSdk from 'stellar-sdk';
-import { horizonServer, networkPassphrase } from '../config/stellar.js';
+import * as StellarSdk from '@stellar/stellar-sdk';
+// ISSUE-044: horizonServer and networkPassphrase are now re-exported from the
+// canonical config/stellar.js (the file previously did not exist → fatal crash).
+import { horizonServer, getNetworkPassphrase } from '../config/stellar.js';
 import logger from '../config/logger.js';
 
 const MAX_STELLAR_LIMIT = '922337203685.4775807'; // Max native limit for Stellar
@@ -100,7 +102,7 @@ export async function modifyTrustlineLimit(sourceSecret, assetCode, issuer, newL
 
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(
         StellarSdk.Operation.changeTrust({

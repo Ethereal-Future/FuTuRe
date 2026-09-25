@@ -12,11 +12,22 @@ import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = express.Router();
 
+// Event-sourcing internals (replay, projections, archival) are an
+// engineering/ops surface, not user-facing, so they are admin-only (#1102).
+router.use(requireAdmin);
+import { requireAuth, requireAdmin, requireOwnAccount } from '../middleware/auth.js';
+
+const router = express.Router();
+
+router.use(requireAuth);
+
 /**
  * @swagger
  * /api/events/history/{aggregateId}:
  *   get:
  *     summary: Get a page of event history for an aggregate
+ *     summary: Get event history for an aggregate
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: path
@@ -44,7 +55,7 @@ const router = express.Router();
  *       200:
  *         description: Event history page retrieved
  */
-router.get('/history/:aggregateId', async (req, res) => {
+router.get('/history/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const limit = clampLimit(req.query.limit);
     const cursor = typeof req.query.cursor === 'string' && req.query.cursor ? req.query.cursor : null;
@@ -65,6 +76,7 @@ router.get('/history/:aggregateId', async (req, res) => {
  * /api/events/state/{aggregateId}:
  *   get:
  *     summary: Get current state of an aggregate
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: path
@@ -73,7 +85,7 @@ router.get('/history/:aggregateId', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/state/:aggregateId', async (req, res) => {
+router.get('/state/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const state = await eventMonitor.getAggregateState(req.params.aggregateId);
     res.json({ aggregateId: req.params.aggregateId, state });
@@ -87,6 +99,7 @@ router.get('/state/:aggregateId', async (req, res) => {
  * /api/events/replay/{aggregateId}:
  *   get:
  *     summary: Replay events to a specific version
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: path
@@ -99,7 +112,7 @@ router.get('/state/:aggregateId', async (req, res) => {
  *         schema:
  *           type: integer
  */
-router.get('/replay/:aggregateId', async (req, res) => {
+router.get('/replay/:aggregateId', requireOwnAccount('aggregateId'), async (req, res) => {
   try {
     const toVersion = req.query.toVersion ? parseInt(req.query.toVersion) : null;
     const state = await eventReplayer.replay(req.params.aggregateId, toVersion);
@@ -114,6 +127,7 @@ router.get('/replay/:aggregateId', async (req, res) => {
  * /api/events/projection/{name}:
  *   get:
  *     summary: Get a projection
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: path
@@ -122,7 +136,7 @@ router.get('/replay/:aggregateId', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/projection/:name', async (req, res) => {
+router.get('/projection/:name', requireAdmin, async (req, res) => {
   try {
     const projection = await eventMonitor.getProjection(req.params.name);
     res.json({ name: req.params.name, projection });
@@ -136,6 +150,7 @@ router.get('/projection/:name', async (req, res) => {
  * /api/events/analytics/{eventType}:
  *   get:
  *     summary: Get analytics for an event type
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: path
@@ -144,7 +159,7 @@ router.get('/projection/:name', async (req, res) => {
  *         schema:
  *           type: string
  */
-router.get('/analytics/:eventType', async (req, res) => {
+router.get('/analytics/:eventType', requireAdmin, async (req, res) => {
   try {
     const analytics = await eventMonitor.getAnalytics(req.params.eventType);
     res.json(analytics);
@@ -158,9 +173,10 @@ router.get('/analytics/:eventType', async (req, res) => {
  * /api/events/stats:
  *   get:
  *     summary: Get event statistics
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  */
-router.get('/stats', async (req, res) => {
+router.get('/stats', requireAdmin, async (req, res) => {
   try {
     const stats = await eventMonitor.getEventStats();
     res.json(stats);
@@ -174,6 +190,7 @@ router.get('/stats', async (req, res) => {
  * /api/events/archive:
  *   post:
  *     summary: Archive old events
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     requestBody:
  *       required: true
@@ -186,7 +203,7 @@ router.get('/stats', async (req, res) => {
  *                 type: integer
  *                 default: 30
  */
-router.post('/archive', async (req, res) => {
+router.post('/archive', requireAdmin, async (req, res) => {
   try {
     const { olderThanDays = 30 } = req.body;
     const result = await eventArchiver.archiveOldEvents(olderThanDays);
@@ -201,6 +218,7 @@ router.post('/archive', async (req, res) => {
  * /api/events/all:
  *   get:
  *     summary: Get all events with pagination
+ *     description: "Known limitation: event-sourcing state is in-memory, so it is not durable across deploys or shared across instances. See docs/guides/internal-tooling.md#event-sourcing"
  *     tags: [Events]
  *     parameters:
  *       - in: query
@@ -214,7 +232,7 @@ router.post('/archive', async (req, res) => {
  *           type: integer
  *           default: 0
  */
-router.get('/all', async (req, res) => {
+router.get('/all', requireAdmin, async (req, res) => {
   try {
     const limit = parseInt(req.query.limit) || 1000;
     const offset = parseInt(req.query.offset) || 0;

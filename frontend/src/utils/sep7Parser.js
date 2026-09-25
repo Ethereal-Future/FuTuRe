@@ -34,6 +34,8 @@ export function parseSep7Uri(uri) {
     assetCode: 'XLM',
     assetIssuer: null,
     originDomain: null,
+    originDomainVerified: false,
+    signature: null,
     message: null,
     callbackUrl: null,
   };
@@ -135,10 +137,19 @@ export function parseSep7Uri(uri) {
       result.memoType = memoType;
     }
 
-    // Optional: origin domain (for security validation)
+    // Optional: origin domain. Per SEP-0007, origin_domain must only be trusted
+    // when accompanied by a signature verified against the domain's stellar.toml
+    // URI_REQUEST_SIGNING_KEY. This app does not implement that verification, so
+    // originDomain is always surfaced as unverified and must never be rendered
+    // as a trust signal.
     const originDomain = params.get('origin_domain');
+    const signature = params.get('signature');
     if (originDomain) {
       result.originDomain = originDomain;
+      result.originDomainVerified = false;
+    }
+    if (signature) {
+      result.signature = signature;
     }
 
     // Optional: message (user-facing)

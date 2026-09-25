@@ -4,8 +4,14 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
+import { saveRefreshToken, consumeRefreshToken, revokeFamily, revokeUserTokens } from '../auth/refreshTokenStore.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
-import { signAccessToken, signRefreshToken, verifyToken, verifyRefreshToken } from '../auth/tokens.js';
+import {
+  signAccessToken,
+  signRefreshToken,
+  verifyToken,
+  verifyRefreshToken,
+} from '../auth/tokens.js';
 import {
   createSession,
   getActiveSession,
@@ -32,8 +38,16 @@ import mfaManager from '../security/mfa.js';
 import oauth2Provider from '../security/oauth2.js';
 import { getConfig } from '../config/env.js';
 import { sendEmail } from '../notifications/channels/email.js';
+import kycCollector from '../compliance/kycCollector.js';
+import auditLogger from '../security/auditLogger.js';
 
 const router = express.Router();
+
+function issueRefreshToken(payload, familyId) {
+  const { token, jti, familyId: family, expiresAt } = signRefreshToken(payload, { familyId });
+  saveRefreshToken({ jti, familyId: family, userId: payload.sub, expiresAt });
+  return token;
+}
 
 function clearRefreshTokenCookie(res) {
   const config = getConfig();
@@ -301,6 +315,27 @@ router.post('/login', authRateLimiter, userRules, validateBody, async (req, res)
   setRefreshTokenCookie(res, refreshToken);
   res.json({
     accessToken: signAccessToken(payload),
+    refreshToken: issueRefreshToken(payload),
+  });
+});
+
+// POST /api/auth/refresh
+router.post('/refresh', (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) return res.status(400).json({ error: 'refreshToken required' });
+  let claims;
+  try {
+    claims = verifyRefreshToken(refreshToken);
+  } catch {
+    return res.status(401).json({ error: 'Invalid or expired refresh token' });
+  }
+  const { sub, username, jti, familyId } = claims;
+  const result = consumeRefreshToken(jti, familyId);
+  if (!result.ok) {
+    const error = result.reason === 'replay'
+      ? 'Refresh token reuse detected; session revoked'
+      : 'Invalid or expired refresh token';
+    return res.status(401).json({ error });
     sessionId: session.id,
   });
 });
@@ -363,8 +398,24 @@ router.post('/refresh', async (req, res) => {
   } catch {
     sendError(res, 401, ErrorCodes.AUTH_INVALID_TOKEN, 'Invalid or expired refresh token');
   }
+  const payload = { sub, username };
+  res.json({
+    accessToken: signAccessToken(payload),
+    refreshToken: issueRefreshToken(payload, familyId),
+  });
 });
 
+// POST /api/auth/logout — revokes the supplied refresh token family, or all user tokens if none given
+router.post('/logout', requireAuth, (req, res) => {
+  const { refreshToken } = req.body ?? {};
+  if (refreshToken) {
+    try {
+      const { familyId, sub } = verifyRefreshToken(refreshToken);
+      if (sub === req.user.sub) revokeFamily(familyId);
+    } catch { /* ignore invalid token */ }
+  } else {
+    revokeUserTokens(req.user.sub);
+  }
 /**
  * @swagger
  * /api/auth/logout:
@@ -722,7 +773,13 @@ router.get('/oauth/google', (req, res) => {
   const state = randomBytes(16).toString('hex');
 
   // Store state in session/cookie for verification
-  res.cookie('oauth_state', state, { httpOnly: true, maxAge: 10 * 60 * 1000 });
+  // Lax (not Strict) so the cookie survives the top-level redirect back from the OAuth provider.
+  res.cookie('oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+  });
 
   const authUrl = oauth2Provider.getGoogleAuthURL(clientId, redirectUri, state);
   res.redirect(authUrl);
@@ -878,8 +935,12 @@ router.get('/data-export', requireAuth, async (req, res) => {
       },
     });
     if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
-
     const exportData = { ...user };
+    if (user.kycRecord) {
+      // KYC documentNumber and address are encrypted at rest; GDPR exports must
+      // contain the values the data subject can actually access.
+      exportData.kycRecord = await kycCollector.getKYCRecord(userId);
+    }
     delete exportData.passwordHash;
 
     res.setHeader('Content-Disposition', 'attachment; filename="data-export.json"');
@@ -1014,9 +1075,30 @@ router.delete('/account', requireAuth, async (req, res) => {
         where: { OR: [{ senderId: userId }, { recipientId: userId }] },
         data: { memo: null },
       });
-    });
 
-    logger.info({ userId }, 'GDPR account deletion: data anonymised');
+      // AML alerts and security audit logs are retained for regulatory and
+      // incident-response obligations, but free-text and network-identifying
+      // fields are scrubbed as part of the same erasure transaction.
+      await tx.aMLAlert.updateMany({
+        where: { userId },
+        data: { description: '[REDACTED: ACCOUNT DELETED]' },
+      });
+      await tx.auditLog.updateMany({
+        where: { userId },
+        data: {
+          details: JSON.stringify({ reason: 'ACCOUNT_DELETED', retainedFor: 'COMPLIANCE' }),
+          ipAddress: null,
+          userAgent: null,
+          resourceId: null,
+        },
+      });
+    });
+    await auditLogger.logAccountDeletion(userId, null, {
+      retainedRecords: ['AMLAlert', 'AuditLog'],
+      retentionReason: 'REGULATORY_COMPLIANCE_AND_SECURITY_RESPONSE',
+      piiScrubbed: true,
+    });
+    logger.info({ userId }, 'GDPR account deletion: data anonymised and retained records scrubbed');
 
     res.json({
       message: 'Account scheduled for deletion. Personal data has been anonymised.',
@@ -1428,7 +1510,8 @@ router.post(
             },
           });
 
-          const baseUrl = getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
+          const baseUrl =
+            getConfig().server?.baseUrl || process.env.BASE_URL || 'http://localhost:3001';
           await sendEmail(email, {
             subject: 'Reset your password',
             body: `Reset your password: ${baseUrl}/reset-password?token=${token}\nExpires in 15 minutes.`,

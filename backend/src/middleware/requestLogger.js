@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
 import logger from '../config/logger.js';
+import { createRequestAbortSignal, runWithRequestContext } from '../db/requestContext.js';
 
 export function requestLogger(req, res, next) {
   const correlationId = req.headers['x-correlation-id'] || randomUUID();
@@ -24,5 +25,21 @@ export function requestLogger(req, res, next) {
     });
   });
 
-  next();
+  // Expose an AbortSignal that fires if the client disconnects before the
+  // response completes, and bind it to the async context so database helpers
+  // (db/client.js) can stop issuing queries and roll back transactions.
+  if (!req.signal) {
+    Object.defineProperty(req, 'signal', {
+      value: createRequestAbortSignal(req, res),
+      configurable: true,
+    });
+  }
+
+  req.signal.addEventListener(
+    'abort',
+    () => logger.warn('http.client.aborted', { correlationId, method: req.method, url: req.originalUrl }),
+    { once: true }
+  );
+
+  runWithRequestContext({ signal: req.signal, correlationId }, next);
 }

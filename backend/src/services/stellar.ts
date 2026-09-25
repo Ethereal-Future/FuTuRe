@@ -1,11 +1,9 @@
 /**
- * Stellar service — typed TypeScript pilot migration (issue #771).
- *
- * This file is the authoritative implementation. stellar.js is retained
- * during the incremental migration period so that callers that import the
- * .js extension explicitly continue to work. Once all callers are updated,
- * stellar.js will be removed.
+ * Canonical Stellar service source of truth lives in stellar.js.
+ * This shim preserves TypeScript import compatibility without maintaining
+ * a second independent implementation.
  */
+export * from './stellar.js';
 
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { randomUUID } from 'crypto';
@@ -184,9 +182,36 @@ export function wrapWithFeeBump(
     ? StellarSDK.Networks.TESTNET
     : StellarSDK.Networks.PUBLIC;
   const multiplier = parseInt(process.env.FEE_BUMP_MULTIPLIER ?? '10', 10);
+  const minFee = parseInt(process.env.MIN_FEE_STROOPS ?? String(StellarSDK.BASE_FEE), 10);
+  const maxFee = parseInt(process.env.MAX_FEE_BUMP_STROOPS ?? process.env.MAX_FEE_STROOPS ?? '100000', 10);
+
+  let surgeFee = 0;
+  try {
+    const avgFee = getSevenDayAverageFee();
+    const surgeInfo = detectFeeSurge(Number(StellarSDK.BASE_FEE) * multiplier, avgFee);
+    if (surgeInfo?.surge && avgFee) {
+      surgeFee = Math.round(avgFee * surgeInfo.ratio);
+    }
+  } catch (err) {
+    logger.warn('stellar.wrapWithFeeBump.feeSurgeCheck.failed', { error: (err as Error).message });
+  }
+
+  const baseConfiguredFee = Number(StellarSDK.BASE_FEE) * multiplier;
+  const calculatedFee = Math.max(surgeFee, baseConfiguredFee, minFee);
+  const finalFee = Math.min(calculatedFee, maxFee);
+
+  logger.info('stellar.wrapWithFeeBump.feeDetermined', {
+    multiplier,
+    baseConfiguredFee,
+    surgeFee,
+    minFee,
+    maxFee,
+    finalFee,
+  });
+
   const feeBumpTx = StellarSDK.TransactionBuilder.buildFeeBumpTransaction(
     feeKeypair,
-    StellarSDK.BASE_FEE * multiplier,
+    finalFee,
     innerTx,
     networkPassphrase,
   );
@@ -240,9 +265,9 @@ const HORIZON_RETRY_BACKOFFS: number[] = [500, 1000, 2000];
 
 function isTransientHorizonError(err: unknown): boolean {
   const e = err as Record<string, unknown>;
-  const status = (e?.response as Record<string, unknown>)?.status ?? e?.status;
-  if (status === 400 || status === 404 || status === 409) return false;
-  if (status === 429 || status === 503) return true;
+  const status = Number((e?.response as Record<string, unknown>)?.status ?? e?.status);
+  if (status === 400 || status === 401 || status === 403 || status === 404 || status === 409) return false;
+  if (status === 429 || status === 502 || status === 503 || status === 504 || status === 520 || (status >= 500 && status < 600)) return true;
   if ((e as { isTimeout?: boolean })?.isTimeout) return true;
   const code = e?.code;
   if (
@@ -260,7 +285,10 @@ function isTransientHorizonError(err: unknown): boolean {
  * Retries on 429, 503, and network timeouts (max 3 attempts: 500ms, 1s, 2s backoff).
  * Does NOT retry on 400, 404, or 409.
  */
-export async function withHorizonRetry<T>(fn: () => Promise<T>): Promise<T> {
+export async function withHorizonRetry<T>(
+  fn: () => Promise<T>,
+  txHash?: string | null,
+): Promise<T> {
   let lastErr: unknown;
   for (let attempt = 0; attempt <= HORIZON_RETRY_BACKOFFS.length; attempt++) {
     try {
@@ -273,6 +301,27 @@ export async function withHorizonRetry<T>(fn: () => Promise<T>): Promise<T> {
         recordHorizonCall(true);
         throw err;
       }
+
+      if (txHash) {
+        try {
+          const confirmedTx = await getHorizonServer().transactions().transaction(txHash).call();
+          if (confirmedTx && (confirmedTx.successful !== undefined || confirmedTx.id || confirmedTx.hash)) {
+            logger.info('stellar.horizon.retry.alreadyCommitted', { txHash, ledger: confirmedTx.ledger_attr });
+            recordHorizonCall(false);
+            return {
+              ...confirmedTx,
+              hash: confirmedTx.hash || txHash,
+              ledger: confirmedTx.ledger_attr,
+              successful: confirmedTx.successful ?? true,
+            } as unknown as T;
+          }
+        } catch (checkErr) {
+          if ((checkErr as { response?: { status?: number } })?.response?.status !== 404) {
+            logger.warn('stellar.horizon.retry.hashCheckFailed', { txHash, error: (checkErr as Error).message });
+          }
+        }
+      }
+
       const delay = HORIZON_RETRY_BACKOFFS[attempt];
       logger.warn('stellar.horizon.retry', { attempt: attempt + 1, delay, error: (err as Error).message });
       await new Promise((r) => setTimeout(r, delay));
@@ -487,8 +536,11 @@ export async function sendPayment(
   }
 
   let result: StellarSDK.Horizon.HorizonApi.SubmitTransactionResponse;
+  const txHash = typeof (txToSubmit as StellarSDK.Transaction | StellarSDK.FeeBumpTransaction)?.hash === 'function'
+    ? (txToSubmit as StellarSDK.Transaction | StellarSDK.FeeBumpTransaction).hash().toString('hex')
+    : null;
   try {
-    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(txToSubmit));
+    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(txToSubmit), txHash);
   } catch (err) {
     logger.error('stellar.sendPayment.failed', {
       source: sourcePublicKey,
@@ -514,7 +566,25 @@ export async function sendPayment(
     correlationId: txCorrelationId,
   });
 
-  await invalidateBalanceCache(sourcePublicKey);
+  await Promise.all([
+    invalidateBalanceCache(sourcePublicKey),
+    invalidateBalanceCache(destination),
+  ]);
+
+  try {
+    const { broadcastToAccount } = await import('./websocket.js');
+    broadcastToAccount(destination, {
+      type: 'balance_update',
+      action: 'payment_received',
+      source: sourcePublicKey,
+      destination,
+      amount,
+      assetCode: assetCode || 'XLM',
+      hash: result.hash,
+    });
+  } catch (wsErr) {
+    logger.warn('stellar.sendPayment.wsNotification.failed', { destination, error: (wsErr as Error).message });
+  }
 
   await eventMonitor.publishEvent(sourcePublicKey, {
     type: 'PaymentSent',

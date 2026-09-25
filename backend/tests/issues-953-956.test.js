@@ -82,6 +82,8 @@ vi.mock('../src/db/client.js', () => ({
     sep31Transaction: {
       create: vi.fn(),
       updateMany: vi.fn(),
+      findMany: vi.fn(),
+      update: vi.fn(),
     },
   },
 }));
@@ -262,10 +264,32 @@ describe('#954 env.js — signingKey / serverBaseUrl / sorobanRpcUrl config fiel
 describe('#955 services/sep31.js', () => {
   let mockFetch;
   let prisma;
+  let authenticateWithAnchor;
 
   beforeEach(async () => {
     vi.resetModules();
     vi.clearAllMocks();
+    process.env.SEP10_SENDER_SECRET = 'S'.repeat(56);
+    authenticateWithAnchor = vi.fn(() => Promise.resolve('sep10-jwt-token'));
+    vi.doMock('../src/services/sep10.js', () => ({
+      authenticateWithAnchor,
+      validateSep31AnchorDomain: vi.fn((domain) =>
+        Promise.resolve({
+          hostname: String(domain).replace(/^https?:\/\//, '').replace(/\/+$/, ''),
+          dnsPin: { hostname: 'anchor.example', addresses: ['1.1.1.1'] },
+        }),
+      ),
+    }));
+    vi.doMock('../src/utils/ssrfValidator.js', () => ({
+      validatePublicHttpsUrl: vi.fn((url) =>
+        Promise.resolve({
+          parsed: new URL(String(url)),
+          normalizedUrl: String(url),
+          dnsPin: { hostname: 'anchor.example', addresses: ['1.1.1.1'] },
+        }),
+      ),
+      assertDnsPin: vi.fn(() => Promise.resolve()),
+    }));
     mockFetch = vi.fn();
     vi.stubGlobal('fetch', mockFetch);
     prisma = (await import('../src/db/client.js')).default;
@@ -273,6 +297,7 @@ describe('#955 services/sep31.js', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    delete process.env.SEP10_SENDER_SECRET;
   });
 
   function tomlResponse(body, { ok = true, status = 200 } = {}) {
@@ -340,6 +365,13 @@ describe('#955 services/sep31.js', () => {
 
     expect(result.id).toBe('anchor-tx-1');
     expect(result.localRecordId).toBe('local-row-1');
+    expect(authenticateWithAnchor).toHaveBeenCalledWith('https://anchor.example/sep31');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://anchor.example/sep31/transactions',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer sep10-jwt-token' }),
+      }),
+    );
     expect(prisma.sep31Transaction.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
@@ -375,12 +407,23 @@ describe('#955 services/sep31.js', () => {
 
   it('getTransactionStatus polls the anchor and updates the local tracking row', async () => {
     mockFetch.mockResolvedValueOnce(jsonResponse({ transaction: { id: 'anchor-tx-1', status: 'completed' } }));
-    prisma.sep31Transaction.updateMany.mockResolvedValue({ count: 1 });
+    prisma.sep31Transaction.findMany.mockResolvedValue([
+      { id: 'row-1', createdAt: new Date('2026-01-01T00:00:00Z') },
+    ]);
+    prisma.sep31Transaction.update.mockResolvedValue({ id: 'row-1' });
 
     const { getTransactionStatus } = await import('../src/services/sep31.js');
     const status = await getTransactionStatus('https://anchor.example/sep31', 'anchor-tx-1');
 
     expect(status).toEqual({ id: 'anchor-tx-1', status: 'completed' });
+    expect(prisma.sep31Transaction.update).toHaveBeenCalledWith({
+      where: { id: 'row-1' },
+      data: expect.objectContaining({
+        status: 'completed',
+        pollingActive: false,
+        terminalState: true,
+      }),
+    expect(authenticateWithAnchor).toHaveBeenCalledWith('https://anchor.example/sep31');
     expect(prisma.sep31Transaction.updateMany).toHaveBeenCalledWith({
       where: { anchorUrl: 'https://anchor.example/sep31', externalId: 'anchor-tx-1' },
       data: { status: 'completed' },
@@ -390,6 +433,75 @@ describe('#955 services/sep31.js', () => {
   it('getTransactionStatus requires an id', async () => {
     const { getTransactionStatus } = await import('../src/services/sep31.js');
     await expect(getTransactionStatus('https://anchor.example/sep31', '')).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('calculateNextSep31PollAt uses 15s, then 2m, then hourly backoff', async () => {
+    const { calculateNextSep31PollAt } = await import('../src/services/sep31.js');
+    const now = new Date('2026-09-24T12:00:00.000Z');
+
+    const firstWindow = calculateNextSep31PollAt(
+      { createdAt: new Date('2026-09-24T11:59:10.000Z') },
+      { status: 'pending_sender' },
+      now,
+    );
+    const midWindow = calculateNextSep31PollAt(
+      { createdAt: new Date('2026-09-24T11:30:00.000Z') },
+      { status: 'pending_sender' },
+      now,
+    );
+    const lateWindow = calculateNextSep31PollAt(
+      { createdAt: new Date('2026-09-24T09:30:00.000Z') },
+      { status: 'pending_sender' },
+      now,
+    );
+
+    expect(firstWindow.toISOString()).toBe('2026-09-24T12:00:15.000Z');
+    expect(midWindow.toISOString()).toBe('2026-09-24T12:02:00.000Z');
+    expect(lateWindow.toISOString()).toBe('2026-09-24T13:00:00.000Z');
+  });
+
+  it('calculateNextSep31PollAt respects anchor retry_after guidance', async () => {
+    const { calculateNextSep31PollAt } = await import('../src/services/sep31.js');
+    const now = new Date('2026-09-24T12:00:00.000Z');
+
+    const nextPoll = calculateNextSep31PollAt(
+      { createdAt: new Date('2026-09-24T11:59:30.000Z') },
+      { status: 'pending_sender', retry_after: 120 },
+      now,
+    );
+
+    expect(nextPoll.toISOString()).toBe('2026-09-24T12:02:00.000Z');
+  });
+
+  it('processSep31StatusPolls stops polling immediately on terminal states', async () => {
+    mockFetch.mockResolvedValueOnce(
+      jsonResponse({ transaction: { id: 'anchor-tx-1', status: 'completed' } }),
+    );
+    prisma.sep31Transaction.findMany
+      .mockResolvedValueOnce([
+        {
+          id: 'row-1',
+          anchorUrl: 'https://anchor.example/sep31',
+          externalId: 'anchor-tx-1',
+          createdAt: new Date('2026-09-24T11:59:00.000Z'),
+        },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'row-1', createdAt: new Date('2026-09-24T11:59:00.000Z') },
+      ]);
+    prisma.sep31Transaction.update.mockResolvedValue({ id: 'row-1' });
+
+    const { processSep31StatusPolls } = await import('../src/services/sep31.js');
+    const processed = await processSep31StatusPolls();
+    expect(processed).toBe(1);
+    expect(prisma.sep31Transaction.update).toHaveBeenCalledWith({
+      where: { id: 'row-1' },
+      data: expect.objectContaining({
+        status: 'completed',
+        pollingActive: false,
+        terminalState: true,
+      }),
+    });
   });
 });
 

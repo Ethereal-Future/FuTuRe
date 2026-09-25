@@ -2,6 +2,9 @@
   "name": "backend",
   "version": "1.0.0",
   "type": "module",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
@@ -17,18 +20,21 @@
     "test:integration": "vitest run tests/stellar.integration.test.js",
     "test:db": "vitest run tests/database.framework.test.js",
     "test:integration:all": "vitest run tests/*.integration.test.js",
-    "db:seed": "node prisma/seed.js"
+    "db:seed": "node prisma/seed.js",
+    "db:rotate-encryption-keys": "node ../scripts/rotate-encryption-keys.mjs",
+    "compliance:verify-audit-chain": "node src/compliance/verifyAuditChain.js"
   },
   "prisma": {
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.700.0",
     "@opentelemetry/api": "^1.8.0",
     "@opentelemetry/auto-instrumentations-node": "^0.76.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.218.0",
     "@opentelemetry/resources": "^1.26.0",
     "@opentelemetry/sdk-node": "^0.218.0",
-    "@opentelemetry/sdk-trace-node": "^1.26.0",
+    "@opentelemetry/sdk-trace-node": "^0.218.0",
     "@opentelemetry/semantic-conventions": "^1.25.0",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
@@ -39,18 +45,23 @@
     "cors": "^2.8.5",
     "csrf-csrf": "^4.0.3",
     "dotenv": "^16.6.1",
+    "double-metaphone": "^2.0.0",
     "express": "^4.19.2",
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.3.1",
+    "fast-levenshtein": "^3.0.0",
     "helmet": "^7.1.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.0",
+    "p-limit": "^6.1.0",
+    "lru-cache": "^11.0.0",
     "pg": "^8.20.0",
     "prisma": "^7.5.0",
     "qrcode": "^1.5.3",
     "speakeasy": "^2.0.0",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
+    "web-push": "^3.6.7",
     "winston": "^3.19.0",
     "winston-daily-rotate-file": "^5.0.0",
     "ws": "^8.20.0",

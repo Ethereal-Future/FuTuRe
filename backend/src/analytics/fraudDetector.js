@@ -1,65 +1,83 @@
 import prisma from '../db/client.js';
+import { createStreamAnalyzer } from '../compliance/rules.js';
 
-// Thresholds
-const LARGE_TX_THRESHOLD = 10000;
-const RAPID_TX_WINDOW_MS = 60 * 60 * 1000; // 1 hour
-const RAPID_TX_COUNT = 5;
-const STRUCTURING_LOW = 9000;
-const STRUCTURING_HIGH = 10000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Default analysis window when `from`/`to` are omitted. */
+export const ANALYZE_DEFAULT_RANGE_MS = 30 * DAY_MS;
+
+/** Hard cap on the requested window (env-overridable). */
+export const ANALYZE_MAX_RANGE_DAYS = parseInt(process.env.FRAUD_ANALYZE_MAX_RANGE_DAYS ?? '90', 10);
+
+export const ANALYZE_MAX_RANGE_MS = ANALYZE_MAX_RANGE_DAYS * DAY_MS;
+
+/** Cursor page size for the underlying transaction query. */
+export const ANALYZE_PAGE_SIZE = parseInt(process.env.FRAUD_ANALYZE_PAGE_SIZE ?? '500', 10);
+
+export class DateRangeError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'DateRangeError';
+    this.statusCode = 400;
+  }
+}
 
 /**
- * Detects fraud patterns in transaction data.
- * Returns an array of flagged incidents.
+ * Resolve from/to into a bounded [fromDate, toDate] window.
+ * Defaults to the last 30 days; rejects ranges longer than ANALYZE_MAX_RANGE_MS.
  */
-class FraudDetector {
-  async analyze({ from, to } = {}) {
-    const where = { successful: true };
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(to);
+export function resolveAnalyzeRange({ from, to } = {}, now = Date.now()) {
+  const toDate = to ? new Date(to) : new Date(now);
+  const fromDate = from ? new Date(from) : new Date(toDate.getTime() - ANALYZE_DEFAULT_RANGE_MS);
+
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    throw new DateRangeError('Invalid from/to date');
+  }
+  if (fromDate > toDate) {
+    throw new DateRangeError('from must be less than or equal to to');
+  }
+  if (toDate.getTime() - fromDate.getTime() > ANALYZE_MAX_RANGE_MS) {
+    throw new DateRangeError(
+      `Date range exceeds the maximum of ${ANALYZE_MAX_RANGE_DAYS} days`
+    );
+  }
+
+  return { fromDate, toDate };
+}
+
+/**
+ * Detects fraud / AML patterns in transaction data using the shared
+ * compliance rule set (`../compliance/rules.js`).
+ */
+export class FraudDetector {
+  /**
+   * @param {{ from?: string|Date, to?: string|Date, pageSize?: number }} [opts]
+   * @returns {Promise<object[]>} flagged incidents
+   */
+  async analyze({ from, to, pageSize = ANALYZE_PAGE_SIZE } = {}) {
+    const { fromDate, toDate } = resolveAnalyzeRange({ from, to });
+    const analyzer = createStreamAnalyzer();
+
+    let cursor = undefined;
+    for (;;) {
+      const page = await prisma.transaction.findMany({
+        where: {
+          successful: true,
+          createdAt: { gte: fromDate, lte: toDate },
+        },
+        select: { id: true, amount: true, senderId: true, createdAt: true },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+        take: pageSize,
+        ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
+      });
+
+      if (page.length === 0) break;
+      analyzer.processPage(page);
+      cursor = page[page.length - 1].id;
+      if (page.length < pageSize) break;
     }
 
-    const txs = await prisma.transaction.findMany({
-      where,
-      select: { id: true, amount: true, senderId: true, createdAt: true },
-      orderBy: { createdAt: 'asc' },
-    });
-
-    const flags = [];
-
-    // Group by sender for window-based checks
-    const bySender = {};
-    for (const tx of txs) {
-      (bySender[tx.senderId] = bySender[tx.senderId] || []).push(tx);
-    }
-
-    for (const [senderId, senderTxs] of Object.entries(bySender)) {
-      for (let i = 0; i < senderTxs.length; i++) {
-        const tx = senderTxs[i];
-        const amount = Number(tx.amount);
-
-        // Large transaction
-        if (amount >= LARGE_TX_THRESHOLD) {
-          flags.push({ type: 'LARGE_TRANSACTION', severity: 'HIGH', senderId, txId: tx.id, amount });
-        }
-
-        // Structuring (just below reporting threshold)
-        if (amount >= STRUCTURING_LOW && amount < STRUCTURING_HIGH) {
-          flags.push({ type: 'STRUCTURING', severity: 'HIGH', senderId, txId: tx.id, amount });
-        }
-
-        // Rapid succession (5+ txs within 1 hour)
-        const windowEnd = tx.createdAt.getTime() + RAPID_TX_WINDOW_MS;
-        const inWindow = senderTxs.filter(t => t.createdAt.getTime() >= tx.createdAt.getTime() && t.createdAt.getTime() <= windowEnd);
-        if (inWindow.length >= RAPID_TX_COUNT) {
-          flags.push({ type: 'RAPID_SUCCESSION', severity: 'MEDIUM', senderId, count: inWindow.length, windowStart: tx.createdAt });
-          break; // one flag per sender per window
-        }
-      }
-    }
-
-    return flags;
+    return analyzer.getFlags();
   }
 }
 
