@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import eventStore from './eventStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ARCHIVE_DIR = path.join(__dirname, '../../data/archive');
@@ -22,29 +23,38 @@ class EventArchiver {
       const archivedCount = { events: 0, aggregates: 0 };
 
       for (const file of files) {
-        const eventFile = path.join(EVENTS_DIR, file);
-        const content = await fs.readFile(eventFile, 'utf-8');
-        const events = content
-          .split('\n')
-          .filter(line => line.trim())
-          .map(line => JSON.parse(line));
+        const aggregateId = file.replace(/\.jsonl$/, '');
+        // Hold the stream lock so an append cannot land between reading the
+        // file and rewriting it with only the recent events.
+        await eventStore.withAggregateLock(aggregateId, async () => {
+          const eventFile = path.join(EVENTS_DIR, file);
+          const content = await fs.readFile(eventFile, 'utf-8');
+          const events = content
+            .split('\n')
+            .filter(line => line.trim())
+            .map(line => JSON.parse(line));
 
-        const oldEvents = events.filter(e => new Date(e.timestamp) < cutoffDate);
-        const recentEvents = events.filter(e => new Date(e.timestamp) >= cutoffDate);
+          const oldEvents = events.filter(e => new Date(e.timestamp) < cutoffDate);
+          const recentEvents = events.filter(e => new Date(e.timestamp) >= cutoffDate);
 
-        if (oldEvents.length > 0) {
-          const archiveFile = path.join(ARCHIVE_DIR, `${file}.${Date.now()}.archive`);
-          await fs.writeFile(archiveFile, oldEvents.map(e => JSON.stringify(e)).join('\n'));
-          archivedCount.events += oldEvents.length;
-          archivedCount.aggregates++;
+          if (oldEvents.length > 0) {
+            // Pin the stream head before removing events so version numbering
+            // continues from here rather than restarting.
+            await eventStore.getCurrentVersion(aggregateId);
 
-          // Keep only recent events
-          if (recentEvents.length > 0) {
-            await fs.writeFile(eventFile, recentEvents.map(e => JSON.stringify(e) + '\n').join(''));
-          } else {
-            await fs.unlink(eventFile);
+            const archiveFile = path.join(ARCHIVE_DIR, `${file}.${Date.now()}.archive`);
+            await fs.writeFile(archiveFile, oldEvents.map(e => JSON.stringify(e)).join('\n'));
+            archivedCount.events += oldEvents.length;
+            archivedCount.aggregates++;
+
+            // Keep only recent events
+            if (recentEvents.length > 0) {
+              await fs.writeFile(eventFile, recentEvents.map(e => JSON.stringify(e) + '\n').join(''));
+            } else {
+              await fs.unlink(eventFile);
+            }
           }
-        }
+        });
       }
 
       return archivedCount;
