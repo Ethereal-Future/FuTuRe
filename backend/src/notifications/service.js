@@ -3,6 +3,7 @@
  * Orchestrates template rendering, preference checks, channel dispatch, and delivery tracking.
  */
 import logger from '../config/logger.js';
+import prisma from '../config/prisma.js';
 import { getRenderedTemplate } from './templates.js';
 import { isChannelEnabled, getPreferences } from './preferences.js';
 import { recordDelivery } from './delivery.js';
@@ -13,6 +14,45 @@ import { sendInApp } from './channels/inApp.js';
 import { getSubscription, sendWebPush } from './webPush.js';
 
 const CHANNELS = ['email', 'push', 'sms', 'inApp'];
+
+// Retention policy (issue #1350): read notifications are kept for 30 days,
+// unread notifications for 90 days. Older records are pruned by the daily
+// cleanup worker so notification storage growth stays bounded.
+export const READ_RETENTION_DAYS = 30;
+export const UNREAD_RETENTION_DAYS = 90;
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/**
+ * Prune stale in-app notifications according to the retention policy.
+ * Deletes read notifications older than 30 days and unread notifications
+ * older than 90 days.
+ *
+ * @param {object} [options]
+ * @param {Date} [options.now] - Reference time (defaults to now); useful for tests.
+ * @returns {Promise<number>} Number of deleted notification records
+ */
+export async function cleanupStaleNotifications({ now = new Date() } = {}) {
+  const readCutoff = new Date(now.getTime() - READ_RETENTION_DAYS * DAY_MS);
+  const unreadCutoff = new Date(now.getTime() - UNREAD_RETENTION_DAYS * DAY_MS);
+
+  try {
+    const { count } = await prisma.notification.deleteMany({
+      where: {
+        OR: [
+          { read: true, createdAt: { lte: readCutoff } },
+          { read: false, createdAt: { lte: unreadCutoff } },
+        ],
+      },
+    });
+
+    logger.info('notification.cleanup', { deleted: count, readCutoff, unreadCutoff });
+    return count;
+  } catch (err) {
+    logger.error('notification.cleanup.error', { error: err.message });
+    throw err;
+  }
+}
 
 /**
  * Send a notification to a user across all enabled channels.

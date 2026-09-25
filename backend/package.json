@@ -53,6 +53,7 @@
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.0",
     "p-limit": "^6.1.0",
+    "lru-cache": "^11.0.0",
     "pg": "^8.20.0",
     "prisma": "^7.5.0",
     "qrcode": "^1.5.3",
