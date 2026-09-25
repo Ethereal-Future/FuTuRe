@@ -6,6 +6,54 @@ import logger from '../config/logger.js';
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // ms, indexed by attempt number (0-based)
 
+// Bounded concurrency for the scheduler tick. Without this, a batch of dead
+// subscriber endpoints would each block the loop for the full 5s timeout,
+// starving healthy deliveries and monopolizing the worker process.
+const MAX_CONCURRENT_DELIVERIES = 10;
+// Per-host cap so a single subscriber is never flooded with the full global
+// concurrency (e.g. 10 parallel connections to one downed server).
+const MAX_CONCURRENT_PER_HOST = 3;
+
+/**
+ * Minimal in-repo concurrency pool. Returns a `limit` function that queues
+ * tasks and runs at most `concurrency` of them at a time.
+ */
+function createLimiter(concurrency) {
+  let active = 0;
+  const queue = [];
+
+  const next = () => {
+    if (active >= concurrency || queue.length === 0) return;
+    active += 1;
+    const { fn, resolve, reject } = queue.shift();
+    Promise.resolve()
+      .then(fn)
+      .then(resolve, reject)
+      .finally(() => {
+        active -= 1;
+        next();
+      });
+  };
+
+  return (fn) =>
+    new Promise((resolve, reject) => {
+      queue.push({ fn, resolve, reject });
+      next();
+    });
+}
+
+/**
+ * Derive a throttle key for a delivery so all deliveries targeting the same
+ * subscriber host share a per-host limiter.
+ */
+function hostKeyFor(webhook) {
+  try {
+    return new URL(webhook.url).host;
+  } catch {
+    return webhook.url;
+  }
+}
+
 async function deliverOnce(webhook, payload) {
   // Re-check the URL at delivery time in case the resolved address changed
   // since registration (DNS rebinding into a private/internal range).
@@ -131,6 +179,9 @@ export async function dispatchEvent(accountId, eventType, data) {
  * Scheduler tick: find every delivery that is due for a retry and attempt it.
  * Replaces the previous in-process setTimeout chain so pending retries are
  * durable across restarts.
+ *
+ * Deliveries run with bounded parallelism (global + per-host) so slow or dead
+ * subscriber endpoints no longer block healthy webhooks or the event loop.
  */
 export async function processDueWebhookDeliveries() {
   const due = await prisma.webhookDelivery.findMany({
@@ -138,13 +189,33 @@ export async function processDueWebhookDeliveries() {
     take: 100,
   });
 
-  for (const delivery of due) {
-    try {
-      await attemptDelivery(delivery);
-    } catch (err) {
-      logger.error({ deliveryId: delivery.id, error: err.message }, 'Webhook delivery retry threw');
+  if (!due.length) return 0;
+
+  const globalLimit = createLimiter(MAX_CONCURRENT_DELIVERIES);
+  const hostLimiters = new Map();
+  const hostLimiterFor = (key) => {
+    let limiter = hostLimiters.get(key);
+    if (!limiter) {
+      limiter = createLimiter(MAX_CONCURRENT_PER_HOST);
+      hostLimiters.set(key, limiter);
     }
-  }
+    return limiter;
+  };
+
+  await Promise.allSettled(
+    due.map((delivery) =>
+      globalLimit(async () => {
+        const webhook = await getWebhook(delivery.webhookId);
+        const hostKey = webhook ? hostKeyFor(webhook) : `delivery:${delivery.id}`;
+        return hostLimiterFor(hostKey)(() => attemptDelivery(delivery));
+      }).catch((err) => {
+        logger.error(
+          { deliveryId: delivery.id, error: err.message },
+          'Webhook delivery retry threw',
+        );
+      }),
+    ),
+  );
 
   return due.length;
 }
