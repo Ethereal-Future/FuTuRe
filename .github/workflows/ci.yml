@@ -41,6 +41,9 @@ jobs:
       - name: Check for hardcoded i18n strings
         run: npm run lint:i18n
 
+      - name: Check for zero-caller (unwired) backend modules
+        run: node scripts/check-unwired-modules.js --src backend/src
+
   # ---------------------------------------------------------------------------
   # Job 2 — Unit Tests
   # ---------------------------------------------------------------------------

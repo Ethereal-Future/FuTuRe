@@ -1,31 +1,31 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import prisma from '../db/client.js';
+import { redisGet, redisSet, redisDelete } from './redisStore.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mobile-secret';
 const RP_ID = process.env.WEBAUTHN_RP_ID || 'localhost';
 const RP_NAME = process.env.WEBAUTHN_RP_NAME || 'FuTuRe';
 
-// In-memory challenge store: challengeId -> { userId, challenge, expiresAt }
-const pendingChallenges = new Map();
+// Challenges live in Redis (`webauthn:challenge:{challengeId}`) with a
+// native 60s TTL (issue #1124) so any server instance behind the load
+// balancer can complete a registration/authentication ceremony started on
+// a different instance, and expiry no longer needs manual sweeping.
+const CHALLENGE_TTL_SECONDS = 60;
 
-function cleanExpiredChallenges() {
-  const now = Date.now();
-  for (const [id, entry] of pendingChallenges) {
-    if (now > entry.expiresAt) pendingChallenges.delete(id);
-  }
+function challengeKey(challengeId) {
+  return `webauthn:challenge:${challengeId}`;
 }
 
 /**
  * Generate registration options for the client to call
  * navigator.credentials.create({ publicKey: options }).
  */
-export function generateRegistrationOptions(userId, username) {
-  cleanExpiredChallenges();
+export async function generateRegistrationOptions(userId, username) {
   const challengeId = crypto.randomUUID();
   const challenge = crypto.randomBytes(32).toString('base64url');
 
-  pendingChallenges.set(challengeId, { userId, challenge, expiresAt: Date.now() + 60_000 });
+  await redisSet(challengeKey(challengeId), { userId, challenge }, CHALLENGE_TTL_SECONDS);
 
   return {
     challengeId,
@@ -53,11 +53,11 @@ export function generateRegistrationOptions(userId, username) {
  * @param {string} [deviceName] - Optional label for this device
  */
 export async function verifyAndStoreRegistration(challengeId, credential, deviceName) {
-  const entry = pendingChallenges.get(challengeId);
-  if (!entry || Date.now() > entry.expiresAt) {
+  const entry = await redisGet(challengeKey(challengeId));
+  if (!entry) {
     throw new Error('Registration challenge expired or not found');
   }
-  pendingChallenges.delete(challengeId);
+  await redisDelete(challengeKey(challengeId));
 
   const { id: credentialId, publicKey } = credential;
   if (!credentialId || !publicKey) {
@@ -82,8 +82,6 @@ export async function verifyAndStoreRegistration(challengeId, credential, device
  * navigator.credentials.get({ publicKey: options }).
  */
 export async function generateAuthenticationOptions(userId) {
-  cleanExpiredChallenges();
-
   const credentials = await prisma.webAuthnCredential.findMany({
     where: { userId },
     select: { credentialId: true },
@@ -95,7 +93,7 @@ export async function generateAuthenticationOptions(userId) {
 
   const challengeId = crypto.randomUUID();
   const challenge = crypto.randomBytes(32).toString('base64url');
-  pendingChallenges.set(challengeId, { userId, challenge, expiresAt: Date.now() + 60_000 });
+  await redisSet(challengeKey(challengeId), { userId, challenge }, CHALLENGE_TTL_SECONDS);
 
   return {
     challengeId,
@@ -116,11 +114,11 @@ export async function generateAuthenticationOptions(userId) {
  * @param {object} assertion - The AuthenticatorAssertionResponse from the client
  */
 export async function verifyAuthentication(challengeId, assertion) {
-  const entry = pendingChallenges.get(challengeId);
-  if (!entry || Date.now() > entry.expiresAt) {
+  const entry = await redisGet(challengeKey(challengeId));
+  if (!entry) {
     throw new Error('Authentication challenge expired or not found');
   }
-  pendingChallenges.delete(challengeId);
+  await redisDelete(challengeKey(challengeId));
 
   const { credentialId, signature, counter: clientCounter } = assertion;
   if (!credentialId || !signature) {

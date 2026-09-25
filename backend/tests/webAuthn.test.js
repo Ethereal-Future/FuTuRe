@@ -51,8 +51,8 @@ describe('WebAuthn service', () => {
   });
 
   describe('generateRegistrationOptions', () => {
-    it('returns a challenge and rp info', () => {
-      const options = generateRegistrationOptions(userId, 'testuser');
+    it('returns a challenge and rp info', async () => {
+      const options = await generateRegistrationOptions(userId, 'testuser');
       expect(options).toHaveProperty('challengeId');
       expect(options).toHaveProperty('challenge');
       expect(options.rp).toHaveProperty('id');
@@ -60,15 +60,15 @@ describe('WebAuthn service', () => {
       expect(options.pubKeyCredParams).toBeInstanceOf(Array);
     });
 
-    it('encodes userId as base64url in user object', () => {
-      const options = generateRegistrationOptions(userId, 'testuser');
+    it('encodes userId as base64url in user object', async () => {
+      const options = await generateRegistrationOptions(userId, 'testuser');
       expect(options.user.id).toBe(Buffer.from(userId).toString('base64url'));
     });
   });
 
   describe('verifyAndStoreRegistration', () => {
     it('stores a credential in the database', async () => {
-      const options = generateRegistrationOptions(userId, 'testuser');
+      const options = await generateRegistrationOptions(userId, 'testuser');
       const { credentialId: storedId } = await verifyAndStoreRegistration(
         options.challengeId,
         { id: 'cred-id-001', publicKey: 'MFkwEw==' },
@@ -85,7 +85,7 @@ describe('WebAuthn service', () => {
     });
 
     it('throws when credential is missing id or publicKey', async () => {
-      const options = generateRegistrationOptions(userId, 'testuser');
+      const options = await generateRegistrationOptions(userId, 'testuser');
       await expect(
         verifyAndStoreRegistration(options.challengeId, { id: '' })
       ).rejects.toThrow('Invalid credential');

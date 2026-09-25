@@ -85,14 +85,55 @@ aws dynamodb create-table \
 
 ### 2. Enable the backend
 
-Uncomment the `backend "s3"` block in `infra/main.tf` and fill in the bucket name.
+The `backend "s3" {}` block in `infra/main.tf` is already active (issue #1101)
+but deliberately left as a *partial* configuration — bucket, region, and the
+DynamoDB lock table are supplied at `terraform init` time via
+`-backend-config` flags rather than hardcoded, so the same `main.tf` works
+for both staging and production state.
+
+In CI (`.github/workflows/terraform-plan.yml` / `terraform-apply.yml`) these
+values come from repository variables (**Settings → Secrets and variables →
+Actions → Variables**):
+
+| Variable                  | Example                    |
+|----------------------------|----------------------------|
+| `TF_STATE_BUCKET`          | `future-terraform-state`   |
+| `TF_STATE_DYNAMODB_TABLE`  | `future-terraform-locks`   |
+| `TF_STATE_REGION`          | `us-east-1` (optional, defaults to `us-east-1`) |
+
+The state `key` is set per-workflow-run to `staging/terraform.tfstate` or
+`production/terraform.tfstate` so the two environments never share state.
 
 ### 3. Initialize Terraform
 
+Locally, pass the same values by hand (or put them in a gitignored
+`backend.hcl` and use `-backend-config=backend.hcl`):
+
 ```bash
 cd infra
-terraform init
+terraform init \
+  -backend-config="bucket=future-terraform-state" \
+  -backend-config="region=us-east-1" \
+  -backend-config="dynamodb_table=future-terraform-locks" \
+  -backend-config="key=staging/terraform.tfstate"   # or production/terraform.tfstate
 ```
+
+### 3b. Reconcile pre-existing resources (one-time)
+
+If any of the resources this configuration manages already exist in AWS
+from before the backend was enabled (created manually or via an earlier
+local-state apply), import them into the new remote state before running
+`terraform apply`, e.g.:
+
+```bash
+terraform import aws_s3_bucket.frontend <bucket-name>
+terraform import aws_ecs_cluster.main <cluster-arn>
+# ...repeat for any other resource `terraform plan` proposes to re-create
+```
+
+Run `terraform plan` first and only import resources it reports as "will be
+created" that you know already exist — a plan with no unexpected
+create/destroy diffs confirms the import is complete.
 
 ### 4. Populate secrets (before first apply)
 
@@ -168,9 +209,17 @@ For production deployments or emergency hotfixes, you can deploy manually:
 
 ```bash
 cd infra
-terraform apply -var-file=environments/production.tfvars -var="backend_image=ghcr.io/org/future/backend:1.2.3"
-terraform apply -var="backend_image=ghcr.io/org/future/backend:1.2.3" -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
+terraform apply \
+  -var-file=environments/production.tfvars \
+  -var="backend_image=ghcr.io/org/future/backend:1.2.3" \
+  -var="frontend_image=ghcr.io/org/future/frontend:1.2.3"
 ```
+
+`environment` has no default — it must always be passed explicitly, either via
+`-var-file` (as above) or `-var="environment=..."`. This is intentional: it
+gates cost- and safety-relevant behavior (Multi-AZ RDS, deletion protection,
+final-snapshot-on-destroy), so an `apply` with the value omitted fails fast
+instead of silently provisioning production-grade infrastructure.
 
 ## Environment Files
 
@@ -218,6 +267,64 @@ and rate limiting, so plan the cutover as a maintenance-window operation:
    (`aws elasticache test-failover --replication-group-id future-staging-redis
    --node-group-id <shard-id>`) and confirm the application reconnects with
    minimal downtime before relying on this in production.
+
+## Redis TLS + AUTH Cutover Runbook (issue #1111)
+
+Enabling `transit_encryption_enabled` and `auth_token` on
+`aws_elasticache_replication_group.redis` typically **replaces** the
+replication group (Terraform will show destroy/recreate). Cached data loss
+is acceptable — Redis is a cache (balances, rates, rate-limit counters) —
+but the connection-string change must ship with the backend at the same time.
+
+### Why a maintenance window
+
+- In-transit encryption and AUTH cannot be added in place on the current
+  group without a replacement in most engine/provider combinations.
+- The new group requires TLS (`REDIS_TLS=true`) and `REDIS_AUTH_TOKEN`
+  (injected from Secrets Manager). Old plaintext `redis://` clients will
+  fail to authenticate.
+- Rate-limit counters and L2 cache entries are wiped on replace; the app
+  already falls back to L1 / origin fetches (see `backend/src/cache/redis.js`).
+
+### Cutover steps
+
+1. **Populate / confirm secrets.** `random_password.redis_auth` is stored in
+   `aws_secretsmanager_secret.redis_auth_token` and wired to ElastiCache
+   `auth_token` plus the ECS task as `REDIS_AUTH_TOKEN`. Confirm the secret
+   version exists (`aws secretsmanager get-secret-value --secret-id
+   <prefix>/redis-auth-token`) before apply.
+2. **Review `terraform plan`.** Expect the replication group to be replaced
+   and the ECS task definition to add `REDIS_HOST` / `REDIS_PORT` /
+   `REDIS_TLS` / `REDIS_AUTH_TOKEN`. Do not apply if the plan also destroys
+   unrelated stateful resources.
+3. **Schedule a short window.** Announce a brief cache-cold period (origin
+   load spike as balances/rates re-warm). Rollback is: revert the Terraform
+   + backend release together (plaintext Redis will not accept AUTH/TLS
+   clients, and TLS clients will not talk to a plaintext cluster).
+4. **Apply Terraform, then deploy the backend** that uses TLS + AUTH
+   (`backend/src/cache/redis.js`). Force a new ECS deployment if the task
+   definition did not roll automatically:
+   ```bash
+   aws ecs update-service \
+     --cluster future-production-cluster \
+     --service future-production-backend \
+     --force-new-deployment
+   ```
+5. **Verify.** `GET /health` Redis check should be `healthy` with
+   `"tls": true`. From a task: `redis-cli --tls -a "$REDIS_AUTH_TOKEN" -h
+   "$REDIS_HOST" ping` → `PONG`. Confirm the app serves cached balances
+   after a warm-up request.
+6. **Rollback.** Re-apply the previous Terraform revision and the previous
+   backend image in the same window. Cache remains empty either way; restore
+   is reconnect + warm, not snapshot restore.
+
+### Cache-warm plan
+
+After the new group is in service, issue a small set of read paths
+(`GET` balance, exchange-rate, fee-stats) against staging then production
+so L2 fills before peak traffic. Rate-limit counters start at zero — expect
+a short period of more-permissive limiting until windows refill.
+
 ## Autoscaling
 
 The backend ECS service includes automatic application autoscaling that dynamically adjusts the number of running tasks based on load:
@@ -326,7 +433,7 @@ Prefer fixing the underlying misconfiguration over suppressing it whenever the f
 | Variable                  | Default           | Description                          |
 |---------------------------|-------------------|--------------------------------------|
 | `aws_region`              | `us-east-1`       | AWS region                           |
-| `environment`             | `production`      | `production` or `staging`            |
+| `environment`             | _(required)_      | `production` or `staging` — always passed explicitly, never defaulted |
 | `app_name`                | `future`          | Resource name prefix                 |
 | `vpc_cidr`                | `10.0.0.0/16`     | VPC CIDR block                       |
 | `availability_zones`      | 3 AZs             | AZs for subnet distribution          |

@@ -49,6 +49,7 @@ class EventReplayer {
             destination: event.data.destination,
             amount: event.data.amount,
             hash: event.data.hash,
+            asset: event.data.asset ?? 'XLM',
             timestamp: event.timestamp
           }
         };

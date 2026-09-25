@@ -3,6 +3,7 @@
  * Orchestrates template rendering, preference checks, channel dispatch, and delivery tracking.
  */
 import logger from '../config/logger.js';
+import prisma from '../config/prisma.js';
 import { getRenderedTemplate } from './templates.js';
 import { isChannelEnabled, getPreferences } from './preferences.js';
 import { recordDelivery } from './delivery.js';
@@ -10,8 +11,48 @@ import { sendEmail } from './channels/email.js';
 import { sendPush } from './channels/push.js';
 import { sendSms } from './channels/sms.js';
 import { sendInApp } from './channels/inApp.js';
+import { getSubscription, sendWebPush } from './webPush.js';
 
 const CHANNELS = ['email', 'push', 'sms', 'inApp'];
+
+// Retention policy (issue #1350): read notifications are kept for 30 days,
+// unread notifications for 90 days. Older records are pruned by the daily
+// cleanup worker so notification storage growth stays bounded.
+export const READ_RETENTION_DAYS = 30;
+export const UNREAD_RETENTION_DAYS = 90;
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/**
+ * Prune stale in-app notifications according to the retention policy.
+ * Deletes read notifications older than 30 days and unread notifications
+ * older than 90 days.
+ *
+ * @param {object} [options]
+ * @param {Date} [options.now] - Reference time (defaults to now); useful for tests.
+ * @returns {Promise<number>} Number of deleted notification records
+ */
+export async function cleanupStaleNotifications({ now = new Date() } = {}) {
+  const readCutoff = new Date(now.getTime() - READ_RETENTION_DAYS * DAY_MS);
+  const unreadCutoff = new Date(now.getTime() - UNREAD_RETENTION_DAYS * DAY_MS);
+
+  try {
+    const { count } = await prisma.notification.deleteMany({
+      where: {
+        OR: [
+          { read: true, createdAt: { lte: readCutoff } },
+          { read: false, createdAt: { lte: unreadCutoff } },
+        ],
+      },
+    });
+
+    logger.info('notification.cleanup', { deleted: count, readCutoff, unreadCutoff });
+    return count;
+  } catch (err) {
+    logger.error('notification.cleanup.error', { error: err.message });
+    throw err;
+  }
+}
 
 /**
  * Send a notification to a user across all enabled channels.
@@ -27,10 +68,24 @@ const CHANNELS = ['email', 'push', 'sms', 'inApp'];
  * @param {string} [params.actionUrl] - Action URL for in-app notifications
  * @param {object} [params.actionRetryParams] - Retry parameters for failed transactions
  * @param {string[]} [params.channels] - Override which channels to attempt
+ * @param {string} [params.locale] - Override locale; if omitted, read from user preferences
  * @returns {Promise<object>} Results per channel
  */
 export async function sendNotification({ userId, type, data = {}, email, phone, phoneRegion, publicKey, actionUrl, actionRetryParams, channels = CHANNELS }) {
+export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
   const results = {};
+
+  // Resolve locale: caller may supply it explicitly (e.g. from a webhook
+  // payload), otherwise read it from stored user preferences.
+  let resolvedLocale = locale;
+  if (!resolvedLocale) {
+    try {
+      const prefs = await getPreferences(userId);
+      resolvedLocale = prefs.locale ?? 'en';
+    } catch {
+      resolvedLocale = 'en';
+    }
+  }
 
   await Promise.all(
     channels.map(async (channel) => {
@@ -41,7 +96,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
         return;
       }
 
-      const content = getRenderedTemplate(type, channel, data);
+      const content = getRenderedTemplate(type, channel, data, resolvedLocale);
       if (!content) {
         results[channel] = { skipped: true, reason: 'no_template' };
         recordDelivery({ userId, type, channel, status: 'skipped' });
@@ -55,9 +110,24 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
             if (!email) { results[channel] = { skipped: true, reason: 'no_email' }; return; }
             result = await sendEmail(email, content);
             break;
-          case 'push':
+          case 'push': {
             result = await sendPush(userId, content);
+            // In addition to the mobile FCM/APNs channel above, also deliver
+            // to any registered browser Web Push subscription (RFC 8291 /
+            // VAPID — see notifications/webPush.js, issue #1123). Best-effort:
+            // a missing subscription or delivery failure here must not
+            // affect the mobile push result already recorded.
+            const webSubscription = getSubscription(userId);
+            if (webSubscription) {
+              const webPushResult = await sendWebPush(webSubscription, {
+                title: content.title,
+                body: content.body,
+                data,
+              });
+              result = { ...result, webPush: webPushResult };
+            }
             break;
+          }
           case 'sms':
             if (!phone) { results[channel] = { skipped: true, reason: 'no_phone' }; return; }
             result = await sendSms(phone, content, { defaultRegion: phoneRegion });

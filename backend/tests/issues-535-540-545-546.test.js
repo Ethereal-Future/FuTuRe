@@ -51,6 +51,28 @@ describe('Issue #545: withHorizonRetry', () => {
     expect(fn).toHaveBeenCalledTimes(2);
   }, 10000);
 
+  it('retries on 502 and eventually succeeds', async () => {
+    const err = new Error('Bad Gateway');
+    err.response = { status: 502 };
+    const fn = vi.fn()
+      .mockRejectedValueOnce(err)
+      .mockResolvedValue('ok');
+    const result = await withHorizonRetry(fn);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+  }, 10000);
+
+  it('retries on 504 and eventually succeeds', async () => {
+    const err = new Error('Gateway Timeout');
+    err.response = { status: 504 };
+    const fn = vi.fn()
+      .mockRejectedValueOnce(err)
+      .mockResolvedValue('ok');
+    const result = await withHorizonRetry(fn);
+    expect(result).toBe('ok');
+    expect(fn).toHaveBeenCalledTimes(2);
+  }, 10000);
+
   it('retries on 503 and eventually succeeds', async () => {
     const err = new Error('Service unavailable');
     err.response = { status: 503 };
@@ -79,6 +101,22 @@ describe('Issue #545: withHorizonRetry', () => {
     err.response = { status: 400 };
     const fn = vi.fn().mockRejectedValue(err);
     await expect(withHorizonRetry(fn)).rejects.toThrow('Bad Request');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry on 401 Unauthorized', async () => {
+    const err = new Error('Unauthorized');
+    err.response = { status: 401 };
+    const fn = vi.fn().mockRejectedValue(err);
+    await expect(withHorizonRetry(fn)).rejects.toThrow('Unauthorized');
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it('does NOT retry on 403 Forbidden', async () => {
+    const err = new Error('Forbidden');
+    err.response = { status: 403 };
+    const fn = vi.fn().mockRejectedValue(err);
+    await expect(withHorizonRetry(fn)).rejects.toThrow('Forbidden');
     expect(fn).toHaveBeenCalledTimes(1);
   });
 

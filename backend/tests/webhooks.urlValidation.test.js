@@ -66,6 +66,12 @@ describe('validateWebhookUrl', () => {
     expect(result.valid).toBe(true);
   });
 
+  it('rejects http:// for unrecognized APP_ENV (fail-closed, #1112 audit)', async () => {
+    const result = await validateWebhookUrl('http://93.184.216.34/hook', { appEnv: 'preprod' });
+    expect(result.valid).toBe(false);
+    expect(result.error).toMatch(/https/);
+  });
+
   it('resolves hostnames via DNS and rejects ones that resolve to a private range', async () => {
     const lookup = vi.fn().mockResolvedValue([{ address: '10.1.2.3', family: 4 }]);
     const result = await validateWebhookUrl('https://internal.example.com/hook', {

@@ -98,7 +98,9 @@ router.get(
  */
 router.post(
   '/transactions',
-  body('anchorUrl').isURL({ require_tld: false }).withMessage('anchorUrl must be a valid URL'),
+  body('anchorUrl')
+    .isURL({ protocols: ['https'], require_protocol: true, require_tld: false })
+    .withMessage('anchorUrl must be a valid https URL'),
   body('amount').isString().trim().notEmpty().withMessage('amount is required'),
   body('assetCode').isString().trim().notEmpty().withMessage('assetCode is required'),
   body('senderId').optional().isString().trim(),
@@ -152,7 +154,9 @@ router.post(
 router.get(
   '/transactions/:id',
   param('id').isString().trim().notEmpty().withMessage('id is required'),
-  query('anchorUrl').isURL({ require_tld: false }).withMessage('anchorUrl must be a valid URL'),
+  query('anchorUrl')
+    .isURL({ protocols: ['https'], require_protocol: true, require_tld: false })
+    .withMessage('anchorUrl must be a valid https URL'),
   validate,
   async (req, res) => {
     try {

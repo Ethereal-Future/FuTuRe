@@ -31,6 +31,10 @@ function handleError(res, error, fallbackMessage) {
     return res
       .status(504)
       .json({ error: 'Gateway timeout — upstream service did not respond in time' });
+  const statusCode = error.statusCode ?? error.status;
+  if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    return res.status(statusCode).json({ error: error.message || fallbackMessage });
+  }
   return res.status(500).json({ error: fallbackMessage });
 }
 

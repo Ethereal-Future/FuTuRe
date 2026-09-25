@@ -14,6 +14,11 @@ vi.mock('@stellar/stellar-sdk', () => ({
     random: vi.fn(),
     fromSecret: vi.fn(),
   },
+  Account: vi.fn().mockImplementation(function (accountId, sequence) {
+    this.accountId = accountId;
+    this._sequence = BigInt(sequence);
+    this.sequenceNumber = () => this._sequence.toString();
+  }),
   Horizon: {
     Server: vi.fn(),
   },
@@ -103,29 +108,23 @@ describe('Stellar Service Unit Tests', () => {
     
     mockAccount = {
       accountId: 'GBRPYHIL2CI3WHZDTOOQFC6EB4KJJGUJJBBX7IXLMQVVXTNQRYUOP7H',
-      sequenceNumber: () => Promise.resolve('1234567890'),
+      _sequence: 1234567890n,
+      sequenceNumber: function () { return this._sequence.toString(); },
       balances: [
         { asset_type: 'native', balance: '1000.0000000' },
         { asset_type: 'credit_alphanum4', asset_code: 'USDC', asset_issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN', balance: '100.0000000' },
       ],
     };
     
-    mockTransaction = {
-      hash: 'a1b2c3d4e5f6g7h8i9j0k1l2m3n4o5p6q7r8s9t0u1v2w3x4y5z6a7b8c9d0e1f2',
-      ledger: 12345,
-      successful: true,
-      sign: vi.fn(),
-    };
-    
-    mockTransactionBuilder = {
-      addOperation: vi.fn().mockReturnThis(),
-      setTimeout: vi.fn().mockReturnThis(),
-      build: vi.fn(() => mockTransaction),
-    };
+    mockTransactionBuilder = null;
     
     mockServer = {
       loadAccount: vi.fn(() => Promise.resolve(mockAccount)),
-      submitTransaction: vi.fn(() => Promise.resolve(mockTransaction)),
+      submitTransaction: vi.fn((tx) => Promise.resolve({
+        hash: `hash-${tx.sequence ?? 'n/a'}`,
+        ledger: 12345,
+        successful: true,
+      })),
       transactions: vi.fn(() => ({
         forAccount: vi.fn(() => ({
           order: vi.fn(() => ({
@@ -183,7 +182,24 @@ describe('Stellar Service Unit Tests', () => {
     StellarSDK.Keypair.fromSecret.mockReturnValue(mockKeypair);
     StellarSDK.Horizon.Server.mockImplementation(function () { return mockServer; });
     StellarSDK.Asset.native.mockReturnValue({ code: 'XLM', issuer: null });
-    StellarSDK.TransactionBuilder.mockImplementation(function () { return mockTransactionBuilder; });
+    StellarSDK.TransactionBuilder.mockImplementation(function (sourceAccount) {
+      mockTransactionBuilder = {
+        addOperation: vi.fn().mockReturnThis(),
+        setTimeout: vi.fn().mockReturnThis(),
+        build: vi.fn(() => {
+          sourceAccount._sequence = BigInt(sourceAccount.sequenceNumber()) + 1n;
+          mockTransaction = {
+            sequence: sourceAccount.sequenceNumber(),
+            hash: `built-${sourceAccount.sequenceNumber()}`,
+            ledger: 12345,
+            successful: true,
+            sign: vi.fn(),
+          };
+          return mockTransaction;
+        }),
+      };
+      return mockTransactionBuilder;
+    });
     StellarSDK.Operation.payment.mockReturnValue({});
     StellarSDK.Operation.changeTrust.mockReturnValue({});
     
@@ -259,6 +275,30 @@ describe('Stellar Service Unit Tests', () => {
       await stellarService.createAccount();
       
       expect(prisma.default.user.upsert).toHaveBeenCalled();
+    });
+
+    it('should mark non-testnet accounts as pending activation when no sponsor is configured', async () => {
+      const { getConfig } = await import('../src/config/env.js');
+      getConfig.mockReturnValue({
+        stellar: {
+          network: 'mainnet',
+          horizonUrl: 'https://horizon.stellar.org',
+        },
+      });
+      global.fetch = vi.fn();
+      delete process.env.PLATFORM_FUNDING_SECRET;
+      delete process.env.PLATFORM_FEE_ACCOUNT_SECRET;
+
+      const result = await stellarService.createAccount();
+      expect(result.status).toBe('PENDING_ACTIVATION');
+      expect(global.fetch).not.toHaveBeenCalled();
+      getConfig.mockReturnValue({
+        stellar: {
+          network: 'testnet',
+          horizonUrl: 'https://horizon-testnet.stellar.org',
+          assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+        },
+      });
     });
   });
 
@@ -413,6 +453,42 @@ describe('Stellar Service Unit Tests', () => {
       // Should not throw, just log warning
       const result = await stellarService.sendPayment(sourceSecret, destination, amount);
       expect(result).toBeDefined();
+    });
+
+    it('should reject MEMO_TEXT that exceeds 28 UTF-8 bytes', async () => {
+      const sourceSecret = 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH';
+      const destination = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6';
+      const amount = '10';
+      const oversizedUtf8Memo = '🚀'.repeat(8); // 32 bytes in UTF-8
+
+      await expect(
+        stellarService.sendPayment(sourceSecret, destination, amount, 'XLM', oversizedUtf8Memo, 'text')
+      ).rejects.toMatchObject({ statusCode: 400 });
+    });
+
+    it('should reject invalid MEMO_HASH format with 400', async () => {
+      const sourceSecret = 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH';
+      const destination = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6';
+      const amount = '10';
+
+      await expect(
+        stellarService.sendPayment(sourceSecret, destination, amount, 'XLM', 'not-hex', 'hash')
+      ).rejects.toMatchObject({ statusCode: 400 });
+    it('handles 5 concurrent payments with strictly increasing sequence numbers', async () => {
+      const sourceSecret = 'SBZVMB74Z76QZ3ZVU4Z7YVCC5L7GXWCF7IXLMQVVXTNQRYUOP7HGHJH';
+      const destination = 'GBXIJJGUJJBBX7IXLMQVVXTNQRYUOP7HGHJHGBRPYHIL2CI3WHZDTOOQFC6';
+      const calls = Array.from({ length: 5 }, (_, index) =>
+        stellarService.sendPayment(sourceSecret, destination, `${index + 1}`),
+      );
+      const results = await Promise.all(calls);
+
+      expect(results).toHaveLength(5);
+      results.forEach((result) => expect(result.success).toBe(true));
+
+      const submittedSequences = mockServer.submitTransaction.mock.calls.map(
+        ([tx]) => Number(tx.sequence),
+      );
+      expect(submittedSequences).toEqual([1234567891, 1234567892, 1234567893, 1234567894, 1234567895]);
     });
   });
 
@@ -621,6 +697,39 @@ describe('Stellar Service Unit Tests', () => {
       const result = await stellarService.getNetworkStatus();
       
       expect(result).toHaveProperty('network', 'mainnet');
+    });
+
+    it('should verify Horizon passphrase matches configured network', async () => {
+      await expect(stellarService.verifyHorizonNetworkPassphrase()).resolves.toEqual({
+        expectedPassphrase: 'Test SDF Network ; September 2015',
+        actualPassphrase: 'Test SDF Network ; September 2015',
+      });
+    });
+
+    it('should throw when Horizon passphrase does not match configured network', async () => {
+      const { getConfig } = await import('../src/config/env.js');
+      getConfig.mockReturnValue({
+        stellar: {
+          network: 'mainnet',
+          horizonUrl: 'https://horizon.stellar.org',
+        },
+      });
+      mockServer.root.mockResolvedValueOnce({
+        horizon_version: '20.0.0',
+        network_passphrase: 'Test SDF Network ; September 2015',
+        current_protocol_version: '19',
+      });
+
+      await expect(stellarService.verifyHorizonNetworkPassphrase()).rejects.toThrow(
+        /Horizon passphrase mismatch/i
+      );
+      getConfig.mockReturnValue({
+        stellar: {
+          network: 'testnet',
+          horizonUrl: 'https://horizon-testnet.stellar.org',
+          assetIssuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+        },
+      });
     });
   });
 

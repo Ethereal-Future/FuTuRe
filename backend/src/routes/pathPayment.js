@@ -4,14 +4,20 @@ import {
   findPaths,
   findPathsStrictReceive,
   sendPathPayment,
+  sendPathPaymentStrictReceive,
   optimizePath,
   getPathPaymentAnalytics,
   recordPathPaymentAnalytic,
+  validateSlippageTolerance,
 } from '../services/pathPayment.js';
 import { validate, rules } from '../middleware/validate.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { SUPPORTED_ASSETS } from '../config/assets.js';
 
+// Intentionally public: path-finding routes only simulate conversions (no
+// funds move), and /send requires a `sourceSecret`, the same secret-key
+// possession model used by routes/stellar/*. /analytics exposes only
+// aggregate, non-user-scoped stats. See #1102.
 const router = Router();
 
 const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
@@ -36,6 +42,12 @@ const amountField = (field) =>
         throw new Error(`${field}: max 7 decimal places`);
       return true;
     });
+
+// ISSUE-045: slippageTolerancePercent — required on send endpoints, default 0.5%
+const slippageField = body('slippageTolerancePercent')
+  .optional()
+  .isFloat({ gt: 0, max: 5 })
+  .withMessage('slippageTolerancePercent must be a positive number between 0 and 5 (default: 0.5)');
 
 // Find paths (strict-send)
 router.post(
@@ -109,7 +121,7 @@ router.post(
  * @swagger
  * /api/path-payment/send:
  *   post:
- *     summary: Execute a path payment
+ *     summary: Execute a strict-send path payment
  *     description: Sends a cross-asset payment along a conversion path.
  *     tags: [PathPayment]
  *     parameters:
@@ -122,7 +134,7 @@ router.post(
  *       500:
  *         description: Server error
  */
-// Execute path payment
+// Execute strict-send path payment
 router.post(
   '/send',
   idempotencyMiddleware,
@@ -134,6 +146,7 @@ router.post(
   assetField('sendAsset'),
   amountField('sendAmount'),
   assetField('destAsset'),
+  slippageField,
   validate,
   async (req, res) => {
     try {
@@ -154,6 +167,74 @@ router.post(
       recordPathPaymentAnalytic({
         sendAsset: req.body.sendAsset?.code,
         sendAmount: req.body.sendAmount,
+        success: false,
+      });
+      res.status(500).json({ error: err.message });
+    }
+  },
+);
+
+/**
+ * @swagger
+ * /api/path-payment/send/strict-receive:
+ *   post:
+ *     summary: Execute a strict-receive path payment with sendMax slippage protection
+ *     description: >
+ *       The destination receives exactly `destAmount`; the sender pays at most
+ *       `sendMax = quotedSourceAmount * (1 + slippageTolerancePercent / 100)`.
+ *       Requests are rejected when sendMax would exceed the sender's available
+ *       balance (ISSUE-045).
+ *     tags: [PathPayment]
+ *     parameters:
+ *       - $ref: '#/components/parameters/IdempotencyKey'
+ *     responses:
+ *       200:
+ *         description: Path payment result including sendMax and quotedSourceAmount
+ *       422:
+ *         description: Validation error
+ *       500:
+ *         description: Server error or sendMax exceeds balance
+ */
+// Execute strict-receive path payment (ISSUE-045)
+router.post(
+  '/send/strict-receive',
+  idempotencyMiddleware,
+  body('sourceSecret').trim().matches(STELLAR_SECRET_KEY).withMessage('Invalid Stellar secret key'),
+  body('destination')
+    .trim()
+    .matches(STELLAR_PUBLIC_KEY)
+    .withMessage('Invalid destination public key'),
+  assetField('sendAsset'),
+  assetField('destAsset'),
+  amountField('destAmount'),
+  slippageField,
+  validate,
+  async (req, res) => {
+    try {
+      const {
+        sourceSecret,
+        destination,
+        sendAsset,
+        destAsset,
+        destAmount,
+        path,
+        slippageTolerancePercent,
+      } = req.body;
+      const result = await sendPathPaymentStrictReceive({
+        sourceSecret,
+        destination,
+        sendAsset,
+        destAsset,
+        destAmount,
+        path,
+        slippageTolerancePercent,
+      });
+      recordPathPaymentAnalytic({ sendAsset: sendAsset.code, sendAmount: result.sendMax, success: result.success });
+      res.json(result);
+    } catch (err) {
+      recordPathPaymentAnalytic({
+        sendAsset: req.body.sendAsset?.code,
+        sendAmount: req.body.destAmount,
         success: false,
       });
       res.status(500).json({ error: err.message });

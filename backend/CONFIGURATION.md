@@ -29,7 +29,7 @@ Everything else has a safe default for local development.
 
 | Variable | Type | Required | Default | Description | Example |
 |---|---|---|---|---|---|
-| `APP_ENV` | string | — | `development` | Runtime environment. Controls validation strictness and defaults. | `production` |
+| `APP_ENV` | string | — | `development` | Runtime environment. Controls validation strictness and defaults. Recognized: `development`, `test`, `staging`, `production`. Any other value is treated as deployed (fail-closed secrets). | `production` |
 | `CONFIG_VERSION` | integer | — | `1` | Config schema version. Must match the expected value or startup fails. | `1` |
 | `CONFIG_WATCH` | boolean | — | `false` | Reload config when `.env*` files change (ignored in `test`). | `true` |
 | `PORT` | integer | — | `3001` | TCP port the Express server listens on. | `3001` |
@@ -56,7 +56,7 @@ Everything else has a safe default for local development.
 
 | Variable | Type | Required | Default | Description | Example |
 |---|---|---|---|---|---|
-| `JWT_SECRET` 🔑 | string | ✅ | `secret` (dev only) | HMAC secret for signing JWT tokens. Must not be the default in production. | `<random 64-char hex>` |
+| `JWT_SECRET` 🔑 | string | ✅ | `secret` (dev/test only) | HMAC secret for signing JWT tokens. Required and must not be the default outside `development`/`test`. | `<random 64-char hex>` |
 | `MFA_ENCRYPTION_KEY` 🔑 | string | — | — | AES-256-GCM key for encrypting TOTP secrets at rest. Generate with `openssl rand -hex 32`. | `<32-byte hex>` |
 | `GOOGLE_CLIENT_ID` | string | — | — | Google OAuth2 client ID. Required to enable Google login. | `123456.apps.googleusercontent.com` |
 | `GOOGLE_CLIENT_SECRET` 🔑 | string | — | — | Google OAuth2 client secret. | `GOCSPX-...` |
@@ -116,7 +116,11 @@ rate-limit rules.
 
 | Variable | Type | Required | Default | Description | Example |
 |---|---|---|---|---|---|
-| `REDIS_URL` | URL | — | — | Redis connection URL. Falls back to in-memory L1 cache when not set. | `redis://localhost:6379` |
+| `REDIS_URL` | URL | — | — | Redis connection URL (`redis://` or `rediss://`). Falls back to in-memory L1 cache when neither this nor `REDIS_HOST` is set. | `redis://localhost:6379` |
+| `REDIS_HOST` | string | — | — | Redis hostname (used with `REDIS_PORT` / `REDIS_AUTH_TOKEN` when `REDIS_URL` is unset; ECS production path). | `my-redis.cache.amazonaws.com` |
+| `REDIS_PORT` | integer | — | `6379` | Redis port. | `6379` |
+| `REDIS_AUTH_TOKEN` 🔑 | string | — | — | Redis AUTH token. Injected from Secrets Manager in ECS; required when the ElastiCache group has AUTH enabled. | `<from Secrets Manager>` |
+| `REDIS_TLS` | boolean | — | `false` | Enable TLS for the Redis client (`true` in production/staging). Also implied by a `rediss://` URL. | `true` |
 | `CACHE_TTL_BALANCE_S` | integer | — | `30` | Cache TTL (seconds) for account balance responses. | `30` |
 | `RATE_CACHE_TTL_S` | integer | — | `60` | Cache TTL (seconds) for exchange-rate responses. | `60` |
 | `CACHE_TTL_FEE_S` | integer | — | `120` | Cache TTL (seconds) for fee-stat responses. | `120` |
@@ -184,12 +188,22 @@ The backend reads configuration from:
 
 ## Environments
 
-Set `APP_ENV` to enable environment-specific defaults and validation:
+Set `APP_ENV` to enable environment-specific defaults and validation.
 
-- `development` (default)
-- `test`
-- `staging`
-- `production`
+**Recognized values**
+
+| `APP_ENV` | Role | Secret validation |
+|---|---|---|
+| `development` (default) | Local development. Aliases: unset, `dev`. | Fail-open: `JWT_SECRET` may default to `secret`. |
+| `test` | Automated tests. | Fail-open: same as development. |
+| `staging` | Pre-production. | Fail-closed: real `JWT_SECRET` and `ALLOWED_ORIGINS` required. |
+| `production` | Live. Alias: `prod`. | Fail-closed: same as staging. |
+
+**Fail-safe default:** any other `APP_ENV` value (`preprod`, `demo`, a typo, a new tier not yet added to this table) is treated as a **deployed** environment. Startup requires a real, non-default `JWT_SECRET` and an explicit `ALLOWED_ORIGINS` list. There is no silent fallback to the hardcoded development secret.
+
+The default JWT literal (`secret`) is rejected for every environment except the `development` / `test` allow-list.
+
+The same fail-closed allow-list is used for `ALLOWED_ORIGINS` (required outside development/test) and for webhook URL HTTPS enforcement in `backend/src/webhooks/urlValidator.js`.
 
 ## `.env` file loading
 
@@ -202,12 +216,14 @@ Files are loaded in this precedence order (later wins):
 
 `process.env` always overrides values from files.
 
-## Required variables (production and staging)
+## Required variables (deployed environments)
 
-When `APP_ENV=production` or `APP_ENV=staging`:
+When `APP_ENV` is anything other than `development` or `test` (including `production`, `staging`, and unrecognized values such as `preprod`):
 
 - `ALLOWED_ORIGINS` (comma-separated)
-- `JWT_SECRET` (must not be `secret`)
+- `JWT_SECRET` (must not be the default `secret`)
+
+`JWT_SECRET` is read from `getConfig().security.jwtSecret` only. There is no second hardcoded fallback in `auth/tokens.js`.
 
 ## Staging vs production differences
 
@@ -482,12 +498,21 @@ After each successful payment, `amlMonitor.screenTransaction()` runs asynchronou
 | `AML_STRUCTURING_THRESHOLD` | `1000` | Per-transaction ceiling for structuring detection |
 | `AML_STRUCTURING_COUNT` | `3` | Number of sub-threshold transactions in 24 h to trigger `STRUCTURING` |
 | `AML_VELOCITY_LIMIT` | `10000` | Total sent in 24 h that triggers `VELOCITY` |
+| `AML_RAPID_TX_COUNT` | `5` | Transactions from one sender within the rapid window that trigger `RAPID_SUCCESSION` |
+| `AML_RAPID_TX_WINDOW_MS` | `3600000` | Rapid-succession window (1 hour) |
+| `AML_NEAR_THRESHOLD_LOW` | `9000` | Lower bound for `NEAR_THRESHOLD` (upper bound is `AML_LARGE_TX_THRESHOLD`) |
+| `FRAUD_ANALYZE_MAX_RANGE_DAYS` | `90` | Max `from`/`to` span for `GET /api/analytics/fraud/flags` |
+| `FRAUD_ANALYZE_PAGE_SIZE` | `500` | Cursor page size for the fraud-analysis query |
+
+Thresholds and detection live in `backend/src/compliance/rules.js` and are shared by the live AML pipeline and the analytics dashboard.
 
 Rules implemented:
 
 - **LARGE_TX** — single transaction ≥ `AML_LARGE_TX_THRESHOLD`
 - **STRUCTURING** — more than `AML_STRUCTURING_COUNT` transactions each below `AML_STRUCTURING_THRESHOLD` within 24 h
+- **NEAR_THRESHOLD** — single transaction in [`AML_NEAR_THRESHOLD_LOW`, `AML_LARGE_TX_THRESHOLD`) (post-submission / analytics)
 - **VELOCITY** — cumulative 24 h send total exceeds `AML_VELOCITY_LIMIT`
+- **RAPID_SUCCESSION** — ≥ `AML_RAPID_TX_COUNT` transactions from the same sender within `AML_RAPID_TX_WINDOW_MS`
 - **UNVERIFIED_USER** — sender has no approved KYC record
 
 ### Web Vitals analytics (#499)

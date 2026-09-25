@@ -17,8 +17,16 @@
 
 import logger from '../config/logger.js';
 import prisma from '../db/client.js';
+import { authenticateWithAnchor, validateSep31AnchorDomain } from './sep10.js';
+import { assertDnsPin, validatePublicHttpsUrl } from '../utils/ssrfValidator.js';
 
 const FETCH_TIMEOUT_MS = 10000;
+const TERMINAL_SEP31_STATUSES = new Set(['completed', 'error', 'expired', 'rejected']);
+const POLL_PHASES = {
+  initialMs: 15 * 1000,
+  mediumMs: 2 * 60 * 1000,
+  slowMs: 60 * 60 * 1000,
+};
 
 function trimTrailingSlash(url) {
   return String(url || '').replace(/\/+$/, '');
@@ -63,20 +71,61 @@ function normalizeDomain(domain) {
     .replace(/\/+$/, '');
 }
 
+function isTerminalStatus(status) {
+  return TERMINAL_SEP31_STATUSES.has(String(status || '').toLowerCase());
+}
+
+function parseSeconds(value) {
+  const num = Number(value);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function getAnchorRecommendedDelayMs(transaction, nowMs) {
+  const retryAfterSeconds = parseSeconds(transaction?.retry_after);
+  if (retryAfterSeconds) return retryAfterSeconds * 1000;
+
+  const etaSeconds = parseSeconds(transaction?.eta);
+  if (etaSeconds) return etaSeconds * 1000;
+
+  const etaDate = transaction?.eta ? Date.parse(transaction.eta) : Number.NaN;
+  if (Number.isFinite(etaDate) && etaDate > nowMs) {
+    return etaDate - nowMs;
+  }
+  return null;
+}
+
+/**
+ * Determine next polling timestamp based on transaction age + anchor guidance.
+ * @param {{createdAt: Date|string, pollCount?: number}} row
+ * @param {object} transaction
+ * @param {Date} [now]
+ * @returns {Date}
+ */
+export function calculateNextSep31PollAt(row, transaction, now = new Date()) {
+  const nowMs = now.getTime();
+  const createdMs = new Date(row.createdAt).getTime();
+  const ageMs = Math.max(0, nowMs - createdMs);
+
+  let baseDelayMs;
+  if (ageMs < 2 * 60 * 1000) baseDelayMs = POLL_PHASES.initialMs;
+  else if (ageMs < (2 * 60 * 1000) + (60 * 60 * 1000)) baseDelayMs = POLL_PHASES.mediumMs;
+  else baseDelayMs = POLL_PHASES.slowMs;
+
+  const anchorDelayMs = getAnchorRecommendedDelayMs(transaction, nowMs);
+  const delayMs = anchorDelayMs ? Math.max(baseDelayMs, anchorDelayMs) : baseDelayMs;
+  return new Date(nowMs + delayMs);
+}
+
 /**
  * Discover a receiving anchor's SEP-0031 endpoint from its stellar.toml.
  * @param {string} domain - The receiving anchor's home domain (no scheme).
  * @returns {Promise<{ domain: string, directPaymentServer: string }>}
  */
 export async function discoverReceivingAnchor(domain) {
-  const cleanDomain = normalizeDomain(domain);
-  if (!cleanDomain) {
-    const err = new Error('domain is required');
-    err.status = 400;
-    throw err;
-  }
+  const { hostname: cleanDomain, dnsPin } = await validateSep31AnchorDomain(domain);
 
   const tomlUrl = `https://${cleanDomain}/.well-known/stellar.toml`;
+  await assertDnsPin(dnsPin);
   const response = await fetchWithTimeout(tomlUrl);
   if (!response.ok) {
     const err = new Error(`${cleanDomain} returned ${response.status} fetching stellar.toml`);
@@ -103,7 +152,10 @@ export async function discoverReceivingAnchor(domain) {
  * @returns {Promise<object>} The anchor's /info response body.
  */
 export async function getAnchorInfo(anchorUrl) {
-  const url = `${trimTrailingSlash(anchorUrl)}/info`;
+  const cleanAnchorUrl = trimTrailingSlash(anchorUrl);
+  const { dnsPin } = await validatePublicHttpsUrl(cleanAnchorUrl, { allowPath: true, allowQuery: true });
+  const url = `${cleanAnchorUrl}/info`;
+  await assertDnsPin(dnsPin);
   const response = await fetchWithTimeout(url);
   if (!response.ok) {
     const err = new Error(`Anchor ${anchorUrl} returned ${response.status} from GET /info`);
@@ -131,11 +183,14 @@ export async function createCrossBorderTransaction(anchorUrl, params, { authToke
   }
 
   const cleanAnchorUrl = trimTrailingSlash(anchorUrl);
+  const { dnsPin } = await validatePublicHttpsUrl(cleanAnchorUrl, { allowPath: true, allowQuery: true });
+  const resolvedAuthToken = authToken || (await authenticateWithAnchor(cleanAnchorUrl));
+  await assertDnsPin(dnsPin);
   const response = await fetchWithTimeout(`${cleanAnchorUrl}/transactions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+      ...(resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {}),
     },
     body: JSON.stringify(params),
   });
@@ -154,6 +209,10 @@ export async function createCrossBorderTransaction(anchorUrl, params, { authToke
         anchorUrl: cleanAnchorUrl,
         externalId: body.id,
         status: 'pending_sender',
+        pollCount: 0,
+        pollingActive: true,
+        terminalState: false,
+        nextPollAt: new Date(),
         amount: String(params.amount),
         assetCode: params.asset_code,
         senderPublicKey: params.sender_id ?? null,
@@ -196,8 +255,11 @@ export async function getTransactionStatus(anchorUrl, id, { authToken } = {}) {
   }
 
   const cleanAnchorUrl = trimTrailingSlash(anchorUrl);
+  const { dnsPin } = await validatePublicHttpsUrl(cleanAnchorUrl, { allowPath: true, allowQuery: true });
+  const resolvedAuthToken = authToken || (await authenticateWithAnchor(cleanAnchorUrl));
+  await assertDnsPin(dnsPin);
   const response = await fetchWithTimeout(`${cleanAnchorUrl}/transactions/${encodeURIComponent(id)}`, {
-    headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
+    headers: resolvedAuthToken ? { Authorization: `Bearer ${resolvedAuthToken}` } : {},
   });
 
   if (!response.ok) {
@@ -208,12 +270,41 @@ export async function getTransactionStatus(anchorUrl, id, { authToken } = {}) {
 
   const body = await response.json();
   const transaction = body.transaction ?? body;
+  const now = new Date();
+  const terminalState = isTerminalStatus(transaction.status);
 
   try {
-    await prisma.sep31Transaction.updateMany({
+    const localRows = await prisma.sep31Transaction.findMany({
       where: { anchorUrl: cleanAnchorUrl, externalId: id },
-      data: { status: transaction.status ?? 'unknown' },
+      select: { id: true, createdAt: true },
     });
+    if (localRows.length > 0) {
+      await Promise.all(
+        localRows.map((row) =>
+          prisma.sep31Transaction.update({
+            where: { id: row.id },
+            data: {
+              status: transaction.status ?? 'unknown',
+              pollCount: { increment: 1 },
+              pollingActive: !terminalState,
+              terminalState,
+              nextPollAt: terminalState ? null : calculateNextSep31PollAt(row, transaction, now),
+            },
+          }),
+        ),
+      );
+    } else {
+      await prisma.sep31Transaction.updateMany({
+        where: { anchorUrl: cleanAnchorUrl, externalId: id },
+        data: {
+          status: transaction.status ?? 'unknown',
+          pollCount: { increment: 1 },
+          pollingActive: !terminalState,
+          terminalState,
+          nextPollAt: terminalState ? null : calculateNextSep31PollAt({ createdAt: now }, transaction, now),
+        },
+      });
+    }
   } catch (error) {
     logger.warn('sep31.getTransactionStatus.persist.failed', {
       anchorUrl: cleanAnchorUrl,
@@ -224,4 +315,44 @@ export async function getTransactionStatus(anchorUrl, id, { authToken } = {}) {
 
   logger.info('sep31.getTransactionStatus', { anchorUrl: cleanAnchorUrl, id, status: transaction.status });
   return transaction;
+}
+
+/**
+ * Poll due SEP-31 transactions and reschedule according to adaptive backoff.
+ * @returns {Promise<number>} number of rows processed
+ */
+export async function processSep31StatusPolls() {
+  const now = new Date();
+  const due = await prisma.sep31Transaction.findMany({
+    where: {
+      pollingActive: true,
+      OR: [{ nextPollAt: null }, { nextPollAt: { lte: now } }],
+    },
+    orderBy: { nextPollAt: 'asc' },
+    take: 50,
+  });
+
+  for (const row of due) {
+    try {
+      await getTransactionStatus(row.anchorUrl, row.externalId);
+    } catch (error) {
+      if (error?.status === 502 && error?.message?.includes(' 429 ')) {
+        await prisma.sep31Transaction.update({
+          where: { id: row.id },
+          data: {
+            nextPollAt: new Date(Date.now() + 5 * 60 * 1000),
+            pollCount: { increment: 1 },
+          },
+        });
+      } else {
+        logger.warn('sep31.processStatusPoll.failed', {
+          anchorUrl: row.anchorUrl,
+          externalId: row.externalId,
+          error: error.message,
+        });
+      }
+    }
+  }
+
+  return due.length;
 }

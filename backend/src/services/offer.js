@@ -1,5 +1,7 @@
-import StellarSdk from 'stellar-sdk';
-import { horizonServer, networkPassphrase } from '../config/stellar.js';
+import * as StellarSdk from '@stellar/stellar-sdk';
+// ISSUE-044: horizonServer and networkPassphrase are now re-exported from the
+// canonical config/stellar.js (the file previously did not exist → fatal crash).
+import { horizonServer, getNetworkPassphrase } from '../config/stellar.js';
 import logger from '../config/logger.js';
 
 const XLM_ASSET = new StellarSdk.Asset.native();
@@ -83,7 +85,7 @@ export async function createOffer(sourceSecret, sellingAsset, buyingAsset, selli
 
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(
         StellarSdk.Operation.manageOffer({
@@ -171,7 +173,7 @@ export async function modifyOffer(
 
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(
         StellarSdk.Operation.manageOffer({
@@ -232,7 +234,7 @@ export async function cancelOffer(sourceSecret, offerId) {
     // Cancel by setting amount to 0
     const transaction = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     })
       .addOperation(
         StellarSdk.Operation.manageOffer({
@@ -264,6 +266,251 @@ export async function cancelOffer(sourceSecret, offerId) {
   } catch (error) {
     logger.error('offer.cancel.error', {
       offerId,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+// ── ISSUE-049: Self-trade detection & passive offer ──────────────────────────
+
+/**
+ * Asset comparison helper — returns true when two Horizon asset descriptors
+ * (from the offers API) refer to the same asset.
+ *
+ * @param {object} a - Horizon offer asset descriptor
+ * @param {object} b - Horizon offer asset descriptor
+ * @returns {boolean}
+ */
+function assetsMatch(a, b) {
+  if (a.asset_type === 'native' && b.asset_type === 'native') return true;
+  return (
+    a.asset_type === b.asset_type &&
+    a.asset_code === b.asset_code &&
+    a.asset_issuer === b.asset_issuer
+  );
+}
+
+/**
+ * Inspect the source account's open offers to detect potential self-trades
+ * against a proposed passive offer.
+ *
+ * A self-trade occurs when the account has an existing *sell* offer whose
+ * selling asset equals the proposed offer's buying asset AND whose buying asset
+ * equals the proposed offer's selling asset, at a price that would cross with
+ * the new passive offer price.
+ *
+ * Passive offers execute against orders at a *better* price (strictly, for a
+ * passive sell the passive offer's price ≤ the existing buy offer's price), so
+ * a crossing situation arises when:
+ *   existingOffer.price  >=  passiveOfferPrice
+ *
+ * (where both prices are expressed as "units of buying per unit of selling").
+ *
+ * @param {string} sourcePublicKey - Account public key to check
+ * @param {object} sellingAssetDesc - Asset descriptor `{ asset_type, asset_code?, asset_issuer? }` for the asset being sold
+ * @param {object} buyingAssetDesc  - Asset descriptor for the asset being bought
+ * @param {number} price - Price of 1 unit of sellingAsset in units of buyingAsset
+ * @returns {Promise<{selfTradeDetected: boolean, crossingOffers: Array<{id: string, price: number}>}>}
+ */
+export async function checkSelfTrade(sourcePublicKey, sellingAssetDesc, buyingAssetDesc, price) {
+  try {
+    const offersPage = await horizonServer.offers().forAccount(sourcePublicKey).call();
+    const existingOffers = offersPage.records ?? [];
+    const passivePrice = parseFloat(price);
+    const crossingOffers = [];
+
+    for (const offer of existingOffers) {
+      // A crossing offer sells what the new passive offer buys, and vice versa.
+      const offerSellsOurBuy  = assetsMatch(offer.selling, buyingAssetDesc);
+      const offerBuysOurSell  = assetsMatch(offer.buying,  sellingAssetDesc);
+
+      if (offerSellsOurBuy && offerBuysOurSell) {
+        // Existing offer price is in "buying per selling" for its own perspective,
+        // i.e. "units of sellingAssetDesc per unit of buyingAssetDesc" from ours.
+        // Passive sell executes when existing (implicit) buy price >= passive price.
+        const existingPrice = parseFloat(offer.price);
+        if (existingPrice >= passivePrice) {
+          crossingOffers.push({ id: offer.id, price: existingPrice });
+        }
+      }
+    }
+
+    return {
+      selfTradeDetected: crossingOffers.length > 0,
+      crossingOffers,
+    };
+  } catch (error) {
+    logger.error('offer.checkSelfTrade.error', {
+      sourcePublicKey,
+      error: error.message,
+    });
+    throw error;
+  }
+}
+
+/**
+ * Helper to build a minimal Horizon asset descriptor from an asset code string.
+ * Accepts `'XLM'` (native) or `'CODE:ISSUER'` format.
+ *
+ * @param {string} assetCode - e.g. 'XLM' or 'USDC:GABC...'
+ * @returns {{ asset_type: string, asset_code?: string, asset_issuer?: string }}
+ */
+function assetDescriptor(assetCode) {
+  if (assetCode === 'XLM') {
+    return { asset_type: 'native' };
+  }
+  const [code, issuer] = assetCode.split(':');
+  const asset_type = code.length <= 4 ? 'credit_alphanum4' : 'credit_alphanum12';
+  return { asset_type, asset_code: code, asset_issuer: issuer };
+}
+
+/**
+ * Create a passive sell offer on the Stellar DEX.
+ *
+ * Passive offers do not cross orders at the same price but will execute at a
+ * better price.  Before submitting, this function checks the account's existing
+ * open offers for potential self-trades.  When a self-trade is detected, the
+ * function either:
+ *   - Automatically cancels the crossing offer (append a `manageSellOffer`
+ *     with `amount: '0'`) when `autoCancelCrossing` is `true` (default), or
+ *   - Returns a warning with `selfTradeWarning: true` without submitting when
+ *     `autoCancelCrossing` is `false`.
+ *
+ * @param {string} sourceSecret - Secret key of the offering account
+ * @param {string} sellingAsset - Asset code being sold (e.g. 'XLM' or 'USDC:GABC...')
+ * @param {string} buyingAsset  - Asset code being bought
+ * @param {number|string} sellingAmount - Amount of `sellingAsset` to offer
+ * @param {number|string} price - Price of 1 unit of `sellingAsset` in units of `buyingAsset`
+ * @param {object}  [opts={}]
+ * @param {boolean} [opts.autoCancelCrossing=true] - When `true`, crossing offers are cancelled atomically in the same transaction
+ * @returns {Promise<{success: boolean, hash?: string, ledger?: number, selfTradeWarning?: boolean, crossingOffers?: Array}>} Submission result
+ * @throws {Error} If required parameters are missing or Horizon submission fails
+ */
+export async function createPassiveOffer(
+  sourceSecret,
+  sellingAsset,
+  buyingAsset,
+  sellingAmount,
+  price,
+  { autoCancelCrossing = true } = {}
+) {
+  try {
+    if (!sourceSecret || !sellingAsset || !buyingAsset || !sellingAmount || !price) {
+      throw new Error('Missing required parameters');
+    }
+
+    const keypair = StellarSdk.Keypair.fromSecret(sourceSecret);
+    const sourcePublicKey = keypair.publicKey();
+
+    const sellingDesc = assetDescriptor(sellingAsset);
+    const buyingDesc  = assetDescriptor(buyingAsset);
+
+    // ── Self-trade check ──────────────────────────────────────────────────
+    const { selfTradeDetected, crossingOffers } = await checkSelfTrade(
+      sourcePublicKey,
+      sellingDesc,
+      buyingDesc,
+      price
+    );
+
+    if (selfTradeDetected && !autoCancelCrossing) {
+      logger.warn('offer.createPassive.selfTradeDetected', {
+        sourcePublicKey,
+        sellingAsset,
+        buyingAsset,
+        price,
+        crossingOffers,
+      });
+      return {
+        success: false,
+        selfTradeWarning: true,
+        crossingOffers,
+        message:
+          'Self-trade detected: the proposed passive offer would cross your own ' +
+          'active orderbook bids. Set autoCancelCrossing=true or cancel the ' +
+          'conflicting offers manually before proceeding.',
+      };
+    }
+    // ─────────────────────────────────────────────────────────────────────
+
+    const sourceAccount = await horizonServer.loadAccount(sourcePublicKey);
+
+    const selling = sellingAsset === 'XLM'
+      ? XLM_ASSET
+      : new StellarSdk.Asset(...sellingAsset.split(':'));
+    const buying  = buyingAsset === 'XLM'
+      ? XLM_ASSET
+      : new StellarSdk.Asset(...buyingAsset.split(':'));
+
+    const priceNum = parseFloat(price);
+    const priceObj = StellarSdk.Fraction.fromDecimal(priceNum.toFixed(7));
+
+    const txBuilder = new StellarSdk.TransactionBuilder(sourceAccount, {
+      fee: StellarSdk.BASE_FEE,
+      networkPassphrase,
+    });
+
+    // Atomically cancel any crossing offers first.
+    if (selfTradeDetected && autoCancelCrossing) {
+      for (const crossing of crossingOffers) {
+        txBuilder.addOperation(
+          StellarSdk.Operation.manageSellOffer({
+            selling: buying,   // the crossing offer sells what we buy
+            buying:  selling,  // and buys what we sell
+            amount: '0',
+            price: '1',
+            offerId: crossing.id,
+          })
+        );
+      }
+      logger.info('offer.createPassive.cancellingCrossingOffers', {
+        sourcePublicKey,
+        count: crossingOffers.length,
+      });
+    }
+
+    txBuilder.addOperation(
+      StellarSdk.Operation.createPassiveSellOffer({
+        selling,
+        buying,
+        amount: sellingAmount.toString(),
+        price: priceObj,
+      })
+    );
+
+    const transaction = txBuilder.setTimeout(300).build();
+    transaction.sign(keypair);
+    const result = await horizonServer.submitTransaction(transaction);
+
+    logger.info('offer.createPassive.success', {
+      sourcePublicKey,
+      sellingAsset,
+      buyingAsset,
+      sellingAmount,
+      price,
+      selfTradeDetected,
+      cancelledOffers: selfTradeDetected ? crossingOffers.length : 0,
+      hash: result.hash,
+    });
+
+    return {
+      success: true,
+      hash: result.hash,
+      ledger: result.ledger,
+      sellingAsset,
+      buyingAsset,
+      sellingAmount,
+      price: priceNum,
+      selfTradeDetected,
+      crossingOffers: selfTradeDetected ? crossingOffers : [],
+    };
+  } catch (error) {
+    logger.error('offer.createPassive.error', {
+      sellingAsset,
+      buyingAsset,
+      sellingAmount,
+      price,
       error: error.message,
     });
     throw error;
