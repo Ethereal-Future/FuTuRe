@@ -4,8 +4,6 @@ import { randomBytes } from 'crypto';
 import bcrypt from 'bcryptjs';
 import * as StellarSDK from '@stellar/stellar-sdk';
 import { hashPassword, verifyPassword } from '../auth/password.js';
-import { createUser, findUser, getUserById } from '../auth/userStore.js';
-import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../auth/tokens.js';
 import { saveRefreshToken, consumeRefreshToken, revokeFamily, revokeUserTokens } from '../auth/refreshTokenStore.js';
 import { createUser, findUser, getUserById, updateUserPassword } from '../auth/userStore.js';
 import {
@@ -775,7 +773,13 @@ router.get('/oauth/google', (req, res) => {
   const state = randomBytes(16).toString('hex');
 
   // Store state in session/cookie for verification
-  res.cookie('oauth_state', state, { httpOnly: true, maxAge: 10 * 60 * 1000 });
+  // Lax (not Strict) so the cookie survives the top-level redirect back from the OAuth provider.
+  res.cookie('oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax',
+    maxAge: 10 * 60 * 1000,
+  });
 
   const authUrl = oauth2Provider.getGoogleAuthURL(clientId, redirectUri, state);
   res.redirect(authUrl);
