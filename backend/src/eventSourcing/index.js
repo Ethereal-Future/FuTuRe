@@ -1,3 +1,5 @@
+export { default as eventStore, ConcurrencyError } from './eventStore.js';
+export { default as eventSerializer } from './eventSerializer.js';
 export { default as eventStore } from './eventStore.js';
 export { default as eventSerializer, EventSerializer, SCHEMA_VERSIONS } from './eventSerializer.js';
 export { default as eventReplayer } from './eventReplayer.js';
