@@ -60,9 +60,20 @@ export class DataMigrationBuilder {
     return this;
   }
 
-  addBatchTransform(table, batchSize, transform) {
+  /**
+   * Chunked, checkpointed batch transform (ISSUE-067).
+   * db must provide:
+   *   fetchBatch(table, { afterId, limit }) -> records ordered by id
+   *   transaction(fn) -> runs fn(tx) atomically (e.g. prisma.$transaction)
+   *   checkpoints: { get(migration, table), save(tx, migration, table, state) }
+   * Each chunk and its checkpoint commit in one transaction, so a crash
+   * resumes from the last committed id without reprocessing records.
+   */
+  addBatchTransform(table, batchSize = 500, transform) {
+    const name = this.migration.name;
     this.migration.addTransformation(table, async (db, tbl) => {
-      return { table: tbl, batchSize, transformed: true };
+      if (!db?.fetchBatch) return { table: tbl, batchSize, transformed: true };
+      return runBatched(db, name, tbl, batchSize, transform);
     });
     return this;
   }
@@ -70,6 +81,28 @@ export class DataMigrationBuilder {
   build() {
     return this.migration;
   }
+}
+
+export async function runBatched(db, migration, table, batchSize, transform) {
+  const cp = (await db.checkpoints.get(migration, table)) || { lastProcessedId: null, processed: 0, completed: false };
+  if (cp.completed) return { table, processed: cp.processed, resumed: true, completed: true };
+
+  let { lastProcessedId, processed } = cp;
+  const resumedFrom = lastProcessedId;
+  for (;;) {
+    const records = await db.fetchBatch(table, { afterId: lastProcessedId, limit: batchSize });
+    if (!records.length) break;
+    const nextId = records[records.length - 1].id;
+    await db.transaction(async (tx) => {
+      await transform(records, tx, table);
+      await db.checkpoints.save(tx, migration, table, { lastProcessedId: nextId, processed: processed + records.length, completed: false });
+    });
+    lastProcessedId = nextId;
+    processed += records.length;
+    if (records.length < batchSize) break;
+  }
+  await db.transaction((tx) => db.checkpoints.save(tx, migration, table, { lastProcessedId, processed, completed: true }));
+  return { table, processed, resumedFrom, completed: true };
 }
 
 export const createDataMigration = (name, version) => new DataMigrationBuilder(name, version);

@@ -5,7 +5,7 @@
 API authentication is signed with a single symmetric secret,
 `JWT_SECRET` (HS256), read in `backend/src/auth/tokens.js`
 (`signAccessToken`, `signRefreshToken`, `verifyToken`) via
-`getConfig().auth.jwtSecret` / `process.env.JWT_SECRET`. There is currently
+`getConfig().security.jwtSecret`. There is currently
 **no dual-secret / grace-period support for JWT** — `verifyToken` checks a
 single secret, so rotating it invalidates every previously issued access and
 refresh token immediately. This is different from the webhook signing

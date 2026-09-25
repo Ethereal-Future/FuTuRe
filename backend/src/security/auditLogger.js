@@ -1,10 +1,19 @@
+import logger from '../config/logger.js';
 import { getClient } from '../db/client.js';
 
-class SecurityAuditLogger {
-  async initialize() {
-  }
+const auditLogger = logger.child({ component: 'audit' });
 
-  async logEvent(actionType, userId, details, severity = 'INFO', ipAddress = null, userAgent = null) {
+class SecurityAuditLogger {
+  async initialize() {}
+
+  async logEvent(
+    actionType,
+    userId,
+    details,
+    severity = 'INFO',
+    ipAddress = null,
+    userAgent = null,
+  ) {
     try {
       const client = getClient();
       return await client.auditLog.create({
@@ -21,7 +30,7 @@ class SecurityAuditLogger {
         },
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to create audit entry:', error.message);
+      auditLogger.error('Failed to create audit entry', { error: error.message });
     }
   }
 
@@ -32,18 +41,12 @@ class SecurityAuditLogger {
       { ipAddress, userAgent },
       success ? 'INFO' : 'WARNING',
       ipAddress,
-      userAgent
+      userAgent,
     );
   }
 
   async logMFAEvent(userId, action, ipAddress) {
-    return this.logEvent(
-      'MFA_EVENT',
-      userId,
-      { action, ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('MFA_EVENT', userId, { action, ipAddress }, 'INFO', ipAddress);
   }
 
   async logSecurityEvent(eventType, userId, details) {
@@ -51,13 +54,7 @@ class SecurityAuditLogger {
   }
 
   async logDataAccess(userId, resource, action, ipAddress) {
-    return this.logEvent(
-      'DATA_ACCESS',
-      userId,
-      { resource, action, ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('DATA_ACCESS', userId, { resource, action, ipAddress }, 'INFO', ipAddress);
   }
 
   async logPayment(userId, resourceId, ipAddress) {
@@ -66,7 +63,7 @@ class SecurityAuditLogger {
       userId,
       { resourceType: 'transaction', resourceId, ipAddress },
       'INFO',
-      ipAddress
+      ipAddress,
     );
   }
 
@@ -76,27 +73,25 @@ class SecurityAuditLogger {
       userId,
       { resourceType: 'kyc', resourceId: userId, ipAddress },
       'INFO',
-      ipAddress
+      ipAddress,
     );
   }
 
   async logPasswordChange(userId, ipAddress) {
-    return this.logEvent(
-      'PASSWORD_CHANGE',
-      userId,
-      { ipAddress },
-      'INFO',
-      ipAddress
-    );
+    return this.logEvent('PASSWORD_CHANGE', userId, { ipAddress }, 'INFO', ipAddress);
   }
 
-  async logAccountDeletion(userId, ipAddress) {
+  async logAccountDeletion(userId, ipAddress = null, retention = {}) {
     return this.logEvent(
       'ACCOUNT_DELETION',
       userId,
-      { resourceType: 'user', resourceId: userId, ipAddress },
+      {
+        resourceType: 'user',
+        resourceId: userId,
+        ...retention,
+      },
       'WARNING',
-      ipAddress
+      ipAddress,
     );
   }
 
@@ -106,7 +101,7 @@ class SecurityAuditLogger {
       adminId,
       { resourceType, resourceId, ipAddress },
       'WARNING',
-      ipAddress
+      ipAddress,
     );
   }
 
@@ -127,7 +122,7 @@ class SecurityAuditLogger {
         skip: offset,
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to retrieve audit log:', error.message);
+      auditLogger.error('Failed to retrieve audit log', { error: error.message });
       return [];
     }
   }
@@ -141,7 +136,7 @@ class SecurityAuditLogger {
         take: limit,
       });
     } catch (error) {
-      console.error('[AuditLog] Failed to get security events:', error.message);
+      auditLogger.error('Failed to get security events', { error: error.message });
       return [];
     }
   }

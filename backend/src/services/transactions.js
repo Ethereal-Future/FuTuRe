@@ -395,9 +395,12 @@ class TransactionService {
    */
   transactionsToCSV(transactions) {
     const csvEscape = (val) => {
-      const s = val == null ? '' : String(val);
-      return s.includes(',') || s.includes('"') || s.includes('\n') 
-        ? `"${s.replace(/"/g, '""')}"` 
+      let s = val == null ? '' : String(val);
+      if (/^[=+\-@]/.test(s)) {
+        s = `'${s}`;
+      }
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s.replace(/"/g, '""')}"`
         : s;
     };
 

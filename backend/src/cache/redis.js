@@ -2,7 +2,63 @@
  * Redis cache backend adapter.
  * Wraps ioredis with the get/set/delete/clear interface expected by MultiLevelCache.
  * Falls back silently to no-op if Redis is not configured or unreachable.
+ *
+ * Production (ECS) connection is host + AUTH token + TLS, not a plaintext
+ * redis:// URL: REDIS_HOST, REDIS_PORT, REDIS_AUTH_TOKEN, REDIS_TLS=true.
+ * REDIS_URL (redis:// or rediss://) remains supported for local/dev.
  */
+
+const REDIS_CLIENT_DEFAULTS = {
+  lazyConnect: true,
+  enableOfflineQueue: false,
+  maxRetriesPerRequest: 1,
+  connectTimeout: 3000,
+};
+
+function envFlag(value) {
+  const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  return ['1', 'true', 'yes', 'y', 'on'].includes(raw);
+}
+
+function nonEmpty(value) {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : '';
+}
+
+/**
+ * Resolve ioredis constructor args from an optional URL and process.env.
+ * TLS is enabled when REDIS_TLS is truthy or the URL uses the rediss:// scheme.
+ */
+export function resolveRedisConfig(url) {
+  const fromArg = nonEmpty(url);
+  const fromEnv = nonEmpty(process.env.REDIS_URL);
+  const resolvedUrl = fromArg || fromEnv;
+  const host = nonEmpty(process.env.REDIS_HOST);
+  const password =
+    nonEmpty(process.env.REDIS_AUTH_TOKEN) || nonEmpty(process.env.REDIS_PASSWORD) || undefined;
+  const portRaw = Number.parseInt(process.env.REDIS_PORT || '6379', 10);
+  const port = Number.isFinite(portRaw) ? portRaw : 6379;
+  const tlsEnabled = envFlag(process.env.REDIS_TLS) || resolvedUrl.startsWith('rediss://');
+
+  if (resolvedUrl) {
+    const options = { ...REDIS_CLIENT_DEFAULTS };
+    if (password) options.password = password;
+    if (tlsEnabled) options.tls = {};
+    return { url: resolvedUrl, options, tlsEnabled };
+  }
+
+  if (host) {
+    const options = {
+      ...REDIS_CLIENT_DEFAULTS,
+      host,
+      port,
+    };
+    if (password) options.password = password;
+    if (tlsEnabled) options.tls = {};
+    return { options, tlsEnabled };
+  }
+
+  return null;
+}
 
 let Redis;
 try {
@@ -13,17 +69,20 @@ try {
 
 export class RedisBackend {
   constructor(url) {
-    if (!Redis || !url) {
+    const resolved = resolveRedisConfig(url);
+    this.tlsEnabled = Boolean(resolved?.tlsEnabled);
+    if (!Redis || !resolved) {
       this.client = null;
       return;
     }
-    this.client = new Redis(url, {
-      lazyConnect: true,
-      enableOfflineQueue: false,
-      maxRetriesPerRequest: 1,
-      connectTimeout: 3000,
-    });
+    this.client = resolved.url
+      ? new Redis(resolved.url, resolved.options)
+      : new Redis(resolved.options);
     this.client.on('error', () => {}); // suppress unhandled error events
+  }
+
+  isTlsEnabled() {
+    return this.tlsEnabled && this.client != null;
   }
 
   async connect() {

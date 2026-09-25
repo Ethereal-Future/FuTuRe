@@ -575,7 +575,7 @@ class ComplianceReporter {
 
       return reports.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     } catch (error) {
-      console.error('Failed to get compliance reports:', error);
+      logger.error('Failed to get compliance reports:', error);
       return [];
     }
   }

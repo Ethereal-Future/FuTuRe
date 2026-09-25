@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 function hashToBucket(input) {
   let hash = 0;
   for (let i = 0; i < input.length; i += 1) {
@@ -176,7 +178,7 @@ class NotificationEngine {
     const channel = this.routeNotification(userId, config, config.channels);
 
     const delivery = {
-      id: `delivery_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: `delivery_${randomUUID()}`,
       userId,
       channel,
       variantId: variant.id,

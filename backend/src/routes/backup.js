@@ -7,8 +7,13 @@ import {
   enforceRetention,
   getMetrics,
 } from '../backup/manager.js';
+import { requireAdmin } from '../middleware/adminAuth.js';
 
 const router = express.Router();
+
+// Backup listing/restore exposes and can overwrite production data, so it is
+// admin-only (#1102).
+router.use(requireAdmin);
 
 /**
  * @swagger

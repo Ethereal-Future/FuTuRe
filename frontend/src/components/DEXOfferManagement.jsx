@@ -107,7 +107,7 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
     try {
       const { data } = await apiClient.post('/api/stellar/offers/modify', {
         sourceSecret: '', // In production, from secure context
-        offerId: parseInt(offerId),
+        offerId,
         sellingAsset,
         buyingAsset,
         sellingAmount: parseFloat(sellingAmount),
@@ -172,8 +172,18 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
     <section className="section" aria-labelledby="offers-heading">
       <h2 id="offers-heading">DEX Offers Management</h2>
 
-      {error && <StatusMessage type="error" message={error} />}
-      {success && <StatusMessage type="success" message={success} />}
+      {error && (
+        <StatusMessage
+          messages={[{ id: 'offers-error', type: 'error', message: error, icon: '⚠️' }]}
+          onRemove={() => setError('')}
+        />
+      )}
+      {success && (
+        <StatusMessage
+          messages={[{ id: 'offers-success', type: 'success', message: success, icon: '✅' }]}
+          onRemove={() => setSuccess('')}
+        />
+      )}
 
       <div style={{ marginBottom: 20 }}>
         <div style={{ display: 'flex', gap: 10 }}>

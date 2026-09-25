@@ -6,6 +6,15 @@ import eventStore from './eventStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTIONS_DIR = path.join(__dirname, '../../data/projections');
+/**
+ * Projection Manager — stores and retrieves read-model projections in Postgres
+ * via Prisma.  Replaces the old local-file approach that wrote per-projection
+ * JSON files to backend/data/projections/ and was not visible to other process
+ * instances.
+ *
+ * Migrated as part of Issue #1125.
+ */
+import prisma from '../db/client.js';
 
 class ProjectionManager {
   constructor() {
@@ -15,6 +24,7 @@ class ProjectionManager {
 
   async initialize() {
     await fs.mkdir(PROJECTIONS_DIR, { recursive: true });
+    this.writeQueues = new Map();
   }
 
   registerProjection(name, handler) {
@@ -37,6 +47,7 @@ class ProjectionManager {
    */
   applyEvents(handler, projection, events) {
     const applied = projection._applied ?? {};
+    let projection = (await this.loadProjection(name)) || {};
 
     for (const event of events) {
       const last = applied[event.aggregateId];
@@ -83,19 +94,31 @@ class ProjectionManager {
   }
 
   async saveProjection(name, data) {
-    const file = path.join(PROJECTIONS_DIR, `${name}.json`);
-    await fs.writeFile(file, JSON.stringify(data, null, 2));
+    if (!this.writeQueues.has(name)) {
+      this.writeQueues.set(name, Promise.resolve());
+    }
+
+    const queuePromise = this.writeQueues.get(name);
+    const newPromise = queuePromise.then(async () => {
+      const file = path.join(PROJECTIONS_DIR, `${name}.json`);
+      const tmpFile = `${file}.tmp`;
+
+      await fs.writeFile(tmpFile, JSON.stringify(data, null, 2));
+      await fs.rename(tmpFile, file);
+    });
+
+    this.writeQueues.set(name, newPromise);
+    await newPromise;
+    await prisma.eventProjection.upsert({
+      where: { name },
+      update: { data, updatedAt: new Date() },
+      create: { name, data },
+    });
   }
 
   async loadProjection(name) {
-    const file = path.join(PROJECTIONS_DIR, `${name}.json`);
-    try {
-      const content = await fs.readFile(file, 'utf-8');
-      return JSON.parse(content);
-    } catch (error) {
-      if (error.code === 'ENOENT') return null;
-      throw error;
-    }
+    const record = await prisma.eventProjection.findUnique({ where: { name } });
+    return record?.data ?? null;
   }
 
   async getProjection(name) {
@@ -103,7 +126,8 @@ class ProjectionManager {
   }
 }
 
-// Default projections
+// ── Default projections ────────────────────────────────────────────────────────
+
 const projectionManager = new ProjectionManager();
 
 projectionManager.registerProjection('account-summary', (projection, event) => {
@@ -114,7 +138,7 @@ projectionManager.registerProjection('account-summary', (projection, event) => {
       projection.accounts[event.aggregateId] = {
         publicKey: event.data.publicKey,
         createdAt: event.timestamp,
-        status: 'created'
+        status: 'created',
       };
       break;
 
@@ -145,7 +169,7 @@ projectionManager.registerProjection('payment-history', (projection, event) => {
       destination: event.data.destination,
       amount: event.data.amount,
       hash: event.data.hash,
-      timestamp: event.timestamp
+      timestamp: event.timestamp,
     });
   }
 

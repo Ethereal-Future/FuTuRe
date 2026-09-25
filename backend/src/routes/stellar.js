@@ -1,3 +1,10 @@
+/**
+ * NOTE (#1102): this file is not mounted by backend/src/server.js — production
+ * traffic is served by routes/stellar/index.js and its sub-routers instead.
+ * It is only imported by test fixtures (tests/helpers/app.js, full-app.js),
+ * so it carries no live unauthenticated-route risk; left unchanged here to
+ * avoid touching test-only behavior.
+ */
 import express from 'express';
 import { body } from 'express-validator';
 import * as StellarSDK from '@stellar/stellar-sdk';
@@ -552,9 +559,33 @@ router.get('/account/:publicKey/trustlines', rules.publicKeyParam, validate, asy
   }
 });
 
+const FULL_TX_HASH_RE = /^[0-9a-f]{64}$/i;
+
 router.get('/account/:publicKey/transactions', rules.publicKeyParam, validate, async (req, res) => {
   try {
     const { cursor, limit, type, dateFrom, dateTo, hash } = req.query;
+
+    // A full 64-char hash bypasses pagination entirely and looks the
+    // transaction up directly from Horizon (issue #1122) — this finds
+    // transactions regardless of how far back they sit in the account's
+    // history, unlike filtering the most recent page of records.
+    if (hash && FULL_TX_HASH_RE.test(hash)) {
+      try {
+        const transaction = await StellarService.getTransactionRecordByHash(
+          hash,
+          req.params.publicKey,
+        );
+        return res.json({ transaction });
+      } catch (error) {
+        if (error.notFoundReason === 'horizon') {
+          return res.status(404).json({ error: 'Transaction not found' });
+        }
+        if (error.notFoundReason === 'account_mismatch') {
+          return res.status(404).json({ error: 'Transaction not found for this account' });
+        }
+        throw error;
+      }
+    }
 
     let parsedLimit = 20;
     if (limit !== undefined) {
@@ -572,6 +603,8 @@ router.get('/account/:publicKey/transactions', rules.publicKeyParam, validate, a
       dateTo,
     });
     if (hash) {
+      // Partial hash — treated as a prefix filter over the fetched page
+      // (kept for backward compatibility with existing callers).
       const prefix = hash.toLowerCase();
       result.records = result.records.filter((tx) => tx.hash?.toLowerCase().startsWith(prefix));
     }
@@ -745,76 +778,96 @@ router.get('/network/status', async (req, res) => {
   }
 });
 
-router.get('/amm/pools', (req, res) => {
-  res.json({ pools: AMMService.getAllPools() });
+router.get('/amm/pools', async (req, res) => {
+  try {
+    res.json({ pools: await AMMService.getAllPools() });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.post('/amm/pools/register', (req, res) => {
+router.post('/amm/pools/register', async (req, res) => {
   try {
-    res.json(AMMService.registerPool(req.body));
+    res.json(await AMMService.registerPool(req.body));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get('/amm/pools/:poolId', (req, res) => {
+router.get('/amm/pools/:poolId', async (req, res) => {
   try {
-    res.json(AMMService.getPoolState(req.params.poolId));
+    res.json(await AMMService.getPoolState(req.params.poolId));
   } catch (error) {
     res.status(404).json({ error: error.message });
   }
 });
 
-router.post('/amm/swap', (req, res) => {
+router.post('/amm/swap', async (req, res) => {
   try {
-    res.json(AMMService.executeSwap(req.body));
+    res.json(await AMMService.executeSwap(req.body));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get('/amm/arbitrage/:assetA/:assetB', (req, res) => {
-  const opportunities = AMMService.detectArbitrageOpportunities([
-    req.params.assetA,
-    req.params.assetB,
-  ]);
-  res.json({ opportunities });
+router.get('/amm/arbitrage/:assetA/:assetB', async (req, res) => {
+  try {
+    const opportunities = await AMMService.detectArbitrageOpportunities([
+      req.params.assetA,
+      req.params.assetB,
+    ]);
+    res.json({ opportunities });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.post('/amm/strategies/run', (req, res) => {
+router.post('/amm/strategies/run', async (req, res) => {
   try {
-    res.json(AMMService.runAutomatedStrategy(req.body));
+    res.json(await AMMService.runAutomatedStrategy(req.body));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.post('/amm/liquidity/automate', (req, res) => {
+router.post('/amm/liquidity/automate', async (req, res) => {
   try {
-    res.json(AMMService.automateLiquidityProvision(req.body));
+    res.json(await AMMService.automateLiquidityProvision(req.body));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.post('/amm/yield/estimate', (req, res) => {
+router.post('/amm/yield/estimate', async (req, res) => {
   try {
-    res.json(AMMService.estimateYieldFarming(req.body));
+    res.json(await AMMService.estimateYieldFarming(req.body));
   } catch (error) {
     res.status(400).json({ error: error.message });
   }
 });
 
-router.get('/amm/analytics', (req, res) => {
-  res.json(AMMService.getAMMAnalytics());
+router.get('/amm/analytics', async (req, res) => {
+  try {
+    res.json(await AMMService.getAMMAnalytics());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get('/amm/risk', (req, res) => {
-  res.json(AMMService.runRiskChecks());
+router.get('/amm/risk', async (req, res) => {
+  try {
+    res.json(await AMMService.runRiskChecks());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
-router.get('/amm/optimize', (req, res) => {
-  res.json(AMMService.optimizeAMMPerformance());
+router.get('/amm/optimize', async (req, res) => {
+  try {
+    res.json(await AMMService.optimizeAMMPerformance());
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Returns supported assets and their issuers

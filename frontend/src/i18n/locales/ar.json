@@ -676,5 +676,67 @@
     "show": "👁 Show",
     "tipStrong": "Tip:",
     "tipRest": "Save both keys somewhere secure before leaving this page. They will not be displayed again."
+  },
+  "notifications": {
+    "transaction_received": {
+      "email": {
+        "subject": "لقد استلمت {{amount}} {{asset}}",
+        "body": "مرحباً {{recipientName}}،\n\nلقد استلمت {{amount}} {{asset}} من {{senderPublicKey}}.\n\nمعرّف المعاملة: {{txHash}}\n\nراجع محفظتك لمزيد من التفاصيل."
+      },
+      "push": { "title": "تم استلام دفعة", "body": "استلمت {{amount}} {{asset}}" },
+      "sms": { "body": "FutureRemit: استلمت {{amount}} {{asset}} من {{senderPublicKey}}. المعاملة: {{txHash}}" },
+      "inApp": { "title": "تم استلام دفعة", "body": "استلمت {{amount}} {{asset}} من {{senderPublicKey}}" }
+    },
+    "transaction_sent": {
+      "email": {
+        "subject": "لقد أرسلت {{amount}} {{asset}}",
+        "body": "مرحباً {{senderName}}،\n\nلقد أرسلت {{amount}} {{asset}} إلى {{recipientPublicKey}}.\n\nمعرّف المعاملة: {{txHash}}\n\nراجع محفظتك لمزيد من التفاصيل."
+      },
+      "push": { "title": "تم إرسال دفعة", "body": "أرسلت {{amount}} {{asset}} إلى {{recipientPublicKey}}" },
+      "sms": { "body": "FutureRemit: أرسلت {{amount}} {{asset}} إلى {{recipientPublicKey}}. المعاملة: {{txHash}}" },
+      "inApp": { "title": "تم إرسال دفعة", "body": "أرسلت {{amount}} {{asset}} إلى {{recipientPublicKey}}" }
+    },
+    "transaction_failed": {
+      "email": {
+        "subject": "فشلت المعاملة",
+        "body": "مرحباً {{userName}}،\n\nفشلت معاملتك بقيمة {{amount}} {{asset}}.\n\nالسبب: {{reason}}\n\nالرجاء المحاولة مجدداً أو التواصل مع الدعم."
+      },
+      "push": { "title": "فشلت المعاملة", "body": "فشلت معاملتك بقيمة {{amount}} {{asset}}: {{reason}}" },
+      "sms": { "body": "FutureRemit: فشلت معاملة {{amount}} {{asset}}. السبب: {{reason}}" },
+      "inApp": { "title": "فشلت المعاملة", "body": "فشلت معاملتك بقيمة {{amount}} {{asset}}: {{reason}}" }
+    },
+    "login_new_device": {
+      "email": {
+        "subject": "تم اكتشاف تسجيل دخول جديد",
+        "body": "مرحباً {{userName}}،\n\nتم اكتشاف تسجيل دخول جديد من {{deviceInfo}} في {{loginTime}}.\n\nإذا لم تكن أنت، قم بتأمين حسابك فوراً."
+      },
+      "push": { "title": "تسجيل دخول جديد", "body": "تسجيل دخول من {{deviceInfo}} في {{loginTime}}" },
+      "sms": { "body": "FutureRemit: تسجيل دخول جديد من {{deviceInfo}} في {{loginTime}}. لم تكن أنت؟ أمّن حسابك." },
+      "inApp": { "title": "تسجيل دخول جديد", "body": "تسجيل دخول من {{deviceInfo}} في {{loginTime}}" }
+    },
+    "account_created": {
+      "email": {
+        "subject": "مرحباً بك في FutureRemit",
+        "body": "مرحباً {{userName}}،\n\nتم إنشاء حسابك بنجاح.\n\nمفتاحك العام: {{publicKey}}\n\nابدأ الإرسال والاستقبال اليوم."
+      },
+      "push": { "title": "مرحباً بك في FutureRemit", "body": "حسابك جاهز. ابدأ بإرسال المدفوعات!" },
+      "sms": { "body": "FutureRemit: مرحباً! حسابك جاهز. المفتاح العام: {{publicKey}}" },
+      "inApp": { "title": "تم إنشاء الحساب", "body": "مرحباً بك في FutureRemit! حسابك جاهز." }
+    },
+    "weekly_digest": {
+      "email": {
+        "subject": "ملخصك الأسبوعي ({{weekStartDay}} - {{weekEndDay}})",
+        "body": "مرحباً {{userName}}،\n\nالمعاملات: {{transactionCount}}\nإجمالي المُرسَل: {{totalSent}} XLM\nإجمالي المستلَم: {{totalReceived}} XLM"
+      },
+      "inApp": { "title": "الملخص الأسبوعي", "body": "أجريت {{transactionCount}} معاملة هذا الأسبوع." }
+    },
+    "low_balance_alert": {
+      "email": {
+        "subject": "تنبيه الرصيد: {{currentBalance}} {{asset}} أقل من {{threshold}} {{asset}}",
+        "body": "مرحباً {{userName}}،\n\nانخفض رصيدك إلى {{currentBalance}} {{asset}}، وهو أقل من حد التنبيه {{threshold}} {{asset}}."
+      },
+      "push": { "title": "تنبيه رصيد منخفض", "body": "رصيدك من {{asset}} الآن {{currentBalance}}" },
+      "inApp": { "title": "تنبيه رصيد منخفض", "body": "رصيدك من {{asset}} ({{currentBalance}}) أقل من الحد ({{threshold}} {{asset}})" }
+    }
   }
 }
