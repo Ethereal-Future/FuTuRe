@@ -6,6 +6,10 @@ import logger from '../config/logger.js';
 const MAX_RETRIES = 3;
 const RETRY_DELAYS = [1000, 5000, 15000]; // ms, indexed by attempt number (0-based)
 
+// Circuit breaker: after this many consecutive delivery failures an endpoint is
+// considered dead and is automatically disabled so we stop queuing doomed rows.
+const CONSECUTIVE_FAILURE_THRESHOLD = 20;
+
 // Bounded concurrency for the scheduler tick. Without this, a batch of dead
 // subscriber endpoints would each block the loop for the full 5s timeout,
 // starving healthy deliveries and monopolizing the worker process.
@@ -51,6 +55,92 @@ function hostKeyFor(webhook) {
     return new URL(webhook.url).host;
   } catch {
     return webhook.url;
+  }
+}
+
+/**
+ * Notify the account owner that their webhook endpoint was disabled after too
+ * many consecutive delivery failures. Best-effort: a notification failure must
+ * never mask the delivery outcome or crash the dispatcher.
+ */
+async function notifyWebhookDisabled(webhook, lastError) {
+  try {
+    const account = await prisma.account.findUnique({
+      where: { id: webhook.accountId },
+      select: { email: true },
+    });
+    if (!account?.email) return;
+
+    await prisma.notification.create({
+      data: {
+        accountId: webhook.accountId,
+        type: 'WEBHOOK_DISABLED',
+        title: 'Webhook endpoint disabled due to continuous delivery errors',
+        body:
+          `Your webhook endpoint ${webhook.url} was disabled after ` +
+          `${CONSECUTIVE_FAILURE_THRESHOLD} consecutive delivery failures. ` +
+          `Last error: ${lastError}. Fix your server and re-enable the endpoint ` +
+          `to resume deliveries.`,
+      },
+    });
+  } catch (err) {
+    logger.error(
+      { webhookId: webhook.id, error: err.message },
+      'Failed to send webhook-disabled notification',
+    );
+  }
+}
+
+/**
+ * Circuit breaker bookkeeping for a failed delivery. Increments the webhook's
+ * consecutive failure counter and, once the threshold is reached, transitions
+ * the endpoint from ACTIVE to DISABLED and alerts the account owner.
+ */
+async function recordFailure(webhook, lastError) {
+  try {
+    const updated = await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: { consecutiveFailures: { increment: 1 } },
+    });
+
+    if (
+      updated.consecutiveFailures >= CONSECUTIVE_FAILURE_THRESHOLD &&
+      updated.status === 'ACTIVE'
+    ) {
+      await prisma.webhook.update({
+        where: { id: webhook.id },
+        data: { status: 'DISABLED' },
+      });
+      logger.warn(
+        { webhookId: webhook.id, consecutiveFailures: updated.consecutiveFailures },
+        'Webhook endpoint auto-disabled after continuous delivery failures',
+      );
+      await notifyWebhookDisabled(webhook, lastError);
+    }
+  } catch (err) {
+    logger.error(
+      { webhookId: webhook.id, error: err.message },
+      'Failed to record webhook delivery failure',
+    );
+  }
+}
+
+/**
+ * Reset the circuit breaker after a successful delivery so a recovered endpoint
+ * starts from a clean slate.
+ */
+async function recordSuccess(webhook) {
+  if (!webhook.consecutiveFailures) return;
+  try {
+    await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: { consecutiveFailures: 0 },
+    });
+  } catch (err) {
+    logger.error(
+      { webhookId: webhook.id, error: err.message },
+      'Failed to reset webhook failure counter',
+    );
   }
 }
 
@@ -101,6 +191,7 @@ async function attemptDelivery(delivery) {
 
   try {
     await deliverOnce(webhook, payload);
+    await recordSuccess(webhook);
     return prisma.webhookDelivery.update({
       where: { id: delivery.id },
       data: {
@@ -124,6 +215,7 @@ async function attemptDelivery(delivery) {
       { webhookId: webhook.id, error: err.message },
       `Webhook delivery failed after ${attempt} attempts`,
     );
+    await recordFailure(webhook, err.message);
     return prisma.webhookDelivery.update({
       where: { id: delivery.id },
       data: { status: 'FAILED', attempt, lastError: err.message },
@@ -139,7 +231,8 @@ async function attemptDelivery(delivery) {
 export async function dispatchEvent(accountId, eventType, data) {
   try {
     const hooks = (await getWebhooksForAccount(accountId)).filter(
-      (w) => w.events.includes('*') || w.events.includes(eventType),
+      (w) =>
+        w.status !== 'DISABLED' && (w.events.includes('*') || w.events.includes(eventType)),
     );
     if (!hooks.length) return [];
 
