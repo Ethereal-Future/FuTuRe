@@ -252,8 +252,8 @@ class EventMonitor {
     return { healthy: projections.every((p) => p.status === 'healthy'), projections };
   }
 
-  async getEventHistory(aggregateId) {
-    return eventStore.getEvents(aggregateId);
+  async getEventHistory(aggregateId, options = {}) {
+    return eventStore.getEvents(aggregateId, options);
   }
 
   async getAggregateState(aggregateId) {
