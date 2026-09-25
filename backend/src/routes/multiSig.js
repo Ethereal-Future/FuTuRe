@@ -284,6 +284,23 @@ router.post('/account/update', rules.updateMultiSig, validate, async (req, res, 
  *       500:
  *         description: Server error
  */
+router.post('/transaction/build', idempotencyMiddleware, rules.buildMultiSigTx, validate, async (req, res) => {
+  try {
+    const { sourcePublicKey, destination, amount, assetCode, ttlSeconds, channelAccount } = req.body;
+    const result = await MultiSigService.buildMultiSigTransaction(
+      sourcePublicKey,
+      destination,
+      amount,
+      assetCode,
+      { ttlSeconds, channelAccount }
+    );
+    broadcastToAccount(sourcePublicKey, { type: 'multisig_tx_pending', ...result });
+    res.json(result);
+  } catch (error) {
+    logError(req, error, { destination: req.body.destination, amount: req.body.amount });
+    res.status(500).json({ error: 'Failed to build multi-sig transaction' });
+  }
+});
 router.post(
   '/transaction/build',
   idempotencyMiddleware,
@@ -410,6 +427,23 @@ router.post('/transaction/sign', rules.signMultiSigTx, validate, async (req, res
  *       500:
  *         description: Server error
  */
+router.post('/transaction/submit', rules.submitMultiSigTx, validate, async (req, res) => {
+  try {
+    const { txId } = req.body;
+    const result = await MultiSigService.submitMultiSigTransaction(txId);
+    broadcastToAccount(result.hash, { type: 'multisig_tx_submitted', ...result });
+    res.json(result);
+  } catch (error) {
+    if (error.status === 409 || error.code === 'MULTISIG_SEQUENCE_DRIFT' || error.code === 'MULTISIG_CONFLICT') {
+      return res.status(409).json({ error: error.message, code: error.code, details: error.details });
+    }
+    if (error.code === 'INSUFFICIENT_MULTISIG_WEIGHT' || error.status === 400) {
+      return res.status(400).json({ error: error.message, code: error.code, details: error.details });
+    }
+    logError(req, error, { txId: req.body.txId });
+    res.status(500).json({ error: 'Failed to submit multi-sig transaction' });
+  }
+});
 router.post(
   '/transaction/submit',
   rules.submitMultiSigTx,

@@ -14,10 +14,16 @@ export async function verifyPassword(password, stored) {
   const buf = await scryptAsync(password, salt, 64);
   return timingSafeEqual(Buffer.from(hash, 'hex'), buf);
 }
- export function calculatePercentageChange(current: number, previous: number) {
-    if (previous === 0) {
-      return current > 0 ? 100 : 0;
-    }
 
-    return Number((((current - previous) / previous) * 100).toFixed(2));
+/**
+ * @param {number} current
+ * @param {number} previous
+ * @returns {number}
+ */
+export function calculatePercentageChange(current, previous) {
+  if (previous === 0) {
+    return current > 0 ? 100 : 0;
   }
+
+  return Number((((current - previous) / previous) * 100).toFixed(2));
+}

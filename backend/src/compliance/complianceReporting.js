@@ -8,6 +8,11 @@
  *     from "actually filed with FinCEN" — two legally distinct states
  *   - include a retainUntil date enforcing the BSA 5-year retention window
  *
+ * Issue #1340: CTR aggregation now groups transactions by beneficial owner
+ * (verified identity) rather than by individual account/senderId, so that
+ * structuring across multiple accounts of the same person is detected per
+ * FinCEN 31 CFR § 1010.311.
+ *
  * ⚠️  WARNING: generating a SAR or CTR here does NOT automatically submit
  * it to FinCEN's BSA E-Filing system.  Every generated report has
  * filingStatus = "MANUAL_REVIEW_REQUIRED" until an authorised operator
@@ -18,9 +23,13 @@
  */
 import prisma from '../db/client.js';
 import complianceAudit from './complianceAudit.js';
+import { getRelatedAccountIds } from './identityVerifier.js';
 
 // BSA mandated retention period in years
 const RETENTION_YEARS = 5;
+
+// FinCEN CTR reporting threshold (31 CFR § 1010.311)
+const CTR_THRESHOLD = 10000;
 
 function retainUntilDate() {
   const d = new Date();
@@ -161,6 +170,12 @@ class ComplianceReportingSystem {
 
   // FinCEN CTR — Currency Transaction Report (transactions >= $10,000)
   //
+  // Per 31 CFR § 1010.311, cash/crypto transactions conducted by or on
+  // behalf of the SAME beneficial owner across ALL accounts they own or
+  // control within a single business day must be aggregated.  We therefore
+  // group by verified identity (taxId / documentNumberHash) rather than by
+  // individual senderId, so cross-account structuring is detected.
+  //
   // ⚠️  WARNING: this generates the report document only. It does NOT file
   // the CTR with FinCEN. Operators must manually submit via BSA E-Filing
   // within 15 days and update filingStatus to "FILED".
@@ -183,16 +198,56 @@ class ComplianceReportingSystem {
           userId: e.userId,
         }));
 
-    const qualifying = transactions.filter((tx) => parseFloat(tx.amount) >= 10000);
+    // Group transactions by beneficial owner so that multiple accounts
+    // belonging to the same verified identity are aggregated together.
+    const groups = new Map();
+    for (const tx of transactions) {
+      const accountId = tx.userId ?? tx.senderId ?? null;
+      const relatedIds = accountId ? await getRelatedAccountIds(accountId) : [];
+      const identityKey = relatedIds.length
+        ? [...relatedIds].sort().join('|')
+        : `account:${accountId ?? 'UNKNOWN'}`;
+
+      if (!groups.has(identityKey)) {
+        groups.set(identityKey, { accountIds: new Set(relatedIds), transactions: [] });
+      }
+      const group = groups.get(identityKey);
+      if (accountId) group.accountIds.add(accountId);
+      group.transactions.push(tx);
+    }
+
+    const qualifying = [];
+    for (const group of groups.values()) {
+      const totalAmount = group.transactions.reduce(
+        (sum, tx) => sum + parseFloat(tx.amount || 0),
+        0
+      );
+      // Only report groups whose combined daily aggregate crosses the
+      // CTR threshold — this is the cross-account structuring detection.
+      if (totalAmount >= CTR_THRESHOLD) {
+        qualifying.push({
+          accountIds: [...group.accountIds],
+          transactions: group.transactions,
+          totalAmount,
+        });
+      }
+    }
+
+    const reportedTransactions = qualifying.flatMap((g) => g.transactions);
 
     const payload = {
       reportType: 'CTR',
       filingDate: new Date().toISOString(),
       period: { from, to },
       reportingEntity: { institutionName: 'FuTuRe Remittance Platform' },
-      transactions: qualifying,
-      totalTransactions: qualifying.length,
-      totalAmount: qualifying.reduce((sum, tx) => sum + parseFloat(tx.amount), 0),
+      transactions: reportedTransactions,
+      aggregatedGroups: qualifying.map((g) => ({
+        accountIds: g.accountIds,
+        totalAmount: g.totalAmount,
+        transactionCount: g.transactions.length,
+      })),
+      totalTransactions: reportedTransactions.length,
+      totalAmount: qualifying.reduce((sum, g) => sum + g.totalAmount, 0),
       _notice: 'MANUAL_FILING_REQUIRED — not yet submitted to FinCEN BSA E-Filing.',
     };
 
@@ -238,20 +293,12 @@ class ComplianceReportingSystem {
       },
     });
 
-    await complianceAudit.log('REPORT_FILED', operatorId, {
+    await complianceAudit.log('REPORT_FILED', operatorId ?? 'system', {
       reportId,
       filingReference,
     });
 
     return record;
-  }
-
-  // Convert a list of objects to CSV given an ordered field list
-  toCsv(fields, rows) {
-    const escape = (v) => JSON.stringify(v ?? '');
-    const header = fields.join(',');
-    const lines = rows.map((row) => fields.map((f) => escape(row[f])).join(','));
-    return [header, ...lines].join('\n');
   }
 }
 

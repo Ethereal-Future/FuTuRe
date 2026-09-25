@@ -50,6 +50,10 @@ function isPrivateOrReservedIp(ip) {
  * Rejects malformed URLs, disallowed schemes, and hosts that resolve to
  * private/loopback/link-local addresses. HTTPS is required outside of
  * development/test so local receivers can still use http://localhost.
+ *
+ * On success the validated, public IP address is returned as `address` so
+ * callers can pin the connection to that exact IP and avoid a second DNS
+ * lookup (DNS rebinding / TOCTOU). `family` is the matching IP family.
  */
 export async function validateWebhookUrl(url, { appEnv, lookup = dns.promises.lookup } = {}) {
   if (typeof url !== 'string' || url.trim().length === 0) {
@@ -72,7 +76,7 @@ export async function validateWebhookUrl(url, { appEnv, lookup = dns.promises.lo
   }
 
   if (HOST_ALLOWLIST.has(hostname)) {
-    return { valid: true };
+    return { valid: true, address: hostname, family: net.isIP(hostname) || undefined };
   }
 
   if (!['http:', 'https:'].includes(parsed.protocol)) {
@@ -87,19 +91,22 @@ export async function validateWebhookUrl(url, { appEnv, lookup = dns.promises.lo
 
   let addresses;
   if (net.isIP(hostname)) {
-    addresses = [hostname];
+    addresses = [{ address: hostname, family: net.isIP(hostname) }];
   } else {
     try {
       const results = await lookup(hostname, { all: true, verbatim: true });
-      addresses = results.map((r) => r.address);
+      addresses = results.map((r) => ({ address: r.address, family: r.family }));
     } catch {
       return { valid: false, error: 'url hostname could not be resolved' };
     }
   }
 
-  if (addresses.length === 0 || addresses.some(isPrivateOrReservedIp)) {
+  if (addresses.length === 0 || addresses.some((r) => isPrivateOrReservedIp(r.address))) {
     return { valid: false, error: 'url resolves to a private, loopback, or link-local address' };
   }
 
-  return { valid: true };
+  // Pin the first validated public address so the caller can connect to this
+  // exact IP without performing a second (rebindable) DNS lookup.
+  const pinned = addresses[0];
+  return { valid: true, address: pinned.address, family: pinned.family };
 }

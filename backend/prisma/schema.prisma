@@ -762,18 +762,34 @@ model ComplianceReport {
 model PendingMultiSigTx {
   txId            String   @id
   txXdr           String
+  baseTxXdr       String?
   sourcePublicKey String
+  submissionSourcePublicKey String?
+  sourceSequence  BigInt?
   destination     String
   amount          String
   assetCode       String   @default("XLM")
   signatures      Json     @default("[]")
-  status          String   @default("pending") // pending | submitted | failed | expired
+  status          String   @default("pending") // pending | submitting | submitted | failed | expired
   expiresAt       DateTime
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  signaturesByKey MultiSigSignature[]
 
   @@index([status, expiresAt])
   @@index([sourcePublicKey, status])
+}
+
+model MultiSigSignature {
+  id              String           @id @default(uuid())
+  txId            String
+  signerPublicKey String
+  signature       String
+  createdAt       DateTime         @default(now())
+  pending         PendingMultiSigTx @relation(fields: [txId], references: [txId], onDelete: Cascade)
+
+  @@unique([txId, signerPublicKey])
+  @@index([txId])
 }
 
 // ─── AMM Pools (#1290) ───────────────────────────────────────────────────────

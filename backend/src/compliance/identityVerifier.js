@@ -71,6 +71,35 @@ class IdentityVerifier {
   // in production/staging, and elsewhere it always routes passing submissions
   // to manual review rather than approving them. Replace with a real provider
   // SDK (Jumio, Onfido, etc.) before removing the manual-review gate.
+  // Resolve all account/user IDs that belong to the same beneficial owner as
+  // `userId`, linking accounts by shared tax ID or hashed identity document
+  // (KycVerification.taxId / documentNumberHash). FinCEN CTR rules (31 CFR
+  // § 1010.311) require aggregating transactions across every account a person
+  // owns or controls, so callers must use this set rather than a single ID.
+  // Always includes `userId` itself so single-account users behave as before.
+  async getRelatedAccountIds(userId) {
+    if (!userId) return [];
+
+    const record = await kycCollector.getKYCRecord(userId);
+    if (!record) return [userId];
+
+    const identityKeys = [record.taxId, record.documentNumberHash].filter(Boolean);
+    if (identityKeys.length === 0) return [userId];
+
+    const related = await kycCollector.findAccountsByIdentity(identityKeys);
+    const ids = new Set([userId]);
+    for (const id of related || []) {
+      if (id) ids.add(id);
+    }
+    return Array.from(ids);
+  }
+
+  // Placeholder only: checks that a document number string is present and >=5
+  // characters. This is NOT identity verification and must never auto-approve
+  // KYC. It refuses to run in production/staging, and elsewhere it always
+  // routes passing submissions to manual review rather than approving them.
+  // Replace with a real provider SDK (Jumio, Onfido, etc.) before removing
+  // the manual-review gate.
   async _callProvider(data) {
     if (IS_DEPLOYED) {
       throw new Error(
