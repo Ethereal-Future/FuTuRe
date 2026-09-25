@@ -188,6 +188,7 @@ model NotificationPreference {
   lowBalanceAsset           String   @default("XLM")
   lastLowBalanceAlertAt     DateTime?
   lastLowBalanceAlertLevel  Decimal?
+  lastBalanceCheckedAt      DateTime?
   updatedAt                 DateTime @updatedAt
 }
 
