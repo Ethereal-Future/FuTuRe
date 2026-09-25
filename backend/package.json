@@ -42,6 +42,7 @@
     "express": "^4.19.2",
     "express-rate-limit": "^7.5.0",
     "express-validator": "^7.3.1",
+    "google-libphonenumber": "^3.2.46",
     "helmet": "^7.1.0",
     "ioredis": "^5.3.2",
     "jsonwebtoken": "^9.0.0",
@@ -57,6 +58,8 @@
     "zod": "^3.24.4"
   },
   "optionalDependencies": {
+    "@aws-sdk/client-sns": "^3.1140.0",
+    "nodemailer": "^8.0.11",
     "twilio": "^5.3.3"
   },
   "devDependencies": {

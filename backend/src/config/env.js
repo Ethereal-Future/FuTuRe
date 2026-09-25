@@ -351,6 +351,9 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
   const alertEmail = env.ALERT_EMAIL ? (typeof env.ALERT_EMAIL === 'string' ? env.ALERT_EMAIL.trim() : '') : undefined;
   const slackWebhookUrl = env.SLACK_WEBHOOK_URL ? (typeof env.SLACK_WEBHOOK_URL === 'string' ? env.SLACK_WEBHOOK_URL.trim() : '') : undefined;
 
+  const emailFrom = trimOrUndefined(env.EMAIL_FROM) ?? 'noreply@futureremit.app';
+  const dkim = resolveDkimConfig(env);
+
   // Default XLM amount above which the frontend requires a WebAuthn
   // biometric re-auth before a payment is confirmed (see issue #808).
   // Operators can raise/lower the sane default; users may further
@@ -401,5 +404,39 @@ export function createConfigFromEnv(env, { appEnv, nodeEnv, loadedEnvFiles } = {
       email: alertEmail,
       slackWebhookUrl,
     },
+    email: {
+      from: emailFrom,
+      dkim,
+    },
   };
+}
+
+function trimOrUndefined(value) {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
+/**
+ * DKIM signing config for outbound email. All three variables must be set
+ * together; a partial configuration is a deployment mistake and fails fast.
+ * DKIM_PRIVATE_KEY may be a PEM with literal "\n" sequences (single-line env).
+ */
+function resolveDkimConfig(env) {
+  const domainName = trimOrUndefined(env.DKIM_DOMAIN);
+  const keySelector = trimOrUndefined(env.DKIM_KEY_SELECTOR);
+  const rawKey = trimOrUndefined(env.DKIM_PRIVATE_KEY);
+
+  const provided = [domainName, keySelector, rawKey].filter(Boolean).length;
+  if (provided === 0) return null;
+  if (provided !== 3) {
+    throw new Error('DKIM_DOMAIN, DKIM_KEY_SELECTOR and DKIM_PRIVATE_KEY must all be set to enable DKIM signing');
+  }
+
+  const privateKey = rawKey.replace(/\\n/g, '\n');
+  if (!/-----BEGIN (RSA )?PRIVATE KEY-----/.test(privateKey)) {
+    throw new Error('DKIM_PRIVATE_KEY must be a PEM-encoded private key');
+  }
+
+  return { domainName, keySelector, privateKey };
 }

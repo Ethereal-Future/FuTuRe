@@ -48,12 +48,12 @@ resource "aws_iam_role_policy" "ecs_secrets" {
     Statement = [{
       Effect = "Allow"
       Action = ["secretsmanager:GetSecretValue"]
-      Resource = [
+      Resource = concat([
         aws_secretsmanager_secret.jwt_secret.arn,
         aws_secretsmanager_secret.stream_encryption_key.arn,
         aws_secretsmanager_secret.backup_enc_key.arn,
         aws_db_instance.postgres.master_user_secret[0].secret_arn,
-      ]
+      ], aws_secretsmanager_secret.dkim_private_key[*].arn)
     }]
   })
 }
@@ -67,6 +67,23 @@ resource "aws_iam_role" "ecs_task" {
       Action    = "sts:AssumeRole"
       Effect    = "Allow"
       Principal = { Service = "ecs-tasks.amazonaws.com" }
+    }]
+  })
+}
+
+# Secondary SMS carrier route (issue #1353). Direct-to-phone SNS publishes
+# have no topic ARN, so the resource must be "*".
+resource "aws_iam_role_policy" "ecs_task_sns_sms" {
+  count = var.sms_sns_failover_enabled ? 1 : 0
+  name  = "${local.name_prefix}-ecs-sns-sms-policy"
+  role  = aws_iam_role.ecs_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["sns:Publish"]
+      Resource = "*"
     }]
   })
 }
@@ -100,14 +117,20 @@ resource "aws_ecs_task_definition" "backend" {
       protocol      = "tcp"
     }]
 
-    environment = [
+    environment = concat([
       { name = "NODE_ENV",        value = "production" },
       { name = "PORT",            value = "3001" },
       { name = "STELLAR_NETWORK", value = "mainnet" },
       { name = "HORIZON_URL",     value = "https://horizon.stellar.org" },
-    ]
+    ], local.app_dkim_enabled ? [
+      { name = "DKIM_DOMAIN",       value = var.email_domain },
+      { name = "DKIM_KEY_SELECTOR", value = var.dkim_key_selector },
+    ] : [], var.sms_sns_failover_enabled ? [
+      { name = "SMS_FAILOVER_PROVIDER", value = "sns" },
+      { name = "AWS_SNS_REGION",        value = var.aws_region },
+    ] : [])
 
-    secrets = [
+    secrets = concat([
       {
         name      = "JWT_SECRET"
         valueFrom = aws_secretsmanager_secret.jwt_secret.arn
@@ -124,7 +147,12 @@ resource "aws_ecs_task_definition" "backend" {
         name      = "DATABASE_URL"
         valueFrom = aws_db_instance.postgres.master_user_secret[0].secret_arn
       },
-    ]
+    ], [
+      for arn in aws_secretsmanager_secret.dkim_private_key[*].arn : {
+        name      = "DKIM_PRIVATE_KEY"
+        valueFrom = arn
+      }
+    ])
 
     logConfiguration = {
       logDriver = "awslogs"
