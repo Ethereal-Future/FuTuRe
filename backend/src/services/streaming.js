@@ -170,6 +170,36 @@ export async function cancelStream(id) {
 }
 
 /**
+ * Cancel every active or paused payment stream originating from a sender account.
+ * Used by compliance holds to immediately halt outgoing capital flow.
+ * @param {string} senderPublicKey - Stellar public key of the stream sender
+ * @returns {Promise<{cancelled: number, streamIds: number[]}>} Summary of cancelled streams
+ */
+export async function cancelStreamsForSender(senderPublicKey) {
+  if (!senderPublicKey) return { cancelled: 0, streamIds: [] };
+
+  const sender = await prisma.user.findUnique({ where: { publicKey: senderPublicKey } });
+  if (!sender) return { cancelled: 0, streamIds: [] };
+
+  const streams = await prisma.paymentStream.findMany({
+    where: { senderId: sender.id, status: { in: ['ACTIVE', 'PAUSED'] } },
+    select: { id: true },
+  });
+
+  const streamIds = [];
+  for (const { id } of streams) {
+    try {
+      await cancelStream(id);
+      streamIds.push(id);
+    } catch (err) {
+      logger.error(`Failed to cancel stream ${id} for compliance hold`, { error: err.message, senderPublicKey });
+    }
+  }
+
+  return { cancelled: streamIds.length, streamIds };
+}
+
+/**
  * Update mutable fields of an active or paused stream.
  * @param {number} id - Primary key of the PaymentStream record
  * @param {object} updates
@@ -214,148 +244,6 @@ export async function updateStream(id, updates) {
  * Return aggregate analytics across all payment streams.
  * @returns {Promise<{totalVolume: string, activeStreams: number, pausedStreams: number, failedStreams: number, completedStreams: number, cancelledStreams: number, totalStreams: number, topAssets: Array<{assetCode: string, count: number}>}>}
  */
-export async function getStreamAnalytics() {
-  const [statusCounts, totalVolumeResult, assets] = await Promise.all([
-    prisma.paymentStream.groupBy({
-      by: ['status'],
-      _count: true,
-    }),
-    prisma.paymentStream.aggregate({
-      _sum: { totalStreamed: true },
-    }),
-    prisma.paymentStream.groupBy({
-      by: ['assetCode'],
-      _count: true,
-      orderBy: { _count: { assetCode: 'desc' } },
-      take: 10,
-    }),
-  ]);
+exp
 
-  const statusMap = statusCounts.reduce((acc, { status, _count }) => {
-    acc[status] = _count;
-    return acc;
-  }, {});
-
-  return {
-    totalVolume: (totalVolumeResult._sum.totalStreamed || 0).toFixed(7),
-    activeStreams: statusMap.ACTIVE || 0,
-    pausedStreams: statusMap.PAUSED || 0,
-    failedStreams: statusMap.FAILED || 0,
-    completedStreams: statusMap.COMPLETED || 0,
-    cancelledStreams: statusMap.CANCELLED || 0,
-    totalStreams: Object.values(statusMap).reduce((a, b) => a + b, 0),
-    topAssets: assets.map(a => ({ assetCode: a.assetCode, count: a._count })),
-  };
-}
-
-/**
- * Return the failure history for a given stream, most recent first.
- * @param {string} id - Primary key of the PaymentStream record
- * @returns {Promise<Array<{id: string, streamId: string, reason: string, createdAt: Date}>>}
- */
-export async function getStreamFailures(id) {
-  return prisma.streamFailure.findMany({
-    where: { streamId: id },
-    orderBy: { createdAt: 'desc' },
-  });
-}
-
-/**
- * Worker tick: find all ACTIVE streams whose interval has elapsed and execute the next payment.
- * Streams that fail 5 consecutive times are automatically set to FAILED status.
- * Intended to be called by a scheduled job (e.g. every 10–30 seconds).
- * @returns {Promise<void>}
- */
-export async function processActiveStreams() {
-  const now = new Date();
-  const activeStreams = await prisma.paymentStream.findMany({
-    where: {
-      status: 'ACTIVE',
-      OR: [
-        { endTime: null },
-        { endTime: { gt: now } },
-      ],
-    },
-    include: { sender: true, recipient: true },
-  });
-
-  logger.debug('streaming.worker.tick', { activeCount: activeStreams.length });
-
-  for (const stream of activeStreams) {
-    const lastProcessed = new Date(stream.lastProcessedAt);
-    const secondsSinceLast = (now - lastProcessed) / 1000;
-
-    if (secondsSinceLast >= stream.intervalSeconds) {
-       try {
-         if (!stream.senderSecret) {
-           throw new Error('Stream has no senderSecret — cannot sign transaction');
-         }
-         const senderSecret = decryptFromEnvValue(stream.senderSecret, getStreamEncryptionKey());
-
-         // Execute payment on Stellar using the actual sender's secret
-         const result = await sendPayment(
-           senderSecret,
-           stream.recipient.publicKey, 
-           stream.rateAmount.toString(), 
-           stream.assetCode
-         );
-         
-         if (result.success) {
-           await prisma.paymentStream.update({
-             where: { id: stream.id },
-             data: {
-               lastProcessedAt: now,
-               totalStreamed: { increment: stream.rateAmount },
-               failureCount: 0,
-             },
-           });
-
-           await eventMonitor.publishEvent(stream.sender.publicKey, {
-             type: 'StreamPaymentProcessed',
-             data: { streamId: stream.id, amount: stream.rateAmount, hash: result.hash },
-             version: 1,
-           });
-
-           withContext(logger, { action: 'processStream', correlationId: stream.id }).info('streaming.process.success', { streamId: stream.id, hash: result.hash });
-         } else {
-           throw new Error('Transaction submission failed');
-         }
-       } catch (err) {
-         withContext(logger, { action: 'processStream', correlationId: stream.id }).error('streaming.process.failed', { streamId: stream.id, error: err.message });
-
-         await prisma.streamFailure.create({
-           data: { streamId: stream.id, reason: err.message },
-         });
-
-         const updatedStream = await prisma.paymentStream.update({
-           where: { id: stream.id },
-           data: { failureCount: { increment: 1 } },
-         });
-
-         if (updatedStream.failureCount >= 3) {
-           await prisma.paymentStream.update({
-             where: { id: stream.id },
-             data: { status: 'FAILED' },
-           });
-
-           const subscription = getSubscriptionByPublicKey(stream.sender.publicKey);
-           if (subscription) {
-             await sendWebPush(subscription, {
-               title: 'Payment stream failed',
-               body: `Your payment stream failed after 3 consecutive errors: ${err.message}`,
-               data: { streamId: stream.id, reason: err.message },
-             });
-           }
-
-           await eventMonitor.publishEvent(stream.sender.publicKey, {
-             type: 'StreamFailed',
-             data: { streamId: stream.id, reason: err.message },
-             version: 1,
-           });
-
-           withContext(logger, { action: 'processStream', correlationId: stream.id }).error('streaming.stream.halted', { streamId: stream.id, reason: err.message });
-         }
-       }
-    }
-  }
-}
+/* … truncated 5126 chars — edit only what you need near the top … */
