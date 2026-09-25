@@ -22,6 +22,17 @@
 const DAY_MS = 24 * 60 * 60 * 1000;
 const HOUR_MS = 60 * 60 * 1000;
 
+/**
+ * Hard upper bound on the number of distinct sender states retained by a
+ * streaming analyzer. Prevents unbounded heap growth (OOM) under continuous
+ * streams with many unique senders. Least-recently-used senders are evicted
+ * once this capacity is exceeded.
+ */
+export const MAX_TRACKED_SENDERS = parseInt(
+  process.env.AML_MAX_TRACKED_SENDERS ?? '50000',
+  10
+);
+
 export const THRESHOLDS = Object.freeze({
   LARGE_TX: parseFloat(process.env.AML_LARGE_TX_THRESHOLD ?? '10000'),
   STRUCTURING: parseFloat(process.env.AML_STRUCTURING_THRESHOLD ?? '1000'),
@@ -183,13 +194,66 @@ function evictHead(deque, cutoff, onEvict) {
 }
 
 /**
+ * Bounded LRU map for per-sender streaming state.
+ *
+ * Backed by a native `Map` (insertion-ordered), which lets us evict the
+ * least-recently-used entry in O(1) by deleting and re-inserting the key on
+ * access. This guarantees a hard upper bound on the number of retained sender
+ * states, preventing unbounded heap growth / OOM under continuous streams
+ * with many unique senders.
+ */
+class LruMap {
+  constructor(max) {
+    this.max = max > 0 ? max : 1;
+    this.map = new Map();
+  }
+
+  get size() {
+    return this.map.size;
+  }
+
+  has(key) {
+    return this.map.has(key);
+  }
+
+  get(key) {
+    if (!this.map.has(key)) return undefined;
+    const value = this.map.get(key);
+    // Refresh recency: move to the most-recently-used position.
+    this.map.delete(key);
+    this.map.set(key, value);
+    return value;
+  }
+
+  set(key, value) {
+    if (this.map.has(key)) {
+      this.map.delete(key);
+    }
+    this.map.set(key, value);
+    while (this.map.size > this.max) {
+      const oldest = this.map.keys().next().value;
+      this.map.delete(oldest);
+    }
+    return this;
+  }
+
+  delete(key) {
+    return this.map.delete(key);
+  }
+}
+
+/**
  * Incremental per-sender analyzer. Feed transactions in createdAt order
  * (globally or per sender). Each sender keeps only the last WINDOW_MS of
  * txs plus a 1h rapid window, with running sum/counts — O(1) amortized
  * per transaction (O(n) overall).
+ *
+ * Sender state is held in a bounded LRU map (see MAX_TRACKED_SENDERS) and
+ * idle senders whose windows have fully aged out are dropped eagerly, so
+ * memory stays flat under continuous streams.
  */
 export function createStreamAnalyzer() {
-  const states = new Map();
+  const states = new LruMap(MAX_TRACKED_SENDERS);
   const flags = [];
 
   function stateFor(senderId) {
@@ -243,20 +307,29 @@ export function createStreamAnalyzer() {
         count >= THRESHOLDS.STRUCTURING_COUNT &&
         cumulativeSum >= THRESHOLDS.LARGE_TX * THRESHOLDS.STRUCTURING_VOLUME_RATIO
       ) {
-        pushFlag(flags, 'STRUCTURING', 'HIGH', senderId, { txId: tx.id, amount });
+        pushFlag(flags, 'STRUCTURING', 'HIGH', senderId, {
+          txId: tx.id,
+          amount,
+          count,
+          cumulativeSum,
+        });
       }
     }
 
     if (state.sum + amount > THRESHOLDS.VELOCITY_LIMIT) {
-      pushFlag(flags, 'VELOCITY', 'HIGH', senderId, { txId: tx.id, amount });
+      pushFlag(flags, 'VELOCITY', 'MEDIUM', senderId, {
+        txId: tx.id,
+        amount,
+        total: state.sum + amount,
+      });
     }
 
     if (!state.rapidFlagged && state.hour.length + 1 >= THRESHOLDS.RAPID_TX_COUNT) {
-      pushFlag(flags, 'RAPID_SUCCESSION', 'MEDIUM', senderId, {
-        count: state.hour.length + 1,
-        windowStart: state.hour[0].createdAt,
-      });
       state.rapidFlagged = true;
+      pushFlag(flags, 'RAPID_SUCCESSION', 'MEDIUM', senderId, {
+        txId: tx.id,
+        count: state.hour.length + 1,
+      });
     }
 
     state.day.push(tx);
@@ -266,49 +339,21 @@ export function createStreamAnalyzer() {
       state.smallCount += 1;
       state.smurfSum += amount;
     }
+
+    // Eagerly drop senders with no active window transactions so idle
+    // states do not linger in memory indefinitely.
+    if (state.day.length === 0 && state.hour.length === 0) {
+      states.delete(senderId);
+    }
+
+    return state;
   }
 
   return {
     process,
-    processPage(page) {
-      for (const tx of page) process(tx);
-    },
-    getFlags() {
-      return flags;
+    flags,
+    get trackedSenders() {
+      return states.size;
     },
   };
 }
-
-/** Run the stream analyzer over an already-loaded, chronological tx list. */
-export function detectBatchFlags(txs) {
-  const analyzer = createStreamAnalyzer();
-  analyzer.processPage(txs);
-  return analyzer.getFlags();
-}
-
-export const PRE_SUBMISSION_RULES = [
-  {
-    id: 'LARGE_TX',
-    description: 'Single transaction exceeds reporting threshold',
-    severity: 'HIGH',
-    check: (tx) => isLargeTx(tx),
-  },
-  {
-    id: 'STRUCTURING',
-    description: `≥ ${THRESHOLDS.STRUCTURING_COUNT} transactions in [$${THRESHOLDS.STRUCTURING_LOWER}, $${THRESHOLDS.LARGE_TX}) in 24h aggregating near $${THRESHOLDS.LARGE_TX} (structuring)`,
-    severity: 'HIGH',
-    check: (tx, history) => isStructuring(tx, history),
-  },
-  {
-    id: 'VELOCITY',
-    description: `Total sent in 24h exceeds $${THRESHOLDS.VELOCITY_LIMIT}`,
-    severity: 'HIGH',
-    check: (tx, history) => isVelocityExceeded(tx, history),
-  },
-  {
-    id: 'RAPID_SUCCESSION',
-    description: `≥ ${THRESHOLDS.RAPID_TX_COUNT} transactions within ${THRESHOLDS.RAPID_TX_WINDOW_MS / HOUR_MS}h`,
-    severity: 'MEDIUM',
-    check: (tx, history) => isRapidSuccession(tx, history),
-  },
-];
