@@ -4,6 +4,8 @@ import { fileURLToPath } from 'url';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 import { incrementCounter } from '../monitoring/metrics.js';
+import { KeyedLock } from './keyedLock.js';
+import eventStore from './eventStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PROJECTIONS_DIR = path.join(__dirname, '../../data/projections');
@@ -23,6 +25,11 @@ export const MAX_PROJECTION_ATTEMPTS = 3;
 class ProjectionManager {
   constructor() {
     this.projections = new Map();
+    this.locks = new KeyedLock();
+  }
+
+  async initialize() {
+    await fs.mkdir(PROJECTIONS_DIR, { recursive: true });
     this.writeQueues = new Map();
   }
 
@@ -30,12 +37,49 @@ class ProjectionManager {
     this.projections.set(name, handler);
   }
 
+  hasProjection(name) {
+    return this.projections.has(name);
+  }
+
+  getProjectionNames() {
+    return [...this.projections.keys()];
+  }
+
+  /**
+   * Fold `events` into the stored projection. Load→fold→save is serialized per
+   * projection within this process so concurrent publishes cannot lose updates.
+   */
   async project(name, events) {
+  getHandler(name) {
     const handler = this.projections.get(name);
     if (!handler) {
       throw new Error(`Projection handler not found: ${name}`);
     }
+    return handler;
+  }
 
+    const previous = this.writeQueues.get(name) ?? Promise.resolve();
+    const run = previous.catch(() => {}).then(async () => {
+      let projection = (await this.loadProjection(name)) || {};
+
+      for (const event of events) {
+        projection = handler(projection, event);
+      }
+
+      await this.saveProjection(name, projection);
+      return projection;
+    });
+
+    this.writeQueues.set(name, run);
+    return run;
+  /**
+   * Folds events into a projection. Each projection records, per aggregate,
+   * the last version (and event id) it applied, and events at or below that
+   * version are skipped, so re-projecting or replaying events is a no-op
+   * instead of applying them twice.
+   */
+  applyEvents(handler, projection, events) {
+    const applied = projection._applied ?? {};
     let projection = (await this.loadProjection(name)) || {};
 
     for (const event of events) {
@@ -48,9 +92,19 @@ class ProjectionManager {
       // Poison pill: quarantine it and keep processing the healthy events
       // behind it instead of freezing the whole projection.
       await this.quarantine(name, event, result.error, result.retryCount);
+      const last = applied[event.aggregateId];
+      // Streams written before versions were store-assigned can repeat a
+      // version, so an equal version only counts as seen if it is the same event.
+      if (last && (event.version < last.version ||
+          (event.version === last.version && event.id === last.eventId))) {
+        continue;
+      }
+
+      projection = handler(projection, event);
+      applied[event.aggregateId] = { version: event.version, eventId: event.id };
     }
 
-    await this.saveProjection(name, projection);
+    projection._applied = applied;
     return projection;
   }
 
@@ -176,13 +230,34 @@ class ProjectionManager {
     const newPromise = queuePromise.then(async () => {
       const file = path.join(PROJECTIONS_DIR, `${name}.json`);
       const tmpFile = `${file}.tmp`;
+  async project(name, events) {
+    const handler = this.getHandler(name);
 
-      await fs.writeFile(tmpFile, JSON.stringify(data, null, 2));
-      await fs.rename(tmpFile, file);
+    // Serialize load-apply-save per projection so concurrent publishes for
+    // different aggregates don't overwrite each other's updates.
+    return this.locks.run(name, async () => {
+      const projection = this.applyEvents(handler, await this.loadProjection(name) || {}, events);
+      await this.saveProjection(name, projection);
+      return projection;
     });
+  }
 
-    this.writeQueues.set(name, newPromise);
-    await newPromise;
+  /**
+   * Discards a projection's state and rebuilds it by folding every stored
+   * event, in order, into an empty projection.
+   */
+  async rebuildFromGenesis(name) {
+    const handler = this.getHandler(name);
+
+    return this.locks.run(name, async () => {
+      const events = await eventStore.readAllEvents();
+      const projection = this.applyEvents(handler, {}, events);
+      await this.saveProjection(name, projection);
+      return projection;
+    });
+  }
+
+  async saveProjection(name, data) {
     await prisma.eventProjection.upsert({
       where: { name },
       update: { data, updatedAt: new Date() },
@@ -242,7 +317,10 @@ projectionManager.registerProjection('payment-history', (projection, event) => {
       aggregateId: event.aggregateId,
       destination: event.data.destination,
       amount: event.data.amount,
+      asset: event.data.asset,
       hash: event.data.hash,
+      feeBump: event.data.feeBump,
+      memoType: event.data.memoType,
       timestamp: event.timestamp,
     });
   }
