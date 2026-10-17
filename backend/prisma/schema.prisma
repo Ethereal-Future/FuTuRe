@@ -36,6 +36,7 @@ model User {
   sessions               Session[]
   mfaSettings            MFASettings?
   recoveryCodes          RecoveryCode[]
+  recoveryRequests       RecoveryRequest[]
 
   @@index([deletedAt])
   @@index([amlStatus])
@@ -329,6 +330,12 @@ model Session {
   device       String?
   ipAddress    String?
   userAgent    String?
+  // Mobile device binding (issue #1381). Null for web sessions; when set,
+  // every request on this session must present a matching X-Device-Id.
+  deviceId     String?
+  deviceModel  String?
+  osVersion    String?
+  appVersion   String?
   lastActiveAt DateTime  @default(now())
   createdAt    DateTime  @default(now())
   expiresAt    DateTime
@@ -336,6 +343,7 @@ model Session {
 
   @@index([userId])
   @@index([userId, revokedAt])
+  @@index([deviceId])
 }
 
 // Immutable audit trail for all admin actions (no UPDATE/DELETE should be issued against this table)
@@ -759,7 +767,17 @@ model DeviceRegistry {
   deviceId     String   @unique
   fingerprint  String
   certHash     String?
+  // Server-derived only: set by a failed hardware attestation or a client
+  // self-report, and cleared solely by a successful server-verified
+  // attestation. Never accepted from the client as "clean" (issue #1382).
   isJailbroken Boolean  @default(false)
+  // Server-verified hardware attestation state (issue #1382).
+  attestationPlatform String? // "android" (Play Integrity) | "ios" (App Attest)
+  attestationVerdict  String? // e.g. "MEETS_STRONG_INTEGRITY", "APP_ATTEST_VERIFIED"
+  attestedAt          DateTime?
+  appAttestKeyId      String?   @unique
+  appAttestPublicKey  String?
+  appAttestCounter    BigInt    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -932,17 +950,6 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
-model Session {
-  id           String    @id @default(uuid())
-  userId       String
-  createdAt    DateTime  @default(now())
-  lastActiveAt DateTime  @default(now())
-  expiresAt    DateTime
-  revokedAt    DateTime?
-
-  @@index([userId])
-}
-
 // Durable storage for mobile clients' offline transaction queues. Items are
 // persisted so they survive container restarts / redeploys and can be flushed
 // from any cluster instance. See issue #1376.
@@ -982,4 +989,57 @@ model ProjectionPoisonPill {
 
   @@unique([projectionName, eventId])
   @@index([status])
+}
+
+// Account recovery lifecycle (issue #1387). Previously held in process
+// memory, which lost in-flight recoveries on restart and could not be shared
+// across API nodes. At most one active (pending/approved/completing) request
+// per user is enforced by a partial unique index in the migration.
+enum RecoveryStatus {
+  pending
+  approved
+  completing
+  completed
+  cancelled
+  expired
+  locked
+}
+
+model RecoveryRequest {
+  id             String             @id @default(uuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method         String             // phrase | social
+  status         RecoveryStatus     @default(pending)
+  attempts       Int                @default(0)
+  ipAddress      String?
+  // Client-generated Stellar key that replaces the lost key on completion (#1389)
+  newPublicKey   String?
+  oldPublicKey   String?
+  rotationTxHash String?
+  initiatedAt    DateTime           @default(now())
+  executeAfter   DateTime
+  expiresAt      DateTime
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  updatedAt      DateTime           @updatedAt
+  approvals      RecoveryApproval[]
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+// One row per guardian contact invited to approve a social recovery (#1388).
+// Only the SHA-256 hash of the out-of-band approval token is stored.
+model RecoveryApproval {
+  id         String          @id @default(uuid())
+  requestId  String
+  request    RecoveryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  contactId  String
+  tokenHash  String
+  approvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@unique([requestId, contactId])
+  @@index([requestId])
 }

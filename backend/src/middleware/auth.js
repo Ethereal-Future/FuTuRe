@@ -31,6 +31,10 @@ export async function requireAuth(req, res, next) {
       if (!session) {
         return unauthorized(res, 'Session expired or revoked', 'SESSION_REVOKED');
       }
+      // Mobile sessions are bound to the device they were issued to (#1381).
+      if (session.deviceId && session.deviceId !== req.headers['x-device-id']) {
+        return unauthorized(res, 'Session is not bound to this device', 'SESSION_DEVICE_MISMATCH');
+      }
     }
   } catch {
     return res.status(503).json({ error: 'Unable to verify session', code: 'SESSION_CHECK_FAILED' });

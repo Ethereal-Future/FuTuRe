@@ -1,7 +1,9 @@
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
+import mobileSessions from './sessions.js';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'mobile-secret';
+const TOKEN_TTL_SECONDS = 604800; // 7 days
 
 class MobileAuth {
   constructor() {
@@ -21,13 +23,13 @@ class MobileAuth {
     return { set: true };
   }
 
-  /** Verify PIN and return a JWT */
-  verifyPin(userId, deviceId, pin) {
+  /** Verify PIN and return a device-bound session JWT */
+  async verifyPin(userId, deviceId, pin, device = {}) {
     const entry = this.pins.get(userId);
     if (!entry) throw new Error('PIN not set for user');
     const hash = crypto.pbkdf2Sync(pin, entry.salt, 100_000, 32, 'sha256').toString('hex');
     if (hash !== entry.pinHash) throw new Error('Invalid PIN');
-    return this._issueToken(userId, deviceId);
+    return this.issueSessionToken(userId, deviceId, device);
   }
 
   /** Register a biometric public key (ECDSA P-256) for a user/device */
@@ -53,8 +55,8 @@ class MobileAuth {
     return { challengeId, challenge };
   }
 
-  /** Verify the signed challenge and return a JWT */
-  verifyBiometric(challengeId, signatureBase64) {
+  /** Verify the signed challenge and return a device-bound session JWT */
+  async verifyBiometric(challengeId, signatureBase64, device = {}) {
     const entry = this.challenges.get(challengeId);
     if (!entry || Date.now() > entry.expiresAt) {
       throw new Error('Challenge expired or not found');
@@ -69,12 +71,26 @@ class MobileAuth {
     const valid = verify.verify(keyEntry.publicKey, signatureBase64, 'base64');
     if (!valid) throw new Error('Biometric verification failed');
 
-    return this._issueToken(entry.userId, entry.deviceId);
+    return this.issueSessionToken(entry.userId, entry.deviceId, device);
   }
 
-  _issueToken(userId, deviceId) {
-    const token = jwt.sign({ userId, deviceId, type: 'mobile' }, JWT_SECRET, { expiresIn: '7d' });
-    return { token, expiresIn: 604800 };
+  /**
+   * Create a device-bound session row (issue #1381) and sign a JWT that
+   * references it via `sid`. The token is only honoured when presented
+   * together with a matching `X-Device-Id` while the session is active.
+   */
+  async issueSessionToken(userId, deviceId, device = {}, extraClaims = {}) {
+    if (!deviceId) throw new Error('deviceId is required to issue a mobile token');
+    const sessionId = await mobileSessions.create(userId, deviceId, {
+      ...device,
+      ttlMs: TOKEN_TTL_SECONDS * 1000,
+    });
+    const token = jwt.sign(
+      { type: 'mobile', ...extraClaims, userId, deviceId, sid: sessionId },
+      JWT_SECRET,
+      { expiresIn: TOKEN_TTL_SECONDS },
+    );
+    return { token, expiresIn: TOKEN_TTL_SECONDS, sessionId };
   }
 
   verifyToken(token) {
