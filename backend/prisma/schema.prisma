@@ -34,6 +34,7 @@ model User {
   contacts               Contact[]
   role                   UserRole                @default(USER)
   sessions               Session[]
+  userDevices            UserDevice[]
   mfaSettings            MFASettings?
   recoveryCodes          RecoveryCode[]
   recoveryRequests       RecoveryRequest[]
@@ -344,6 +345,23 @@ model Session {
   @@index([userId])
   @@index([userId, revokedAt])
   @@index([deviceId])
+}
+
+// Push notification device tokens (FCM / APNS). Rows whose token the push
+// provider reports as expired or unregistered are pruned after each
+// broadcast (issue #1384).
+model UserDevice {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String
+  token     String   @unique
+  platform  String   // "ios" (APNS) | "android" (FCM)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, deviceId])
 }
 
 // Immutable audit trail for all admin actions (no UPDATE/DELETE should be issued against this table)

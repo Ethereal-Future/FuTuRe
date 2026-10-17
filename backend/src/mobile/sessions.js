@@ -9,13 +9,13 @@
  */
 import {
   createSession,
-  getActiveSession,
   getActiveSessionForDevice,
   listUserSessions,
   revokeSession,
   revokeAllSessions,
   SessionDeviceMismatchError,
 } from '../auth/sessionStore.js';
+import { getMobileSession } from './redisStore.js';
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -57,8 +57,9 @@ class MobileSessions {
     return session.id;
   }
 
+  /** Redis read-through with a PostgreSQL fallback, so a Redis outage never logs users out (#1385). */
   async get(sessionId) {
-    const session = await getActiveSession(sessionId);
+    const session = await getMobileSession(sessionId);
     return session ? toMobileSession(session) : null;
   }
 
