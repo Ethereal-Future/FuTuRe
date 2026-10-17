@@ -1,95 +1,101 @@
-import crypto from 'crypto';
-import { redisGet, redisSet, redisDelete, redisSetAdd, redisSetRemove, redisSetMembers } from './redisStore.js';
+/**
+ * Mobile sessions, persisted in the unified Prisma `Session` table alongside
+ * web sessions (issue #1381). This replaces the previous Redis-only store
+ * (issue #1124), which a web "log out everywhere" could not see — mobile
+ * tokens kept working after a global logout.
+ *
+ * Every mobile session is bound to the `deviceId` it was issued to;
+ * `validate()` rejects any request whose `X-Device-Id` doesn't match.
+ */
+import {
+  createSession,
+  getActiveSession,
+  getActiveSessionForDevice,
+  listUserSessions,
+  revokeSession,
+  revokeAllSessions,
+  SessionDeviceMismatchError,
+} from '../auth/sessionStore.js';
 
-// Sessions live in Redis (`mobile:session:{sessionId}`) with a 30-day TTL,
-// plus a secondary per-user index set (`mobile:user_sessions:{userId}`) so
-// listForUser/revokeAll don't require a Redis SCAN (issue #1124). This
-// replaces the previous in-process Map, which only worked correctly for a
-// single server instance.
-const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
-const SESSION_TTL_SECONDS = Math.floor(SESSION_TTL_MS / 1000);
+export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-function sessionKey(sessionId) {
-  return `mobile:session:${sessionId}`;
-}
-
-function userSessionsKey(userId) {
-  return `mobile:user_sessions:${userId}`;
+function toMobileSession(session) {
+  return {
+    sessionId: session.id,
+    userId: session.userId,
+    deviceId: session.deviceId,
+    metadata: {
+      deviceModel: session.deviceModel ?? null,
+      osVersion: session.osVersion ?? null,
+      appVersion: session.appVersion ?? null,
+    },
+    createdAt: new Date(session.createdAt).getTime(),
+    lastActiveAt: new Date(session.lastActiveAt).getTime(),
+    expiresAt: new Date(session.expiresAt).getTime(),
+  };
 }
 
 class MobileSessions {
+  /**
+   * @param {string} userId
+   * @param {string} deviceId - Required: the device this session is bound to.
+   * @param {{ deviceModel?: string, osVersion?: string, appVersion?: string,
+   *           userAgent?: string, ipAddress?: string, ttlMs?: number }} [metadata]
+   * @returns {Promise<string>} The new session id.
+   */
   async create(userId, deviceId, metadata = {}) {
-    const sessionId = crypto.randomUUID();
-    const session = {
-      sessionId,
-      userId,
+    if (!deviceId) throw new Error('deviceId is required to create a mobile session');
+    const session = await createSession(userId, {
       deviceId,
-      metadata,
-      createdAt: Date.now(),
-      lastActiveAt: Date.now(),
-      expiresAt: Date.now() + SESSION_TTL_MS,
-    };
-    await redisSet(sessionKey(sessionId), session, SESSION_TTL_SECONDS);
-    await redisSetAdd(userSessionsKey(userId), sessionId);
-    return sessionId;
+      deviceModel: metadata?.deviceModel,
+      osVersion: metadata?.osVersion,
+      appVersion: metadata?.appVersion,
+      userAgent: metadata?.userAgent,
+      ipAddress: metadata?.ipAddress,
+      ttlMs: metadata?.ttlMs ?? SESSION_TTL_MS,
+    });
+    return session.id;
   }
 
   async get(sessionId) {
-    const session = await redisGet(sessionKey(sessionId));
-    if (!session) return null;
-    if (Date.now() > session.expiresAt) {
-      await this.revoke(sessionId, session.userId);
-      return null;
-    }
-    session.lastActiveAt = Date.now();
-    // Persist the refreshed lastActiveAt using the session's *remaining*
-    // TTL, so reading a session doesn't reset its 30-day expiry window.
-    const remainingSeconds = Math.max(1, Math.ceil((session.expiresAt - Date.now()) / 1000));
-    await redisSet(sessionKey(sessionId), session, remainingSeconds);
-    return session;
+    const session = await getActiveSession(sessionId);
+    return session ? toMobileSession(session) : null;
   }
 
   /**
-   * Revoke a single session.
-   * @param {string} sessionId
-   * @param {string} [userId] - Pass when already known, to avoid an extra Redis read to find it for index cleanup.
+   * Resolve an active session and enforce its device binding.
+   * @returns {Promise<object|null>} null when the session is missing, expired or revoked.
+   * @throws {SessionDeviceMismatchError} When `deviceId` doesn't match the bound device,
+   *   or the session isn't a device-bound (mobile) session at all.
    */
-  async revoke(sessionId, userId) {
-    let uid = userId;
-    if (!uid) {
-      const session = await redisGet(sessionKey(sessionId));
-      uid = session?.userId;
+  async validate(sessionId, deviceId) {
+    if (!deviceId) throw new SessionDeviceMismatchError('X-Device-Id header is required');
+    const session = await getActiveSessionForDevice(sessionId, deviceId);
+    if (!session) return null;
+    if (!session.deviceId) {
+      throw new SessionDeviceMismatchError('Session is not a device-bound mobile session');
     }
-    await redisDelete(sessionKey(sessionId));
-    if (uid) await redisSetRemove(userSessionsKey(uid), sessionId);
-    return true;
+    return toMobileSession(session);
   }
 
+  /**
+   * Revoke a single session. Pass `userId` to scope the revocation to the
+   * caller's own sessions.
+   */
+  async revoke(sessionId, userId) {
+    return revokeSession(sessionId, userId);
+  }
+
+  /** Global logout — revokes the user's web and mobile sessions together. */
   async revokeAll(userId) {
-    const sessionIds = await redisSetMembers(userSessionsKey(userId));
-    let count = 0;
-    for (const sessionId of sessionIds) {
-      await redisDelete(sessionKey(sessionId));
-      await redisSetRemove(userSessionsKey(userId), sessionId);
-      count++;
-    }
-    return count;
+    return revokeAllSessions(userId);
   }
 
   async listForUser(userId) {
-    const sessionIds = await redisSetMembers(userSessionsKey(userId));
-    const sessions = [];
-    for (const sessionId of sessionIds) {
-      const session = await redisGet(sessionKey(sessionId));
-      if (session && Date.now() <= session.expiresAt) {
-        sessions.push(session);
-      } else {
-        // Session already expired (or TTL'd out of Redis) — drop the stale
-        // index entry so future listForUser/revokeAll calls stay accurate.
-        await redisSetRemove(userSessionsKey(userId), sessionId);
-      }
-    }
-    return sessions;
+    const sessions = await listUserSessions(userId);
+    return sessions
+      .filter((s) => s.deviceId)
+      .map((s) => toMobileSession({ ...s, userId }));
   }
 }
 
