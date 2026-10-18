@@ -71,8 +71,7 @@ export async function cleanupStaleNotifications({ now = new Date() } = {}) {
  * @param {string} [params.locale] - Override locale; if omitted, read from user preferences
  * @returns {Promise<object>} Results per channel
  */
-export async function sendNotification({ userId, type, data = {}, email, phone, phoneRegion, publicKey, actionUrl, actionRetryParams, channels = CHANNELS }) {
-export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
+export async function sendNotification({ userId, type, data = {}, email, phone, phoneRegion, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
   const results = {};
 
   // Resolve locale: caller may supply it explicitly (e.g. from a webhook
