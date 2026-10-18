@@ -6,7 +6,7 @@ Node.js + Express API for the Stellar Remittance Platform. Runs on port `3001` b
 
 - Node.js 20+
 - PostgreSQL
-- Redis (optional, for caching)
+- Redis (optional for local dev, recommended for production — enables distributed cache)
 
 ## Local Development
 
@@ -72,6 +72,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      redis:
+        condition: service_started
 
   db:
     image: postgres:16-alpine
@@ -84,4 +86,49 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
 ```
+
+## Production Deployment
+
+### Multi-Instance (ECS) Requirements
+
+When deploying multiple backend instances (ECS tasks), Redis is **required** for distributed cache coherence:
+
+- **IP Whitelist**: Shared across instances via Redis Pub/Sub
+- **AMM Pool Reserves**: Synchronized via Redis Pub/Sub + optimistic locking
+- **Rate Limiting**: Shared counters (when using Redis backend)
+
+**Configuration:**
+```bash
+REDIS_HOST=your-elasticache.amazonaws.com
+REDIS_PORT=6379
+REDIS_AUTH_TOKEN=<from-secrets-manager>
+REDIS_TLS=true
+```
+
+**Without Redis:** Each instance maintains local-only cache, which may lead to:
+- Stale IP whitelist entries (security risk)
+- Inconsistent rate limiting across instances
+- AMM pool reserve race conditions
+
+See [`docs/operations/DISTRIBUTED_CACHE.md`](../docs/operations/DISTRIBUTED_CACHE.md) for detailed operational procedures.
+
+## Key Features
+
+- **Distributed Caching**: Two-tier (L1 in-memory + L2 Redis) with Pub/Sub invalidation
+- **Security**: IP whitelisting, rate limiting, JWT auth, MFA support
+- **Stellar Integration**: Payment streaming, fee-bump, multisig custody
+- **Compliance**: Sanctions screening (OFAC), AML monitoring, audit logging
+- **Observability**: Structured logging, distributed tracing (OTLP), Prometheus metrics
+
+## Documentation
+
+- [Configuration Guide](./CONFIGURATION.md) — All environment variables
+- [Distributed Cache Operations](../docs/operations/DISTRIBUTED_CACHE.md) — Cache troubleshooting & monitoring
+- [ADR-0003: Caching Strategy](../docs/adr/0003-caching-strategy.md) — Architecture decisions
