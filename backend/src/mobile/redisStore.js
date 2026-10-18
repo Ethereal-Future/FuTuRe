@@ -63,6 +63,25 @@ export async function redisDelete(key) {
   memoryValues.delete(key);
 }
 
+/**
+ * Atomically read and delete `key` (Redis GETDEL), so two concurrent readers
+ * can never both observe the same value. Used for single-use secrets such as
+ * WebAuthn challenges and attestation nonces (issues #1379, #1382).
+ *
+ * Unlike get/set this does NOT fail open: a Redis error is rethrown so a
+ * caller can never mistake "Redis unavailable" for a successful consume.
+ */
+export async function redisGetDelete(key) {
+  if (isRedisAvailable()) {
+    const raw = await redisBackend.client.getdel(key);
+    return raw ? JSON.parse(raw) : null;
+  }
+  // Single-threaded event loop: read + delete with no await in between is atomic.
+  const value = memoryGet(key);
+  memoryValues.delete(key);
+  return value;
+}
+
 // ── Public set API (used for the per-user session index) ───────────────────
 
 export async function redisSetAdd(setKey, member) {

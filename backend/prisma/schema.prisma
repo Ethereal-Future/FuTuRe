@@ -329,6 +329,12 @@ model Session {
   device       String?
   ipAddress    String?
   userAgent    String?
+  // Mobile device binding (issue #1381). Null for web sessions; when set,
+  // every request on this session must present a matching X-Device-Id.
+  deviceId     String?
+  deviceModel  String?
+  osVersion    String?
+  appVersion   String?
   lastActiveAt DateTime  @default(now())
   createdAt    DateTime  @default(now())
   expiresAt    DateTime
@@ -336,6 +342,7 @@ model Session {
 
   @@index([userId])
   @@index([userId, revokedAt])
+  @@index([deviceId])
 }
 
 // Immutable audit trail for all admin actions (no UPDATE/DELETE should be issued against this table)
@@ -759,7 +766,17 @@ model DeviceRegistry {
   deviceId     String   @unique
   fingerprint  String
   certHash     String?
+  // Server-derived only: set by a failed hardware attestation or a client
+  // self-report, and cleared solely by a successful server-verified
+  // attestation. Never accepted from the client as "clean" (issue #1382).
   isJailbroken Boolean  @default(false)
+  // Server-verified hardware attestation state (issue #1382).
+  attestationPlatform String? // "android" (Play Integrity) | "ios" (App Attest)
+  attestationVerdict  String? // e.g. "MEETS_STRONG_INTEGRITY", "APP_ATTEST_VERIFIED"
+  attestedAt          DateTime?
+  appAttestKeyId      String?   @unique
+  appAttestPublicKey  String?
+  appAttestCounter    BigInt    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -930,17 +947,6 @@ model RefreshToken {
   @@index([familyId])
   @@index([userId])
   @@index([expiresAt])
-}
-
-model Session {
-  id           String    @id @default(uuid())
-  userId       String
-  createdAt    DateTime  @default(now())
-  lastActiveAt DateTime  @default(now())
-  expiresAt    DateTime
-  revokedAt    DateTime?
-
-  @@index([userId])
 }
 
 // Durable storage for mobile clients' offline transaction queues. Items are
