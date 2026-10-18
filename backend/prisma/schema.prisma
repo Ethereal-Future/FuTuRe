@@ -36,6 +36,7 @@ model User {
   sessions               Session[]
   mfaSettings            MFASettings?
   recoveryCodes          RecoveryCode[]
+  recoveryRequests       RecoveryRequest[]
 
   @@index([deletedAt])
   @@index([amlStatus])
@@ -988,4 +989,57 @@ model ProjectionPoisonPill {
 
   @@unique([projectionName, eventId])
   @@index([status])
+}
+
+// Account recovery lifecycle (issue #1387). Previously held in process
+// memory, which lost in-flight recoveries on restart and could not be shared
+// across API nodes. At most one active (pending/approved/completing) request
+// per user is enforced by a partial unique index in the migration.
+enum RecoveryStatus {
+  pending
+  approved
+  completing
+  completed
+  cancelled
+  expired
+  locked
+}
+
+model RecoveryRequest {
+  id             String             @id @default(uuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method         String             // phrase | social
+  status         RecoveryStatus     @default(pending)
+  attempts       Int                @default(0)
+  ipAddress      String?
+  // Client-generated Stellar key that replaces the lost key on completion (#1389)
+  newPublicKey   String?
+  oldPublicKey   String?
+  rotationTxHash String?
+  initiatedAt    DateTime           @default(now())
+  executeAfter   DateTime
+  expiresAt      DateTime
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  updatedAt      DateTime           @updatedAt
+  approvals      RecoveryApproval[]
+
+  @@index([userId, status])
+  @@index([expiresAt])
+}
+
+// One row per guardian contact invited to approve a social recovery (#1388).
+// Only the SHA-256 hash of the out-of-band approval token is stored.
+model RecoveryApproval {
+  id         String          @id @default(uuid())
+  requestId  String
+  request    RecoveryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  contactId  String
+  tokenHash  String
+  approvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@unique([requestId, contactId])
+  @@index([requestId])
 }
