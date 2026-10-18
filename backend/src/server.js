@@ -55,7 +55,7 @@ import adminRoutes from './routes/admin.js';
 import assetIntegrityRoutes from './routes/assetIntegrity.js';
 import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
-import { initializeCache as initIPWhitelistCache } from './security/ipWhitelist.js';
+import { initializeCache as initIPWhitelistCache, closeRedisConnections as closeIPWhitelistRedis } from './security/ipWhitelist.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { performanceMiddleware } from './monitoring/middleware.js';
@@ -314,6 +314,7 @@ async function shutdown(signal) {
     // 3. Stop background workers
     stopScheduler();
     await closeAMMState();
+    await closeIPWhitelistRedis();
     // 4. Close DB connection
     await disconnectDB();
     logger.info('server.shutdown.complete');
