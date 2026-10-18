@@ -331,7 +331,7 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
 
     const txBuilder = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     });
 
     // Prepend changeTrust if the account lacks a trustline for this pool's share asset.
@@ -339,15 +339,6 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
       txBuilder.addOperation(
         StellarSdk.Operation.changeTrust({
           asset: new StellarSdk.LiquidityPoolAsset(poolId),
-      networkPassphrase: getNetworkPassphrase(),
-    })
-      .addOperation(
-        StellarSdk.Operation.liquidityPoolDeposit({
-          liquidityPoolId: poolId,
-          maxAmountA: amountA.toString(),
-          maxAmountB: amountB.toString(),
-          minPrice,
-          maxPrice,
         })
       );
     }
@@ -357,8 +348,8 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
         liquidityPoolId: poolId,
         maxAmountA: amountA.toString(),
         maxAmountB: amountB.toString(),
-        minPrice: '0.1', // Placeholder
-        maxPrice: '10', // Placeholder
+        minPrice,
+        maxPrice,
       })
     );
 

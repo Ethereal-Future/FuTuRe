@@ -1,5 +1,5 @@
 /**
- * #1124 — Redis-backed WebAuthn challenges and mobile session store.
+ * #1124 / #1379 — Redis-backed, session-bound, single-use WebAuthn challenges.
  *
  * Simulates two distinct server instances (e.g. two ECS tasks behind a load
  * balancer) that each hold their own module state but share the same Redis
@@ -48,6 +48,13 @@ const FakeRedis = vi.hoisted(() => {
     }
     async del(key) {
       return store.delete(key) ? 1 : 0;
+    }
+    async getdel(key) {
+      // No await between read and delete — atomic, like the real command.
+      const entry = store.get(key);
+      store.delete(key);
+      if (!entry || (entry.expiresAt && Date.now() > entry.expiresAt)) return null;
+      return entry.value;
     }
     async sadd(key, member) {
       if (!sets.has(key)) sets.set(key, new Set());
@@ -149,59 +156,28 @@ describe('#1124 - Redis-backed mobile auth (multi-instance)', () => {
     ).rejects.toThrow('Registration challenge expired or not found');
   });
 
-  it('shares a mobile session across two instances, including listing and revocation', async () => {
-    const instanceA = await import('../../src/mobile/sessions.js');
-    const sessionId = await instanceA.default.create('user-sess-1', 'device-1', { app: 'ios' });
-    expect(sessionId).toBeDefined();
 
-    // Instance B (fresh module registry) reads the session instance A wrote.
+  it('consumes a challenge atomically so two instances cannot both redeem it', async () => {
+    const credStore = new Map();
+
+    mockPrisma(credStore);
+    const instanceA = await import('../../src/mobile/webAuthn.js');
+    const options = await instanceA.generateRegistrationOptions('user-multi-3', 'multiuser3');
+
     vi.resetModules();
-    const instanceB = await import('../../src/mobile/sessions.js');
+    mockPrisma(credStore);
+    const instanceB = await import('../../src/mobile/webAuthn.js');
 
-    const session = await instanceB.default.get(sessionId);
-    expect(session).not.toBeNull();
-    expect(session.userId).toBe('user-sess-1');
-    expect(session.deviceId).toBe('device-1');
+    const results = await Promise.allSettled([
+      instanceA.verifyAndStoreRegistration(options.sessionId, { id: 'cred-race-a', publicKey: 'MFkwEw==' }),
+      instanceB.verifyAndStoreRegistration(options.sessionId, { id: 'cred-race-b', publicKey: 'MFkwEw==' }),
+    ]);
 
-    const listed = await instanceB.default.listForUser('user-sess-1');
-    expect(listed.map((s) => s.sessionId)).toContain(sessionId);
-
-    const revokedCount = await instanceB.default.revokeAll('user-sess-1');
-    expect(revokedCount).toBeGreaterThanOrEqual(1);
-
-    // A third instance must see the revocation too.
-    vi.resetModules();
-    const instanceC = await import('../../src/mobile/sessions.js');
-    expect(await instanceC.default.get(sessionId)).toBeNull();
-    expect(await instanceC.default.listForUser('user-sess-1')).toEqual([]);
+    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
   });
 
-  it('persists a session across a simulated process restart', async () => {
-    const instanceA = await import('../../src/mobile/sessions.js');
-    const sessionId = await instanceA.default.create('user-restart', 'device-9');
-
-    // Simulate the process restarting entirely — a fresh module registry,
-    // same (mocked) Redis server.
-    vi.resetModules();
-    const restarted = await import('../../src/mobile/sessions.js');
-    const session = await restarted.default.get(sessionId);
-
-    expect(session).not.toBeNull();
-    expect(session.deviceId).toBe('device-9');
-  });
-
-  it('revoking a single session on one instance is visible on another', async () => {
-    const instanceA = await import('../../src/mobile/sessions.js');
-    const keep = await instanceA.default.create('user-partial-revoke', 'device-keep');
-    const drop = await instanceA.default.create('user-partial-revoke', 'device-drop');
-
-    vi.resetModules();
-    const instanceB = await import('../../src/mobile/sessions.js');
-    await instanceB.default.revoke(drop);
-
-    vi.resetModules();
-    const instanceC = await import('../../src/mobile/sessions.js');
-    const remaining = await instanceC.default.listForUser('user-partial-revoke');
-    expect(remaining.map((s) => s.sessionId)).toEqual([keep]);
-  });
+  // Mobile sessions moved from Redis into the unified Prisma `Session` table
+  // (issue #1381); their cross-instance behaviour is covered by
+  // src/mobile/sessions.test.js.
 });

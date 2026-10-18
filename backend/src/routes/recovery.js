@@ -9,8 +9,10 @@ import {
   getRequest, getUserRequests, setupRecoveryPhrase, verifyRecoveryPhrase,
   markPhraseUsed, hasRecoveryPhrase, stageNewCredentials,
   consumePendingCredentials, logRecoveryInitiated, logRecoveryAttempt,
-  logRecoveryCompleted, logRecoveryCancelled, logRecoveryLocked,
+  logRecoveryCompleted, logRecoveryCancelled, logRecoveryLocked, RecoveryAuthError,
 } from '../recovery/index.js';
+
+const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
 
 const router = express.Router();
 
@@ -276,6 +278,9 @@ router.delete('/contacts/:contactId', requireAuth,
  *             properties:
  *               userId: { type: string }
  *               method: { type: string, enum: [phrase, social] }
+ *               newPublicKey:
+ *                 type: string
+ *                 description: Client-generated Stellar public key that replaces the lost key on completion
  *     responses:
  *       201:
  *         description: Recovery initiated with 24h time-lock
@@ -288,13 +293,14 @@ router.post(
   '/initiate',
   body('userId').notEmpty(),
   body('method').isIn(['phrase', 'social']),
+  body('newPublicKey').optional().trim().matches(STELLAR_PUBLIC_KEY),
   validate,
   async (req, res) => {
     try {
-      const { userId, method } = req.body;
-      if (!getUserById(userId)) return res.status(404).json({ error: 'User not found' });
+      const { userId, method, newPublicKey } = req.body;
+      if (!(await getUserById(userId))) return res.status(404).json({ error: 'User not found' });
 
-      const request = initiateRecovery(userId, method, ip(req));
+      const request = await initiateRecovery(userId, method, ip(req), { newPublicKey });
       await logRecoveryInitiated(userId, request.id, method, ip(req));
 
       res.status(201).json({
@@ -347,13 +353,13 @@ router.post(
   validate,
   async (req, res) => {
     const { requestId } = req.params;
-    const request = getRequest(requestId);
+    const request = await getRequest(requestId);
     if (!request) return res.status(404).json({ error: 'Recovery request not found' });
     if (request.method !== 'phrase') return res.status(400).json({ error: 'Wrong recovery method' });
 
     const success = verifyRecoveryPhrase(request.userId, req.body.phrase);
     try {
-      const updated = recordAttempt(requestId, success);
+      const updated = await recordAttempt(requestId, success);
       await logRecoveryAttempt(request.userId, requestId, success, ip(req));
 
       if (!success) return res.status(401).json({ error: 'Invalid recovery phrase', attemptsLeft: 5 - updated.attempts });
@@ -371,9 +377,12 @@ router.post(
 
 /**
  * @swagger
- * /api/recovery/{requestId}/social-approve:
+ * /api/recovery/{requestId}/approve:
  *   post:
  *     summary: A recovery contact approves a social recovery request
+ *     description: >
+ *       The contact must present the out-of-band approval token emailed to them
+ *       when recovery was initiated. Also served at /{requestId}/social-approve.
  *     tags: [Recovery]
  *     security: []
  *     parameters:
@@ -387,35 +396,42 @@ router.post(
  *         application/json:
  *           schema:
  *             type: object
- *             required: [contactId]
+ *             required: [contactId, approvalToken]
  *             properties:
  *               contactId: { type: string, format: uuid }
+ *               approvalToken: { type: string, description: 64-char hex token }
  *     responses:
  *       200:
  *         description: Approval recorded
  *       400:
  *         description: Wrong method or invalid request
+ *       401:
+ *         description: Missing or invalid approval token
  *       404:
  *         description: Request not found
  */
 router.post(
-  '/:requestId/social-approve',
+  ['/:requestId/approve', '/:requestId/social-approve'],
   param('requestId').isUUID(),
   body('contactId').isUUID(),
   validate,
   async (req, res) => {
     try {
-      const request = getRequest(req.params.requestId);
+      const request = await getRequest(req.params.requestId);
       if (!request) return res.status(404).json({ error: 'Recovery request not found' });
       if (request.method !== 'social') return res.status(400).json({ error: 'Wrong recovery method' });
 
       const confirmedCount = getConfirmedContactCount(request.userId);
       const threshold = Math.ceil(confirmedCount / 2) || 1; // majority
 
-      const updated = addApproval(req.params.requestId, req.body.contactId);
+      let updated = await addApproval(
+        req.params.requestId,
+        req.body.contactId,
+        req.body.approvalToken,
+      );
 
       if (updated.approvals.length >= threshold) {
-        recordAttempt(req.params.requestId, true);
+        updated = await recordAttempt(req.params.requestId, true);
         await logRecoveryAttempt(request.userId, req.params.requestId, true, ip(req));
       }
 
@@ -425,6 +441,7 @@ router.post(
         status: updated.status,
       });
     } catch (err) {
+      if (err instanceof RecoveryAuthError) return res.status(401).json({ error: err.message });
       res.status(400).json({ error: err.message });
     }
   }
@@ -451,9 +468,12 @@ router.post(
  *             required: [newPassword]
  *             properties:
  *               newPassword: { type: string, minLength: 8 }
+ *               newPublicKey:
+ *                 type: string
+ *                 description: Must match the key supplied at initiation, if any
  *     responses:
  *       200:
- *         description: Recovery complete
+ *         description: Recovery complete; signers rotated on-chain and all sessions revoked
  *       400:
  *         description: Time-lock not elapsed or request invalid
  */
@@ -461,13 +481,20 @@ router.post(
   '/:requestId/complete',
   param('requestId').isUUID(),
   body('newPassword').isLength({ min: 8 }),
+  body('newPublicKey').optional().trim().matches(STELLAR_PUBLIC_KEY),
   validate,
   async (req, res) => {
     try {
-      const request = completeRecovery(req.params.requestId);
+      const request = await completeRecovery(req.params.requestId, {
+        newPublicKey: req.body.newPublicKey,
+      });
       await stageNewCredentials(request.userId, req.body.newPassword);
       await logRecoveryCompleted(request.userId, req.params.requestId, ip(req));
-      res.json({ message: 'Recovery complete. You may now log in with your new password.' });
+      res.json({
+        message: 'Recovery complete. You may now log in with your new password.',
+        publicKey: request.newPublicKey,
+        rotationTxHash: request.rotationTxHash,
+      });
     } catch (err) {
       res.status(400).json({ error: err.message });
     }
@@ -499,7 +526,7 @@ router.post('/:requestId/cancel', requireAuth,
   param('requestId').isUUID(), validate,
   async (req, res) => {
     try {
-      cancelRecovery(req.params.requestId, req.user.sub);
+      await cancelRecovery(req.params.requestId, req.user.sub);
       await logRecoveryCancelled(req.user.sub, req.params.requestId, ip(req));
       res.json({ message: 'Recovery cancelled' });
     } catch (err) {
@@ -522,9 +549,13 @@ router.post('/:requestId/cancel', requireAuth,
  *       401:
  *         description: Unauthorized
  */
-router.get('/status', requireAuth, (req, res) => {
-  const active = getActiveRequest(req.user.sub);
-  res.json({ active: active || null });
+router.get('/status', requireAuth, async (req, res) => {
+  try {
+    const active = await getActiveRequest(req.user.sub);
+    res.json({ active: active || null });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 /**
@@ -541,8 +572,12 @@ router.get('/status', requireAuth, (req, res) => {
  *       401:
  *         description: Unauthorized
  */
-router.get('/history', requireAuth, (req, res) => {
-  res.json({ requests: getUserRequests(req.user.sub) });
+router.get('/history', requireAuth, async (req, res) => {
+  try {
+    res.json({ requests: await getUserRequests(req.user.sub) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 export default router;

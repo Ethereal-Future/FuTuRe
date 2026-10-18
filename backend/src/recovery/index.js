@@ -1,8 +1,10 @@
-export { generateRecoveryPhrase, validatePhraseFormat } from './recoveryPhrase.js';
+export {
+  generateRecoveryPhrase, validatePhraseFormat, validateMnemonic, mnemonicToSeed, deriveStellarKeypair,
+} from './recoveryPhrase.js';
 export { addContact, confirmContact, removeContact, getContacts, getConfirmedContactCount } from './contactManager.js';
 export {
   initiateRecovery, recordAttempt, addApproval, completeRecovery,
-  cancelRecovery, getActiveRequest, getRequest, getUserRequests,
+  cancelRecovery, getActiveRequest, getRequest, getUserRequests, RecoveryAuthError,
 } from './recoveryWorkflow.js';
 export {
   setupRecoveryPhrase, verifyRecoveryPhrase, markPhraseUsed,

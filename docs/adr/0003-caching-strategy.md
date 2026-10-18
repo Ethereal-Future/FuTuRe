@@ -41,9 +41,88 @@ Cache invalidation is triggered explicitly after balance-changing operations (pa
 
 ### Negative Consequences
 
-* L1 cache can serve stale data if a write happens on a different instance before L2 propagates
+* L1 cache can serve stale data if a write happens on a different instance before pub/sub propagates (typically <20ms window)
 * Two cache layers add complexity to debugging cache misses
 * In-memory L1 is bounded by process heap — large cache payloads risk OOM
+* Requires Redis Pub/Sub for cross-instance coherence in production deployments
+
+## Implementation Patterns
+
+### Pattern 1: Read-Through Cache (General-purpose)
+
+Used for: Balance queries, exchange rates, fee stats
+
+```javascript
+// backend/src/cache/multi-level.js
+async get(key) {
+  // L1 hit
+  const l1Value = this.l1.get(key);
+  if (l1Value) return l1Value;
+  
+  // L2 hit
+  if (this.l2) {
+    const l2Value = await this.l2.get(key);
+    if (l2Value) {
+      this.l1.set(key, l2Value); // warm L1
+      return l2Value;
+    }
+  }
+  
+  return null; // cache miss
+}
+```
+
+### Pattern 2: Pub/Sub Invalidation (Distributed State)
+
+Used for: IP whitelist, AMM pool reserves
+
+```javascript
+// backend/src/security/ipWhitelist.js
+// Publisher side (writer instance)
+async addToWhitelist(ip, reason, adminId) {
+  const entry = await prisma.iPWhitelist.create({...}); // DB write
+  whitelistedIPsCache.set(ip, entry); // L1 update
+  await writeCachedEntry(entry); // L2 update
+  await publishCacheUpdate({ action: 'add', entry }); // Pub/sub
+}
+
+// Subscriber side (all instances)
+subscriber.on('message', (channel, message) => {
+  const update = JSON.parse(message);
+  if (update.action === 'add') {
+    whitelistedIPsCache.set(update.entry.ipAddress, update.entry); // L1 sync
+  }
+});
+```
+
+**Key properties:**
+- Database is source of truth
+- L1 update is immediate (local write)
+- L2 and pub/sub are async (fire-and-forget)
+- Failures in L2/pub/sub are logged but don't fail the operation
+- Sub-20ms propagation time for cross-instance updates
+
+### Pattern 3: Optimistic Locking (Concurrency Control)
+
+Used for: AMM pool reserves with version field
+
+```javascript
+// backend/src/services/amm.js
+const pool = await prisma.ammPool.findUnique({ where: { poolId } });
+
+// Attempt update with version check
+const updated = await prisma.ammPool.update({
+  where: { poolId, version: pool.version }, // optimistic lock
+  data: { reserveA: newReserveA, version: { increment: 1 } }
+});
+
+await publishPool(updated); // Notify other instances
+```
+
+**Stale cache resolution:**
+- Stale L1/L2 read → DB write fails due to version mismatch
+- Retry reads fresh data from DB → cache miss recovery
+- Pub/sub ensures next read hits updated L1 cache
 
 ## Pros and Cons of the Options
 
@@ -65,3 +144,14 @@ Cache invalidation is triggered explicitly after balance-changing operations (pa
 
 * Good, because simplest possible implementation
 * Bad, because unacceptable latency and Horizon rate-limit exposure under any meaningful load
+
+## Related Issues
+
+* [#1400](https://github.com/Ethereal-Future/FuTuRe/issues/1400) — IP whitelist distributed cache invalidation (resolved via Redis pub/sub pattern)
+* [#1290](https://github.com/Ethereal-Future/FuTuRe/issues/1290) — AMM pool reserve synchronization across ECS tasks (resolved via pub/sub + optimistic locking)
+
+## References
+
+* [Distributed Cache Operations Guide](../operations/DISTRIBUTED_CACHE.md)
+* [Backend Configuration: Redis Settings](../../backend/CONFIGURATION.md#caching--redis)
+* [ioredis Pub/Sub Documentation](https://github.com/redis/ioredis#pubsub)

@@ -1,7 +1,3 @@
-'use strict';
-
-const nodemailer = require('nodemailer');
-
 /**
  * Email notification channel.
  * Uses nodemailer in production; stubs in development/test.
@@ -107,56 +103,11 @@ export async function sendEmail(to, { subject, body, html }) {
     logger.error('email.transport.failed', { error: err.message });
     return { success: false, error: err.message };
   }
-let transporter = null;
 
-function getTransporter() {
-  if (transporter) {
-    return transporter;
-  }
-
-  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
-
-  if (!SMTP_HOST) {
-    return null;
-  }
-
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT ? Number(SMTP_PORT) : 587,
-    secure: Number(SMTP_PORT) === 465,
-    auth: SMTP_USER
-      ? {
-          user: SMTP_USER,
-          pass: SMTP_PASS,
-        }
-      : undefined,
-  });
-
-  return transporter;
-}
-
-/**
- * Send an email message.
- *
- * @param {Object} message
- * @param {string} message.to      Recipient address.
- * @param {string} message.subject Subject line.
- * @param {string} message.text    Plain-text body.
- * @param {string} [message.html]  Optional HTML body.
- * @returns {Promise<{sent: boolean, reason?: string}>}
- */
-async function sendEmail({ to, subject, text, html }) {
-  if (!to || !subject) {
-    throw new Error('sendEmail requires "to" and "subject"');
-  }
-
-  const transport = getTransporter();
-
-  if (!transport) {
-    // No SMTP configured: log and report as not sent so callers can decide.
-    // eslint-disable-next-line no-console
-    console.warn(`[email] SMTP not configured, skipping email to ${to}: ${subject}`);
-    return { sent: false, reason: 'smtp_not_configured' };
+  if (!t) {
+    // No SMTP configured — stub in dev/test environments
+    logger.warn('email.stub', { to, subject });
+    return { success: true, stub: true };
   }
 
   try {
@@ -172,15 +123,7 @@ async function sendEmail({ to, subject, text, html }) {
   } catch (err) {
     logger.error('email.send.failed', { to, subject, error: err.message });
     return { success: false, error: err.message };
-  await transport.sendMail({
-    from: process.env.SMTP_FROM || process.env.SMTP_USER || 'no-reply@localhost',
-    to,
-    subject,
-    text,
-    html,
-  });
-
-  return { sent: true };
+  }
 }
 
 /**
@@ -213,7 +156,5 @@ async function sendVerificationEmail({ to, token, ttlMinutes = 15 }) {
   return sendEmail({ to, subject, text, html });
 }
 
-module.exports = {
-  sendEmail,
-  sendVerificationEmail,
-};
+export { sendVerificationEmail };
+export default { sendEmail, sendVerificationEmail };

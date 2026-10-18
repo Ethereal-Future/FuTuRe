@@ -101,24 +101,15 @@ export function renderHtmlTemplate(template, data = {}) {
 }
 
 /**
- * Get a rendered template for a given type and channel.
+ * Get a rendered template for a given type, channel, and locale.
  * Email templates are rendered as both plain text (`body`) and HTML (`html`).
  * The subject is a plain-text header and is never HTML-encoded.
- * @param {string} type - Template key (e.g. 'transaction_received')
- * @param {string} channel - 'email' | 'push' | 'sms' | 'inApp'
- * @param {Record<string, string>} data
- * @returns {{ subject?: string, title?: string, body: string, html?: string } | null}
- */
-export function getRenderedTemplate(type, channel, data = {}) {
-  if (!Object.prototype.hasOwnProperty.call(TEMPLATES, type)) return null;
-  const tmpl = Object.prototype.hasOwnProperty.call(TEMPLATES[type], channel) ? TEMPLATES[type][channel] : null;
- * Get a rendered template for a given type, channel, and locale.
  *
  * @param {string} type    - Template key (e.g. 'transaction_received')
  * @param {string} channel - 'email' | 'push' | 'sms' | 'inApp'
  * @param {Record<string, string>} data - Interpolation variables
  * @param {string} [locale='en'] - Recipient's preferred locale
- * @returns {{ subject?: string, title?: string, body: string } | null}
+ * @returns {{ subject?: string, title?: string, body: string, html?: string } | null}
  */
 export function getRenderedTemplate(type, channel, data = {}, locale = 'en') {
   const tmpl = getRawTemplate(type, channel, locale);
