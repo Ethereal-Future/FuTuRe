@@ -42,6 +42,13 @@ const MAKER_CHECKER_ACTIONS = new Set([
 ]);
 
 /**
+ * TTL for the /stats cache entry.
+ * 30 seconds gives a dashboard acceptable freshness without hammering the DB
+ * on every auto-refresh cycle.
+ */
+export const ADMIN_STATS_TTL_SECONDS = 30;
+
+/**
  * Create a pending maker-checker approval request instead of executing the
  * sensitive action immediately. The maker identity is recorded for the audit
  * trail; the checker is filled in later by a different officer.
@@ -58,22 +65,6 @@ async function submitApprovalRequest({ action, targetUserId, makerId, payload = 
     },
   });
 }
-
-router.get('/stats', requireAdmin, async (req, res) => {
-  try {
-    const [totalUsers, totalTransactions, activeStreams, pendingKYC, openAMLAlerts] = await Promise.all([
-      prisma.user.count({ where: { deletedAt: null } }),
-      prisma.transaction.count({ where: { deletedAt: null } }),
-      prisma.paymentStream.count({ where: { status: 'ACTIVE' } }),
-      prisma.kYCRecord.count({ where: { status: 'PENDING' } }),
-      prisma.aMLAlert.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
-    ]);
-/**
- * TTL for the /stats cache entry.
- * 30 seconds gives a dashboard acceptable freshness without hammering the DB
- * on every auto-refresh cycle.
- */
-export const ADMIN_STATS_TTL_SECONDS = 30;
 
 /** Stable cache key — stats are global, not per-user or per-tenant. */
 const STATS_CACHE_KEY = 'admin:stats';
