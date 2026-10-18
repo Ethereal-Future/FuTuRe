@@ -363,15 +363,6 @@ export async function createMultiSigAccount(sourceSecret, signers, thresholds, m
 export async function buildMultiSigTransaction(sourcePublicKey, destination, amount, assetCode = 'XLM', options = {}) {
   const submissionSourcePublicKey = options.channelAccount || sourcePublicKey;
   const sourceAccount = await withHorizonRetry(() => getHorizonServer().loadAccount(submissionSourcePublicKey));
-export async function buildMultiSigTransaction(
-  sourcePublicKey,
-  destination,
-  amount,
-  assetCode = 'XLM',
-) {
-  const sourceAccount = await withHorizonRetry(() =>
-    getHorizonServer().loadAccount(sourcePublicKey),
-  );
 
   const asset =
     assetCode === 'XLM'

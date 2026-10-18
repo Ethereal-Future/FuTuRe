@@ -336,8 +336,7 @@ router.post('/refresh', (req, res) => {
       ? 'Refresh token reuse detected; session revoked'
       : 'Invalid or expired refresh token';
     return res.status(401).json({ error });
-    sessionId: session.id,
-  });
+  }
 });
 
 /**
