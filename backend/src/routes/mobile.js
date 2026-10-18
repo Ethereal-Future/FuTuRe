@@ -2,6 +2,7 @@ import express from 'express';
 import {
   mobileAuth,
   pushNotifications,
+  notificationEngine,
   mobileSessions,
   offlineQueue,
   mobileSecurity,
@@ -108,33 +109,54 @@ router.post('/auth/pin/verify', async (req, res) => {
 
 // ─── Biometric Auth ───────────────────────────────────────────────────────────
 
-/** POST /api/mobile/auth/biometric/register */
-router.post('/auth/biometric/register', (req, res) => {
+// Biometrics authorize individual transactions (issue #1383): the device's
+// Secure Enclave / Keystore key signs a single-use challenge bound to one
+// transaction's hash, amount and destination. No reusable biometric token
+// is ever issued.
+
+/** POST /api/mobile/auth/biometric/register — binds the key to the caller's own device */
+router.post('/auth/biometric/register', requireMobileAuth, (req, res) => {
   try {
-    const { userId, deviceId, publicKeyPem } = req.body;
-    res.json(mobileAuth.registerBiometric(userId, deviceId, publicKeyPem));
+    const { publicKeyPem } = req.body;
+    res.json(mobileAuth.registerBiometric(req.mobile.userId, req.mobile.deviceId, publicKeyPem));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-/** POST /api/mobile/auth/biometric/challenge */
-router.post('/auth/biometric/challenge', (req, res) => {
+/** POST /api/mobile/auth/biometric/challenge  Body: { transactionHash, amount, destination } */
+router.post('/auth/biometric/challenge', requireMobileAuth, async (req, res) => {
   try {
-    const { userId, deviceId } = req.body;
-    res.json(mobileAuth.createChallenge(userId, deviceId));
+    const { transactionHash, amount, destination } = req.body;
+    res.json(
+      await mobileAuth.createTransactionChallenge(req.mobile.userId, req.mobile.deviceId, {
+        transactionHash,
+        amount,
+        destination,
+      }),
+    );
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(e.status ?? 400).json({ error: e.message, code: e.code });
   }
 });
 
-/** POST /api/mobile/auth/biometric/verify */
-router.post('/auth/biometric/verify', async (req, res) => {
+/**
+ * POST /api/mobile/auth/biometric/verify
+ * Body: { challengeId, signature, transactionHash, amount, destination }
+ */
+router.post('/auth/biometric/verify', requireMobileAuth, async (req, res) => {
   try {
-    const { challengeId, signature } = req.body;
-    res.json(await mobileAuth.verifyBiometric(challengeId, signature, deviceInfo(req)));
+    const { challengeId, signature, transactionHash, amount, destination } = req.body;
+    res.json(
+      await mobileAuth.verifyTransactionSignature(
+        challengeId,
+        signature,
+        { transactionHash, amount, destination },
+        { userId: req.mobile.userId, deviceId: req.mobile.deviceId },
+      ),
+    );
   } catch (e) {
-    res.status(401).json({ error: e.message });
+    res.status(e.status ?? 401).json({ error: e.message, code: e.code });
   }
 });
 
@@ -204,9 +226,11 @@ router.post('/auth/webauthn/authenticate', async (req, res) => {
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
 /** POST /api/mobile/notifications/register */
-router.post('/notifications/register', requireMobileAuth, (req, res) => {
+router.post('/notifications/register', requireMobileAuth, async (req, res) => {
   try {
     const { deviceId, token, platform } = req.body;
+    // Persisted so broadcasts can reach the device and prune its token once expired (#1384).
+    await notificationEngine.registerPushToken(req.mobile.userId, deviceId, token, platform);
     res.json(pushNotifications.registerDevice(req.mobile.userId, deviceId, token, platform));
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -388,6 +412,21 @@ router.post('/analytics/track', requireMobileAuth, (req, res) => {
   try {
     const { event, properties } = req.body;
     res.json(mobileAnalytics.track(req.mobile.userId, req.mobile.deviceId, event, properties));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+/**
+ * POST /api/mobile/analytics/telemetry
+ * Body: { type, event, metadata, crashDiagnostics?: { optIn } }
+ * Headers, IPs and hardware ids are sanitized before logging (#1386).
+ */
+router.post('/analytics/telemetry', requireMobileAuth, (req, res) => {
+  try {
+    const { type, event, metadata, crashDiagnostics } = req.body ?? {};
+    mobileAnalytics.recordTelemetry(req, { type, event, metadata, crashDiagnostics });
+    res.status(202).json({ recorded: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
