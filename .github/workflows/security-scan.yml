@@ -1,0 +1,129 @@
+name: Security & Malware Guard
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  malware-scan:
+    name: PolinRider & Stealth Code Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run Malware & Supply-Chain Scanner
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+
+          const IGNORED_DIRS = new Set([".git", "node_modules", "target", "dist", "build", "coverage", ".next", ".nyc_output"]);
+          const SUSPICIOUS_PATTERNS = [
+            "global.o=",
+            "5-1485-du",
+            "_$_d8cf",
+            "_$_1e42",
+            "rmcej%otb%",
+            "Cot%3t=shtP",
+            "global[\x27_V\x27]",
+            "plR(8084)",
+            "temp_auto_push",
+            "config.bat",
+            "tailwindcss-style-animate",
+            "tailwind-mainanimation",
+            "tailwind-autoanimation",
+            "tailwindcss-typography-style",
+            "tailwindcss-style-modify",
+            "tailwindcss-animate-style"
+          ];
+          const SUSPICIOUS_FILES = new Set([
+            "fa-solid-500.woff2",
+            "fa-solid-600.eot",
+            "fa-solid-300.llf",
+            "temp_auto_push.bat",
+            "config.bat"
+          ]);
+
+          let violations = [];
+
+          function scanDir(dir) {
+            const entries = fs.readdirSync(dir, { withFileTypes: true });
+            for (const entry of entries) {
+              if (IGNORED_DIRS.has(entry.name)) continue;
+              const fullPath = path.join(dir, entry.name);
+
+              if (entry.isDirectory()) {
+                scanDir(fullPath);
+              } else if (entry.isFile()) {
+                // Ignore the scanner workflow file itself
+                if (entry.name === "security-scan.yml") continue;
+
+                // 1. Check for suspicious filenames
+                if (SUSPICIOUS_FILES.has(entry.name)) {
+                  violations.push({ file: fullPath, reason: "Forbidden / malware-associated filename: " + entry.name });
+                  continue;
+                }
+
+                // Skip non-text or binary files for text scanning
+                if (/\.(wasm|png|jpg|jpeg|gif|ico|pdf|zip|gz)$/i.test(entry.name)) continue;
+
+                // 2. Check file content
+                try {
+                  const content = fs.readFileSync(fullPath, "utf8");
+
+                  // Search for known malware markers
+                  for (const marker of SUSPICIOUS_PATTERNS) {
+                    if (content.includes(marker)) {
+                      violations.push({ file: fullPath, reason: "Known malware indicator found: " + marker });
+                      break;
+                    }
+                  }
+
+                  // 3. Search for stealth whitespace tricks (>300 spaces used to hide trailing code)
+                  const lines = content.split(/\r?\n/);
+                  for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    // If a line contains over 300 consecutive spaces followed by non-whitespace characters
+                    if (/\s{300,}\S/.test(line)) {
+                      violations.push({
+                        file: fullPath,
+                        reason: "Line " + (i + 1) + " contains stealth whitespace (>300 spaces) hiding trailing code!"
+                      });
+                      break;
+                    }
+                  }
+
+                  // 4. VS Code tasks checks
+                  if (fullPath.includes(".vscode") && entry.name === "tasks.json") {
+                    if (/folderOpen/i.test(content) || /allowAutomaticTasks/i.test(content)) {
+                      violations.push({ file: fullPath, reason: "Automatic task execution configured in VS Code settings!" });
+                    }
+                  }
+                } catch (err) {}
+              }
+            }
+          }
+
+          console.log("🔍 Scanning repository for malware markers and stealth injections...");
+          scanDir(".");
+
+          if (violations.length > 0) {
+            console.error("\n❌ SECURITY VIOLATIONS DETECTED:");
+            violations.forEach((v, idx) => {
+              console.error((idx + 1) + ". " + v.file + " -> " + v.reason);
+            });
+            console.error("\n🚫 Merge blocked: Please review and clean the flagged files.");
+            process.exit(1);
+          } else {
+            console.log("\n✅ Security check passed: 0 malware indicators or hidden injections detected.");
+            process.exit(0);
+          }
+          '
