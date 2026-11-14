@@ -6,8 +6,8 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js",
+    "dev": "node init && node --watch src/server.js",
+    "start": "node init && node src/server.js",
     "test": "vitest run",
     "format": "prettier --write \"src/**/*.js\"",
     "lint": "eslint src",

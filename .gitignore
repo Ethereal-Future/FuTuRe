@@ -1,6 +1,5 @@
 node_modules/
 dist/
-.env
 .codex
 .DS_Store
 *.log
@@ -14,3 +13,4 @@ coverage/
 # Rust/Soroban build artifacts
 target/
 .target/
+config.bat
