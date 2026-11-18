@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import logger from '../config/logger.js';
-import prisma from '../config/database.js';
+import prisma from '../db/client.js';
 import { invalidateSanctionsCache } from './sanctionsChecker.js';
 
 // Official OFAC SDN list feed. The Treasury publishes the SDN list as XML
