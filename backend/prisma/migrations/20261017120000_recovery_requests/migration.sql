@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS "RecoveryRequest" (
     "newPublicKey" TEXT,
     "oldPublicKey" TEXT,
     "rotationTxHash" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "initiatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "executeAfter" TIMESTAMP(3) NOT NULL,
     "expiresAt" TIMESTAMP(3) NOT NULL,
@@ -41,8 +42,10 @@ CREATE TABLE IF NOT EXISTS "RecoveryApproval" (
 
 CREATE INDEX IF NOT EXISTS "RecoveryRequest_userId_status_idx" ON "RecoveryRequest"("userId", "status");
 CREATE INDEX IF NOT EXISTS "RecoveryRequest_expiresAt_idx" ON "RecoveryRequest"("expiresAt");
+CREATE INDEX IF NOT EXISTS "RecoveryRequest_status_idx" ON "RecoveryRequest"("status");
 CREATE UNIQUE INDEX IF NOT EXISTS "RecoveryApproval_requestId_contactId_key" ON "RecoveryApproval"("requestId", "contactId");
 CREATE INDEX IF NOT EXISTS "RecoveryApproval_requestId_idx" ON "RecoveryApproval"("requestId");
+CREATE INDEX IF NOT EXISTS "RecoveryApproval_contactId_idx" ON "RecoveryApproval"("contactId");
 
 -- Not expressible in schema.prisma: at most one active recovery per user, so
 -- concurrent initiations on different nodes cannot both succeed.
@@ -61,3 +64,6 @@ BEGIN
       FOREIGN KEY ("requestId") REFERENCES "RecoveryRequest"("id") ON DELETE CASCADE ON UPDATE CASCADE;
   END IF;
 END $$;
+
+-- Backfill createdAt for rows created before the column existed (idempotent).
+UPDATE "RecoveryRequest" SET "createdAt" = "initiatedAt" WHERE "createdAt" IS NULL;

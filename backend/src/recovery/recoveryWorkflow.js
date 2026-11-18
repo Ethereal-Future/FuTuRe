@@ -11,6 +11,7 @@ import { revokeUserTokens } from '../auth/refreshTokenStore.js';
 
 // Recovery state lives in PostgreSQL (RecoveryRequest / RecoveryApproval) so
 // requests survive restarts and are visible to every API node (#1387).
+// There is intentionally no in-memory cache: every read/write goes to the DB.
 
 const DELAY_HOURS = 24; // mandatory time-lock before recovery completes
 const MAX_ATTEMPTS = 5;
@@ -71,6 +72,8 @@ function findRequestRow(requestId) {
   });
 }
 
+// Marks the request expired if past expiresAt and throws. The status guard in
+// the update keeps this safe when several nodes race on the same request.
 async function expireIfStale(request) {
   if (new Date() <= new Date(request.expiresAt)) return;
   await prisma.recoveryRequest.updateMany({
@@ -135,7 +138,10 @@ export async function initiateRecovery(userId, method, ipAddress, { newPublicKey
     data: { status: 'expired' },
   });
 
-  const existing = await getActiveRequest(userId);
+  const existing = await prisma.recoveryRequest.findFirst({
+    where: { userId, status: { in: ACTIVE_STATUSES } },
+    select: { id: true },
+  });
   if (existing) throw new Error('Recovery already in progress');
 
   const guardians = method === 'social' ? getContacts(userId).filter((c) => c.confirmedAt) : [];
@@ -166,7 +172,8 @@ export async function initiateRecovery(userId, method, ipAddress, { newPublicKey
       include: { approvals: true },
     });
   } catch (err) {
-    // Partial unique index: another node won the race to open a request.
+    // Partial unique index on (userId) for active statuses: another node won
+    // the race to open a request.
     if (err?.code === 'P2002') throw new Error('Recovery already in progress');
     throw err;
   }
@@ -189,7 +196,12 @@ export async function recordAttempt(requestId, success) {
   // Compare-and-set on the attempt counter so concurrent attempts on
   // different nodes can't both slip under MAX_ATTEMPTS.
   const { count } = await prisma.recoveryRequest.updateMany({
-    where: { id: requestId, status: 'pending', attempts: request.attempts },
+    where: {
+      id: requestId,
+      status: 'pending',
+      attempts: request.attempts,
+      expiresAt: { gt: new Date() },
+    },
     data: { attempts, status },
   });
   if (count === 0) throw new Error('Recovery request was modified concurrently; retry');
@@ -224,6 +236,8 @@ export async function addApproval(requestId, contactId, approvalToken) {
   }
 
   if (!approval.approvedAt) {
+    // Guard on approvedAt so duplicate approvals from different nodes are
+    // idempotent and the first timestamp wins.
     await prisma.recoveryApproval.updateMany({
       where: { id: approval.id, approvedAt: null },
       data: { approvedAt: new Date() },
@@ -267,8 +281,15 @@ export async function completeRecovery(requestId, { newPublicKey } = {}) {
   if (!user) throw new Error('User not found');
   const oldPublicKey = user.publicKey;
 
+  // Claim atomically: only one node may transition approved -> completing, and
+  // only once the time-lock has elapsed and the request has not expired.
   const claimed = await prisma.recoveryRequest.updateMany({
-    where: { id: requestId, status: 'approved' },
+    where: {
+      id: requestId,
+      status: 'approved',
+      executeAfter: { lte: new Date() },
+      expiresAt: { gt: new Date() },
+    },
     data: { status: 'completing', newPublicKey: targetKey, oldPublicKey },
   });
   if (claimed.count === 0) throw new Error('Recovery not approved');
@@ -351,7 +372,7 @@ export async function cancelRecovery(requestId, userId) {
     throw new Error('Cannot cancel a completed or already cancelled request');
   }
   const { count } = await prisma.recoveryRequest.updateMany({
-    where: { id: requestId, status: { in: ['pending', 'approved'] } },
+    where: { id: requestId, userId, status: { in: ['pending', 'approved'] } },
     data: { status: 'cancelled', cancelledAt: new Date() },
   });
   if (count === 0) throw new Error('Cannot cancel a completed or already cancelled request');

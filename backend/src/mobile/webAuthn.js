@@ -224,7 +224,9 @@ export async function verifyAndStoreRegistration(sessionId, credential, deviceNa
   }
   if (clientDataJSON) verifyClientData(clientDataJSON, 'webauthn.create', entry.challenge);
   if (authenticatorData) {
-    const parsed = assertAuthenticatorFlags(authenticatorData, options);
+    const parsed = assertAuthenticatorFlags(authenticatorData, {
+      requireBiometrics: options.requireBiometrics ?? REQUIRE_USER_VERIFICATION,
+    });
     assertRpIdHash(parsed);
   }
 
@@ -322,7 +324,12 @@ export async function verifyAuthentication(sessionId, assertion, options = {}) {
   }
 
   const clientDataRaw = verifyClientData(clientDataJSON, 'webauthn.get', entry.challenge);
-  const parsed = assertAuthenticatorFlags(authenticatorData, options);
+  // Enforce UP (always) and UV (biometric-gated flows) before trusting the
+  // signature — an assertion with UP only must never satisfy a biometric
+  // re-authentication (issue #1380).
+  const parsed = assertAuthenticatorFlags(authenticatorData, {
+    requireBiometrics: options.requireBiometrics ?? REQUIRE_USER_VERIFICATION,
+  });
   assertRpIdHash(parsed);
 
   // WebAuthn signature covers authenticatorData || SHA-256(clientDataJSON).

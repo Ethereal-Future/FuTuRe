@@ -1,6 +1,7 @@
 -- Unified device-bound sessions (issue #1381) and server-verified hardware
 -- attestation state (issue #1382). Written defensively because these tables
 -- may have been created via `prisma db push` in some environments.
+-- Every statement is idempotent (IF NOT EXISTS) so re-running is safe.
 
 -- Session: mobile device binding metadata (null for web sessions)
 ALTER TABLE IF EXISTS "Session" ADD COLUMN IF NOT EXISTS "deviceId" TEXT;

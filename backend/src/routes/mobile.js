@@ -64,11 +64,16 @@ async function requireMobileAuth(req, res, next) {
     if (!session || session.userId !== payload.userId) {
       return res.status(401).json({ error: 'Session expired or revoked', code: 'SESSION_REVOKED' });
     }
-    req.mobile = { ...payload, session };
+    req.mobile = {
+      ...payload,
+      userId: payload.userId,
+      deviceId,
+      session,
+    };
     next();
   } catch (e) {
-    if (e.code === 'SESSION_DEVICE_MISMATCH') {
-      return res.status(401).json({ error: e.message, code: e.code });
+    if (e.name === 'SessionDeviceMismatchError' || e.code === 'SESSION_DEVICE_MISMATCH') {
+      return res.status(401).json({ error: e.message, code: 'SESSION_DEVICE_MISMATCH' });
     }
     res.status(503).json({ error: 'Unable to verify session', code: 'SESSION_CHECK_FAILED' });
   }

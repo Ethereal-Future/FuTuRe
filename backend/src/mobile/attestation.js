@@ -174,6 +174,13 @@ function decryptJwe(token, decryptionKeyB64) {
       503,
     );
   }
+  if (b64url(encryptedKey).length !== 40) {
+    throw new AttestationError(
+      'Play Integrity JWE encrypted key is malformed',
+      'ATTESTATION_INVALID',
+      400,
+    );
+  }
 
   try {
     const unwrap = crypto.createDecipheriv('id-aes256-wrap', kek, AES_KW_IV);
@@ -215,11 +222,20 @@ function verifyJws(jws, verificationKeyB64) {
     );
   }
 
-  const key = crypto.createPublicKey({
-    key: Buffer.from(verificationKeyB64, 'base64'),
-    format: 'der',
-    type: 'spki',
-  });
+  let key;
+  try {
+    key = crypto.createPublicKey({
+      key: Buffer.from(verificationKeyB64, 'base64'),
+      format: 'der',
+      type: 'spki',
+    });
+  } catch {
+    throw new AttestationError(
+      'PLAY_INTEGRITY_VERIFICATION_KEY is not a valid SPKI public key',
+      'ATTESTATION_NOT_CONFIGURED',
+      503,
+    );
+  }
   let valid = false;
   try {
     valid = crypto.verify(
@@ -309,7 +325,9 @@ export function verifyPlayIntegrityToken(
     }
   }
 
-  const deviceVerdicts = payload.deviceIntegrity?.deviceRecognitionVerdict ?? [];
+  const deviceVerdicts = Array.isArray(payload.deviceIntegrity?.deviceRecognitionVerdict)
+    ? payload.deviceIntegrity.deviceRecognitionVerdict
+    : [];
   const verdict = ACCEPTED_DEVICE_VERDICTS.find((v) => deviceVerdicts.includes(v));
   if (!verdict) {
     throw new AttestationError(
@@ -535,6 +553,13 @@ export function verifyAppleCertificateChain(x5c, rootPem, now = Date.now()) {
 
   const rootIncluded = certs[certs.length - 1].fingerprint256 === root.fingerprint256;
   const chain = rootIncluded ? certs : [...certs, root];
+  if (chain.length < 2) {
+    throw new AttestationError(
+      'App Attest certificate chain is too short',
+      'ATTESTATION_INVALID',
+      400,
+    );
+  }
   for (let i = 0; i < chain.length; i++) {
     const cert = chain[i];
     const issuer = i === chain.length - 1 ? root : chain[i + 1];
@@ -753,9 +778,84 @@ export function verifyAppAssertion(
   if (!safeEqual(authData.rpIdHash, sha256(appId))) {
     throw new AttestationError('App Attest App ID mismatch', 'ATTESTATION_MISMATCH');
   }
-  if (authData.signCount <= Number(previousCounter)) {
+  const previous = Number(previousCounter);
+  if (!Number.isFinite(previous) || previous < 0) {
+    throw new AttestationError('Invalid stored App Attest counter', 'ATTESTATION_INVALID', 400);
+  }
+  if (authData.signCount <= previous) {
     throw new AttestationError('App Attest counter did not increase', 'ATTESTATION_REPLAY');
   }
 
   return { counter: authData.signCount };
+}
+
+// ── High-value operation gate ───────────────────────────────────────────────
+
+/**
+ * Assert that a device has produced valid platform attestation before a
+ * high-value operation (wallet creation, large transfer authorization).
+ * Client-supplied booleans such as `isJailbroken` / `isRooted` are ignored.
+ *
+ * @param {{ platform: 'android'|'ios', token?: string, keyId?: string,
+ *           attestationObject?: string, assertion?: string, clientData?: string,
+ *           publicKeyPem?: string, previousCounter?: number }} evidence
+ * @param {{ deviceId: string, now?: number, config?: object }} context
+ * @returns {Promise<{ platform: string, verdict?: string, counter?: number }>}
+ */
+export async function requireHardwareAttestation(evidence = {}, context = {}) {
+  const { deviceId, now = Date.now(), config } = context;
+  if (!deviceId) {
+    throw new AttestationError('deviceId is required', 'ATTESTATION_INVALID', 400);
+  }
+  const nonce = await takeAttestationNonce(deviceId);
+
+  if (evidence.platform === 'android') {
+    if (!evidence.token) {
+      throw new AttestationError(
+        'Play Integrity token is required',
+        'ATTESTATION_REQUIRED',
+        401,
+      );
+    }
+    const result = verifyPlayIntegrityToken(evidence.token, { expectedNonce: nonce, now, config });
+    return { platform: 'android', verdict: result.verdict };
+  }
+
+  if (evidence.platform === 'ios') {
+    if (evidence.attestationObject) {
+      const registered = verifyAppAttestation(
+        {
+          keyId: evidence.keyId,
+          attestationObject: evidence.attestationObject,
+          challenge: nonce,
+        },
+        { now, config },
+      );
+      return { platform: 'ios', counter: registered.counter };
+    }
+    if (!evidence.assertion) {
+      throw new AttestationError(
+        'App Attest assertion is required',
+        'ATTESTATION_REQUIRED',
+        401,
+      );
+    }
+    const result = verifyAppAssertion(
+      {
+        assertion: evidence.assertion,
+        clientData: evidence.clientData,
+        expectedChallenge: nonce,
+        publicKeyPem: evidence.publicKeyPem,
+        previousCounter: evidence.previousCounter,
+      },
+      { config },
+    );
+    return { platform: 'ios', counter: result.counter };
+  }
+
+  throw new AttestationError(
+    'Unsupported attestation platform',
+    'ATTESTATION_INVALID',
+    400,
+  );
 }

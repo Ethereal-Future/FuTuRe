@@ -32,8 +32,6 @@ export class SessionDeviceMismatchError extends Error {
   }
 }
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
 function parseDevice(userAgent) {
   if (!userAgent) return 'Unknown device';
   if (/iPhone|iPad/i.test(userAgent)) return 'iPhone / iPad';
@@ -44,7 +42,6 @@ function parseDevice(userAgent) {
   return 'Web browser';
 }
 
-export async function createSession(userId, { ipAddress, userAgent } = {}) {
 async function cacheSession(session) {
   const ttlSec = Math.floor((new Date(session.expiresAt).getTime() - Date.now()) / 1000);
   if (ttlSec > 0) await redis.set(key(session.id), session, ttlSec);
@@ -184,13 +181,6 @@ export async function revokeAllSessions(userId, exceptSessionId = null) {
   if (exceptSessionId) {
     where.id = { not: exceptSessionId };
   }
-  const sessions = await prisma.session.findMany({ where, select: { id: true } });
-  const result = await prisma.session.updateMany({
-    where,
-    data: { revokedAt: new Date() },
-  });
-  await invalidate(sessions.map((s) => s.id));
-  return result.count;
 
   const revokedIds = await prisma.$transaction(async (tx) => {
     const active = await tx.session.findMany({ where, select: { id: true } });

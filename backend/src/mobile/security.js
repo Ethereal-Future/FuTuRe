@@ -39,6 +39,9 @@ class MobileSecurity {
    * @returns {Promise<{ registered: boolean }>}
    */
   async registerDevice(deviceId, fingerprint, pinnedCertHash = null) {
+    // Any client-supplied integrity booleans (isJailbroken, isRooted, ...) are
+    // deliberately ignored: only server-side attestation can clear or set the
+    // jailbreak flag, so a spoofed `{ isJailbroken: false }` has no effect.
     const existing = await prisma.deviceRegistry.findUnique({ where: { deviceId } });
     if (existing) {
       const fingerprintChanged = existing.fingerprint !== fingerprint;
@@ -86,6 +89,9 @@ class MobileSecurity {
       throw new Error('Certificate pinning failure');
     }
 
+    // `isJailbroken` is only ever set by a server-side attestation failure or
+    // an explicit client self-report (which can only restrict, never clear).
+    // It is never derived from request payload booleans.
     if (device.isJailbroken) {
       await this._alert(deviceId, 'jailbroken_device');
       throw new Error('Jailbroken/rooted device not allowed');
@@ -132,6 +138,8 @@ class MobileSecurity {
     const device = await prisma.deviceRegistry.findUnique({ where: { deviceId } });
     if (!device) throw new AttestationError('Unknown device', 'UNKNOWN_DEVICE', 404);
 
+    // Client-asserted booleans (isJailbroken / isRooted / ...) are ignored;
+    // only the cryptographic evidence below determines the verdict.
     const nonce = await takeAttestationNonce(deviceId);
     try {
       if (evidence.platform === PLATFORM_ANDROID) {
@@ -245,6 +253,9 @@ class MobileSecurity {
   requireHardwareAttestation() {
     return async (req, res, next) => {
       const deviceId = req.mobile?.deviceId ?? req.headers['x-device-id'];
+      if (!deviceId) {
+        return res.status(401).json({ error: 'Device identity required', code: 'UNKNOWN_DEVICE' });
+      }
       try {
         await this.verifyHighRiskOperation(deviceId, {
           integrityToken: req.headers['x-play-integrity-token'],
