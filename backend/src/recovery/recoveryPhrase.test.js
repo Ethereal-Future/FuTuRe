@@ -8,6 +8,7 @@
  *  - SEP-0005: Stellar key derivation test 1
  */
 import { describe, it, expect } from 'vitest';
+import { pbkdf2Sync, createHash } from 'crypto';
 import {
   entropyToMnemonic,
   mnemonicToEntropy,
@@ -94,6 +95,28 @@ describe('BIP-39 seed (PBKDF2-HMAC-SHA512, 2048 rounds)', () => {
     expect(out.toString('hex')).toBe(seed);
   });
 
+  it('matches the official BIP-39 vector with an empty passphrase', () => {
+    expect(mnemonicToSeed(TREZOR_VECTORS[0].mnemonic, '').toString('hex')).toBe(
+      '5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4',
+    );
+  });
+
+  it('uses PBKDF2-HMAC-SHA512 with 2048 iterations and salt "mnemonic"+passphrase', () => {
+    const mnemonic = TREZOR_VECTORS[0].mnemonic;
+    const passphrase = 'TREZOR';
+    const expected = pbkdf2Sync(
+      mnemonic.normalize('NFKD'),
+      ('mnemonic' + passphrase).normalize('NFKD'),
+      2048,
+      64,
+      'sha512',
+    );
+    expect(mnemonicToSeed(mnemonic, passphrase).equals(expected)).toBe(true);
+    // A single unsalted SHA-256 hash (the old, broken behaviour) must not match.
+    const legacy = createHash('sha256').update(mnemonic + passphrase).digest();
+    expect(mnemonicToSeed(mnemonic, passphrase).equals(legacy)).toBe(false);
+  });
+
   it('uses an empty passphrase by default', () => {
     expect(mnemonicToSeed(TREZOR_VECTORS[0].mnemonic).toString('hex')).toBe(
       '5eb00bbddcf069084889a8ab9155568165f5c453ccb85e70811aaed6f6da5fc19a5ac40b389cd370d086206dec8aa6c43daea6690f20ad3d8d48b2d2ce9e38e4',
@@ -149,6 +172,27 @@ describe("SEP-0005 Stellar keypairs (m/44'/148'/x')", () => {
     expect(deriveStellarKeypair(SEP5_MNEMONIC, { passphrase: 'p' }).publicKey()).not.toBe(
       deriveStellarKeypair(SEP5_MNEMONIC).publicKey(),
     );
+  });
+
+  it('derives keys from a freshly generated phrase that standard wallets can restore', () => {
+    const phrase = generateRecoveryPhrase(24);
+    expect(validateMnemonic(phrase)).toBe(true);
+
+    // The seed must be the BIP-39 PBKDF2 output, which is what Freighter,
+    // Albedo, Lobstr and Ledger feed into SLIP-0010 / SEP-0005 derivation.
+    const seed = mnemonicToSeed(phrase);
+    expect(seed).toHaveLength(64);
+    expect(
+      seed.equals(
+        pbkdf2Sync(phrase.normalize('NFKD'), 'mnemonic'.normalize('NFKD'), 2048, 64, 'sha512'),
+      ),
+    ).toBe(true);
+
+    // Derivation is deterministic and produces a valid Stellar keypair.
+    const kp = deriveStellarKeypair(phrase);
+    expect(kp.publicKey()).toMatch(/^G[A-Z2-7]{55}$/);
+    expect(kp.secret()).toMatch(/^S[A-Z2-7]{55}$/);
+    expect(deriveStellarKeypair(phrase).publicKey()).toBe(kp.publicKey());
   });
 });
 

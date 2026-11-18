@@ -248,24 +248,48 @@ export async function rotateRecoveredAccountSigner({
     );
   }
 
-  const transaction = builder.setTimeout(30).build();
-  transaction.sign(recoverySigner);
+  let transaction;
+  try {
+    transaction = builder.setTimeout(30).build();
+    transaction.sign(recoverySigner);
+  } catch (err) {
+    logger.error('keypairRotation.recovery.build.failed', {
+      accountId,
+      correlationId,
+      error: err.message,
+    });
+    throw new Error(`Failed to build signer rotation transaction: ${err.message}`);
+  }
+
   const txHash = transaction.hash().toString('hex');
 
   let result;
   try {
     result = await withHorizonRetry(() => server.submitTransaction(transaction), txHash);
   } catch (err) {
+    // Horizon returns a structured result_codes payload on rejected transactions;
+    // surface it so callers can distinguish e.g. tx_bad_auth from tx_insufficient_fee.
+    const resultCodes = err?.response?.data?.extras?.result_codes;
     logger.error('keypairRotation.recovery.submit.failed', {
       accountId,
       correlationId,
+      txHash,
       error: err.message,
+      resultCodes,
     });
-    throw new Error(`On-chain signer rotation failed: ${err.message}`);
+    const detail = resultCodes ? ` (${JSON.stringify(resultCodes)})` : '';
+    throw new Error(`On-chain signer rotation failed${detail}: ${err.message}`);
+  }
+
+  if (!result || !result.hash) {
+    logger.error('keypairRotation.recovery.submit.noHash', {
+      accountId, correlationId, txHash,
+    });
+    throw new Error('On-chain signer rotation submitted but no transaction hash was returned');
   }
 
   logger.info('keypairRotation.recovery.success', {
-    accountId, newPublicKey, hash: result.hash, correlationId,
+    accountId, newPublicKey, hash: result.hash, ledger: result.ledger, correlationId,
   });
 
   return { hash: result.hash, ledger: result.ledger, newSignerWeight };
