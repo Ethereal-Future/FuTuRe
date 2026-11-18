@@ -24,6 +24,28 @@ function hashOtp(otp) {
   return crypto.createHash('sha256').update(otp).digest('hex');
 }
 
+/**
+ * Hash an approval token with SHA-256. Approval tokens are 32 random bytes
+ * (hex-encoded) generated at recovery initiation and dispatched out-of-band
+ * to the guardian. Only the hash is ever stored.
+ *
+ * @param {string} token
+ * @returns {string} hex-encoded SHA-256 digest
+ */
+export function hashApprovalToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex');
+}
+
+/**
+ * Generate a cryptographically secure 32-byte approval token.
+ *
+ * @returns {{ token: string, tokenHash: string }}
+ */
+export function generateApprovalToken() {
+  const token = crypto.randomBytes(32).toString('hex');
+  return { token, tokenHash: hashApprovalToken(token) };
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 export function addContact(userId, email, name) {
@@ -37,6 +59,9 @@ export function addContact(userId, email, name) {
     name,
     // Contact starts unconfirmed; confirmedAt is set only after OTP challenge passes
     confirmedAt: null,
+    // Hash of the per-guardian approval token (set at recovery initiation).
+    // The plaintext token is only ever sent out-of-band to the guardian.
+    tokenHash: null,
     addedAt: new Date().toISOString(),
   };
   contacts.push(contact);
@@ -194,4 +219,50 @@ export function getContacts(userId) {
 
 export function getConfirmedContactCount(userId) {
   return getContacts(userId).filter(c => c.confirmedAt).length;
+}
+
+/**
+ * Store the hash of a guardian's approval token. The plaintext token must
+ * never be persisted — only its SHA-256 hash.
+ *
+ * @param {string} userId
+ * @param {string} contactId
+ * @param {string} tokenHash
+ * @returns {object} the updated contact
+ */
+export function setContactTokenHash(userId, contactId, tokenHash) {
+  const contacts = recoveryContacts.get(userId) || [];
+  const contact = contacts.find(c => c.id === contactId);
+  if (!contact) throw new Error('Contact not found');
+  contact.tokenHash = tokenHash;
+  return contact;
+}
+
+/**
+ * Retrieve a guardian by their approval token hash.
+ *
+ * Used by the recovery workflow to resolve which guardian a submitted
+ * approval token belongs to, without ever trusting a caller-supplied
+ * contactId.
+ *
+ * @param {string} userId
+ * @param {string} tokenHash
+ * @returns {object|undefined} the matching contact, if any
+ */
+export function getContactByTokenHash(userId, tokenHash) {
+  if (!tokenHash) return undefined;
+  const contacts = recoveryContacts.get(userId) || [];
+  return contacts.find(c => c.tokenHash && c.tokenHash === tokenHash);
+}
+
+/**
+ * Retrieve a guardian by ID (internal helper).
+ *
+ * @param {string} userId
+ * @param {string} contactId
+ * @returns {object|undefined}
+ */
+export function getContactById(userId, contactId) {
+  const contacts = recoveryContacts.get(userId) || [];
+  return contacts.find(c => c.id === contactId);
 }

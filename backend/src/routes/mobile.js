@@ -170,12 +170,19 @@ router.post('/auth/biometric/verify', requireMobileAuth, async (req, res) => {
  * POST /api/mobile/auth/webauthn/register
  * Phase 1 (no credential in body): returns registration options.
  * Phase 2 (credential in body):    verifies and persists credential in DB.
+ *
+ * The challenge is bound to the caller's authenticated mobile session
+ * (issue #1379): `sessionId` is derived from the verified token, never from
+ * the request body, so a challenge cannot be replayed across sessions.
  */
-router.post('/auth/webauthn/register', async (req, res) => {
+router.post('/auth/webauthn/register', requireMobileAuth, async (req, res) => {
   try {
     const { userId, username, credential, deviceName } = req.body;
-    const sessionId = req.body.sessionId ?? req.body.challengeId;
+    const sessionId = req.mobile.sid;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
+    if (userId !== req.mobile.userId) {
+      return res.status(403).json({ error: 'userId does not match session', code: 'SESSION_USER_MISMATCH' });
+    }
 
     if (!credential) {
       // Phase 1 — return options for navigator.credentials.create()
@@ -186,6 +193,9 @@ router.post('/auth/webauthn/register', async (req, res) => {
     const result = await verifyAndStoreRegistration(sessionId, credential, deviceName, { userId });
     res.status(201).json(result);
   } catch (e) {
+    if (e.code === 'ChallengeExpired') {
+      return res.status(401).json({ error: e.message, code: e.code });
+    }
     res.status(e.status ?? 400).json({ error: e.message, code: e.code });
   }
 });
@@ -195,12 +205,18 @@ router.post('/auth/webauthn/register', async (req, res) => {
  * Phase 1 (no assertion in body): returns authentication options.
  * Phase 2 (assertion in body):    verifies assertion and returns a
  *                                 device-bound session JWT (X-Device-Id required).
+ *
+ * As with registration, the challenge is bound to the authenticated mobile
+ * session (issue #1379) and consumed on first verification.
  */
-router.post('/auth/webauthn/authenticate', async (req, res) => {
+router.post('/auth/webauthn/authenticate', requireMobileAuth, async (req, res) => {
   try {
     const { userId, assertion } = req.body;
-    const sessionId = req.body.sessionId ?? req.body.challengeId;
+    const sessionId = req.mobile.sid;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
+    if (userId !== req.mobile.userId) {
+      return res.status(403).json({ error: 'userId does not match session', code: 'SESSION_USER_MISMATCH' });
+    }
 
     if (!assertion) {
       // Phase 1 — return options for navigator.credentials.get()
@@ -219,6 +235,9 @@ router.post('/auth/webauthn/authenticate', async (req, res) => {
     });
     res.json(result);
   } catch (e) {
+    if (e.code === 'ChallengeExpired') {
+      return res.status(401).json({ error: e.message, code: e.code });
+    }
     res.status(e.status ?? 401).json({ error: e.message, code: e.code });
   }
 });

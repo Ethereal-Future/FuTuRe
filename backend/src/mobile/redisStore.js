@@ -177,6 +177,36 @@ export async function redisGetDelete(key) {
   return value;
 }
 
+/**
+ * Atomically read and delete `key` without JSON-decoding the stored value.
+ * Used for single-use WebAuthn challenges (issue #1379), which are stored as
+ * raw strings so they can be compared byte-for-byte against the value the
+ * client echoes back. Same GETDEL semantics and fault behavior as
+ * `redisGetDelete`: a Redis error is rethrown (never fail-open), and values
+ * written to the in-process store during an outage are consumed from there.
+ *
+ * @param {string} key
+ * @returns {Promise<string|null>} The raw stored value, or null when missing/expired.
+ */
+export async function redisGetDeleteRaw(key) {
+  if (isRedisAvailable()) {
+    let raw;
+    try {
+      raw = await redisBackend.client.getdel(key);
+    } catch (err) {
+      recordFailure('getdel', err);
+      throw err;
+    }
+    recordSuccess();
+    if (raw !== null && raw !== undefined) return raw;
+    // Fall through: the value may have been written locally while the breaker was open.
+  }
+  // Single-threaded event loop: read + delete with no await in between is atomic.
+  const value = memoryGet(key);
+  memoryValues.delete(key);
+  return value ?? null;
+}
+
 // ── Public set API (used for the per-user session index) ───────────────────
 
 export async function redisSetAdd(setKey, member) {

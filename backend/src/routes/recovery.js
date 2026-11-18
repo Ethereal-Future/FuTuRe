@@ -413,7 +413,7 @@ router.post(
 router.post(
   ['/:requestId/approve', '/:requestId/social-approve'],
   param('requestId').isUUID(),
-  body('contactId').isUUID(),
+  body('approvalToken').isString().trim().isLength({ min: 64, max: 64 }).isHexadecimal(),
   validate,
   async (req, res) => {
     try {
@@ -426,7 +426,6 @@ router.post(
 
       let updated = await addApproval(
         req.params.requestId,
-        req.body.contactId,
         req.body.approvalToken,
       );
 

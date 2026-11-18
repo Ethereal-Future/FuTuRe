@@ -356,6 +356,25 @@ describe('guardian approval tokens (#1388)', () => {
     expect(replay.approvals).toEqual([a.id]);
   });
 
+  it('rejects a WebAuthn assertion replayed with an already-consumed challenge', async () => {
+    const [g] = addGuardians(USER_ID, 1);
+    const { id } = await initiateRecovery(USER_ID, 'social', '10.0.0.1');
+    const challenge = crypto.randomBytes(32).toString('hex');
+    const assertion = { contactId: g.id, challenge, signature: 'a'.repeat(128) };
+
+    const first = await addApproval(id, g.id, assertion).catch((e) => e);
+    // Either the assertion is accepted once or rejected outright; a replay must
+    // never be accepted a second time.
+    if (first instanceof Error) {
+      expect(first).toBeInstanceOf(RecoveryAuthError);
+      expect(first.statusCode).toBe(401);
+    }
+
+    const replay = await addApproval(id, g.id, assertion).catch((e) => e);
+    expect(replay).toBeInstanceOf(RecoveryAuthError);
+    expect(replay.statusCode).toBe(401);
+  });
+
   describe('POST /api/recovery/:requestId/approve', () => {
     let app;
     beforeEach(async () => {
@@ -386,6 +405,18 @@ describe('guardian approval tokens (#1388)', () => {
         .send({ contactId: g.id, approvalToken: tokenFor(g) });
       expect(res.status).toBe(200);
       expect(res.body).toMatchObject({ approvals: 1, required: 1, status: 'approved' });
+    });
+
+    it('rejects an unauthenticated approval with 401 and leaves the request pending', async () => {
+      const [a, b] = addGuardians(USER_ID, 3);
+      const { id } = await initiateRecovery(USER_ID, 'social', '10.0.0.1');
+
+      for (const contact of [a, b]) {
+        const res = await request(app).post(`/api/recovery/${id}/approve`).send({ contactId: contact.id });
+        expect(res.status).toBe(401);
+      }
+      expect(db.requests.get(id).status).toBe('pending');
+      expect([...db.approvals.values()].every((r) => r.approvedAt === null)).toBe(true);
     });
   });
 });
@@ -489,5 +520,49 @@ describe('completeRecovery key rotation and teardown (#1389)', () => {
     await Promise.allSettled([completeRecovery(id), completeRecovery(id)]);
     expect(rotateRecoveredAccountSigner).toHaveBeenCalledTimes(1);
     expect((await getRequest(id)).status).toBe('completed');
+  });
+
+  it('performs on-chain signer replacement and revokes sessions end-to-end', async () => {
+    db.refreshTokens.push(
+      { jti: 'r1', userId: USER_ID, isRevoked: false },
+      { jti: 'r2', userId: USER_ID, isRevoked: false },
+    );
+    const id = await approvedRequest();
+
+    const done = await completeRecovery(id);
+
+    expect(rotateRecoveredAccountSigner).toHaveBeenCalledTimes(1);
+    expect(rotateRecoveredAccountSigner).toHaveBeenCalledWith(
+      expect.objectContaining({ oldPublicKey: OLD_KEY, newPublicKey: NEW_KEY }),
+    );
+    expect(done.status).toBe('completed');
+    expect(db.users.get(USER_ID).publicKey).toBe(NEW_KEY);
+    expect(db.refreshTokens.every((t) => t.isRevoked)).toBe(true);
+    expect(revokeAllSessions).toHaveBeenCalledWith(USER_ID);
+    expect(revokeUserTokens).toHaveBeenCalledWith(USER_ID);
+  });
+});
+
+// ── BIP-39 mnemonic derivation ────────────────────────────────────────────────
+
+describe('mnemonicToSeed (BIP-39 vectors)', () => {
+  it('derives the standard seed for the all-zero entropy vector', async () => {
+    const { mnemonicToSeed } = await import('../utils/mnemonic.js');
+    const mnemonic =
+      'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
+    const seed = await mnemonicToSeed(mnemonic, 'TREZOR');
+    expect(seed.toString('hex')).toBe(
+      'c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04',
+    );
+  });
+
+  it('derives the standard seed for the all-ones entropy vector', async () => {
+    const { mnemonicToSeed } = await import('../utils/mnemonic.js');
+    const mnemonic =
+      'zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo zoo wrong';
+    const seed = await mnemonicToSeed(mnemonic, 'TREZOR');
+    expect(seed.toString('hex')).toBe(
+      'ac27495480225222079d7be181583751e86f571027b0497b5b5d11218e0a8a13332572917f0f8e5a589620c6f15b11c61dee327651a14c34e18231052e48c069',
+    );
   });
 });

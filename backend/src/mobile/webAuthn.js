@@ -59,6 +59,9 @@ function safeEqual(a, b) {
  */
 export async function generateChallenge(sessionId, context) {
   if (!sessionId) throw new WebAuthnError('sessionId is required', 'SessionRequired', 400);
+  if (!context || !context.userId || !context.type) {
+    throw new WebAuthnError('challenge context requires userId and type', 'InvalidContext', 400);
+  }
   const challenge = crypto.randomBytes(32).toString('base64url');
   await redisSet(
     challengeKey(sessionId),
@@ -76,8 +79,10 @@ export async function generateChallenge(sessionId, context) {
  * @throws {WebAuthnError} 401 ChallengeExpired when missing/expired/already used,
  *   401 ChallengeMismatch when it belongs to another user or ceremony type.
  */
-export async function consumeChallenge(sessionId, { userId, type }) {
+export async function consumeChallenge(sessionId, { userId, type } = {}) {
   const label = type === 'registration' ? 'Registration' : 'Authentication';
+  // Atomic GETDEL: the challenge is removed from Redis in the same operation
+  // that reads it, so concurrent or replayed responses can never both succeed.
   const entry = sessionId ? await redisGetDelete(challengeKey(sessionId)) : null;
   if (!entry) {
     throw new WebAuthnError(`${label} challenge expired or not found`, 'ChallengeExpired');
@@ -212,6 +217,7 @@ export async function generateRegistrationOptions(userId, username, { sessionId 
  * @param {{ userId?: string, requireBiometrics?: boolean }} [options]
  */
 export async function verifyAndStoreRegistration(sessionId, credential, deviceName, options = {}) {
+  // Consume first: the challenge is burned even if verification fails below.
   const entry = await consumeChallenge(sessionId, { userId: options.userId, type: 'registration' });
 
   const { id: credentialId, publicKey, authenticatorData, clientDataJSON } = credential || {};

@@ -202,15 +202,68 @@ describe('WebAuthn service', () => {
 
   // ── #1379: session binding, TTL and single use ────────────────────────────
 
-  describe('challenge session binding (#1379)', () => {
-    it('stores challenges per session id', async () => {
+  describe('generateChallenge / consumeChallenge (#1379)', () => {
+    it('generates a 32-byte base64url challenge', async () => {
+      const challenge = await generateChallenge('sess-gen', { userId, type: 'authentication' });
+      expect(typeof challenge).toBe('string');
+      expect(Buffer.from(challenge, 'base64url')).toHaveLength(32);
+    });
+
+    it('generates a distinct challenge per call', async () => {
+      const a = await generateChallenge('sess-distinct', { userId, type: 'authentication' });
+      const b = await generateChallenge('sess-distinct', { userId, type: 'authentication' });
+      expect(a).not.toBe(b);
+    });
+
+    it('binds the challenge to the session id', async () => {
       const a = await generateChallenge('sess-a', { userId, type: 'authentication' });
       const b = await generateChallenge('sess-b', { userId, type: 'authentication' });
-      expect(a).not.toBe(b);
-      expect(Buffer.from(a, 'base64url')).toHaveLength(32);
 
       expect((await consumeChallenge('sess-b', { userId, type: 'authentication' })).challenge).toBe(b);
       expect((await consumeChallenge('sess-a', { userId, type: 'authentication' })).challenge).toBe(a);
+    });
+
+    it('rejects consumption with a mismatched challenge', async () => {
+      await generateChallenge('sess-mismatch-consume', { userId, type: 'authentication' });
+      await expect(
+        consumeChallenge('sess-mismatch-consume', {
+          userId,
+          type: 'authentication',
+          challenge: crypto.randomBytes(32).toString('base64url'),
+        }),
+      ).rejects.toMatchObject({ code: 'ChallengeMismatch', status: 401 });
+    });
+
+    it('rejects consumption for a different user', async () => {
+      await generateChallenge('sess-user-consume', { userId, type: 'authentication' });
+      await expect(
+        consumeChallenge('sess-user-consume', { userId: 'someone-else', type: 'authentication' }),
+      ).rejects.toMatchObject({ code: 'ChallengeMismatch', status: 401 });
+    });
+
+    it('rejects consumption for a different ceremony type', async () => {
+      await generateChallenge('sess-type-consume', { userId, type: 'registration' });
+      await expect(
+        consumeChallenge('sess-type-consume', { userId, type: 'authentication' }),
+      ).rejects.toMatchObject({ code: 'ChallengeMismatch', status: 401 });
+    });
+
+    it('consumes the challenge exactly once (atomic delete-on-read)', async () => {
+      await generateChallenge('sess-once', { userId, type: 'authentication' });
+      await expect(consumeChallenge('sess-once', { userId, type: 'authentication' })).resolves.toHaveProperty(
+        'challenge',
+      );
+      await expect(consumeChallenge('sess-once', { userId, type: 'authentication' })).rejects.toMatchObject({
+        code: 'ChallengeExpired',
+        status: 401,
+      });
+    });
+
+    it('rejects consumption of an unknown session', async () => {
+      await expect(consumeChallenge('sess-unknown', { userId, type: 'authentication' })).rejects.toMatchObject({
+        code: 'ChallengeExpired',
+        status: 401,
+      });
     });
 
     it('expires challenges after the 60 second TTL', async () => {
@@ -223,6 +276,18 @@ describe('WebAuthn service', () => {
         status: 401,
       });
     });
+
+    it('accepts challenges consumed within the 60 second TTL', async () => {
+      vi.useFakeTimers();
+      await generateChallenge('sess-ttl-ok', { userId, type: 'authentication' });
+      vi.advanceTimersByTime(59_000);
+      await expect(consumeChallenge('sess-ttl-ok', { userId, type: 'authentication' })).resolves.toHaveProperty(
+        'challenge',
+      );
+    });
+  });
+
+  describe('challenge session binding (#1379)', () => {
 
     it('a new ceremony on the same session invalidates the previous challenge', async () => {
       seedCredential(userId);
