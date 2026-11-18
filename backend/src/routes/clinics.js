@@ -1,6 +1,6 @@
 import express from 'express';
 import { body } from 'express-validator';
-import { validate } from '../../middleware/validate.js';
+import { validate } from '../middleware/validate.js';
 import { rotateKeypair } from '../../services/keypairRotation.js';
 import logger from '../../config/logger.js';
 import { requireAuth } from '../../middleware/auth.js';

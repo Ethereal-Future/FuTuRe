@@ -37,7 +37,6 @@ export class ConcurrencyError extends Error {
  * so stored rows are never rewritten.
  */
 import prisma from '../db/client.js';
-import logger from '../config/logger.js';
 import eventSerializer from './eventSerializer.js';
 
 /** Take an aggregate snapshot every N events (#1362). */
