@@ -293,6 +293,67 @@ describe('recovery persistence (#1387)', () => {
     expect(db.requests.get(id).cancelledAt).toBeInstanceOf(Date);
     expect(await getActiveRequest(USER_ID)).toBeNull();
   });
+
+  it('survives a process restart between initiation and approval on another node', async () => {
+    const [guardian] = addGuardians(USER_ID, 1);
+    const created = await initiateRecovery(USER_ID, 'social', '10.0.0.1');
+
+    // Simulate a redeploy: the module graph is discarded and rebuilt, so any
+    // module-level Map would be empty. Only the shared database survives.
+    vi.resetModules();
+    const nodeB = await import('./recoveryWorkflow.js');
+    expect(nodeB).not.toBe(workflow);
+
+    const seenByB = await nodeB.getRequest(created.id);
+    expect(seenByB).toMatchObject({ id: created.id, userId: USER_ID, status: 'pending', method: 'social' });
+
+    // The guardian's approval token was emailed by node A; node B must accept it.
+    const approved = await nodeB.addApproval(created.id, guardian.id, tokenFor(guardian));
+    expect(approved.approvals).toEqual([guardian.id]);
+    expect(db.requests.get(created.id).status).toBe('approved');
+
+    // Node A observes the approval recorded by node B.
+    expect((await getRequest(created.id)).approvals).toEqual([guardian.id]);
+  });
+
+  it('matures the 24h time-lock across restarts without losing state', async () => {
+    const created = await initiateRecovery(USER_ID, 'phrase', '10.0.0.1', { newPublicKey: NEW_KEY });
+    await recordAttempt(created.id, true);
+
+    vi.resetModules();
+    const nodeB = await import('./recoveryWorkflow.js');
+
+    // Time-lock still active on the fresh node.
+    await expect(nodeB.completeRecovery(created.id)).rejects.toThrow('Time-lock active');
+    expect(rotateRecoveredAccountSigner).not.toHaveBeenCalled();
+
+    // 24 hours later the persisted executeAfter has matured.
+    elapseTimeLock(created.id);
+    const done = await nodeB.completeRecovery(created.id);
+    expect(done).toMatchObject({ status: 'completed', newPublicKey: NEW_KEY });
+    expect(db.users.get(USER_ID).publicKey).toBe(NEW_KEY);
+  });
+
+  it('reads and writes recovery state exclusively through prisma, never a Map', async () => {
+    const { id } = await initiateRecovery(USER_ID, 'phrase', '10.0.0.1');
+    expect(prisma.recoveryRequest.create).toHaveBeenCalledTimes(1);
+    expect(prisma.recoveryRequest.findFirst).toHaveBeenCalled();
+
+    await recordAttempt(id, true);
+    expect(prisma.recoveryRequest.updateMany).toHaveBeenCalled();
+
+    await getRequest(id);
+    expect(prisma.recoveryRequest.findUnique).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id } }),
+    );
+
+    await cancelRecovery(id, USER_ID);
+    expect(prisma.recoveryRequest.update).toHaveBeenCalled();
+
+    const source = fs.readFileSync(new URL('./recoveryWorkflow.js', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/new Map\(\)/);
+    expect(source).not.toMatch(/recoveryRequests|userRequests/);
+  });
 });
 
 // ── #1388 Guardian approval tokens ────────────────────────────────────────────

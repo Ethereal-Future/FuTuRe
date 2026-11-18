@@ -15,7 +15,6 @@ import {
   revokeAllSessions,
   SessionDeviceMismatchError,
 } from '../auth/sessionStore.js';
-import { getMobileSession } from './redisStore.js';
 
 export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 
@@ -57,9 +56,13 @@ class MobileSessions {
     return session.id;
   }
 
-  /** Redis read-through with a PostgreSQL fallback, so a Redis outage never logs users out (#1385). */
+  /**
+   * Read a session straight from the unified Prisma store. There is no
+   * separate Redis-only session state anymore (#1381), so a Redis outage
+   * can never log users out (#1385).
+   */
   async get(sessionId) {
-    const session = await getMobileSession(sessionId);
+    const session = await getActiveSessionForDevice(sessionId);
     return session ? toMobileSession(session) : null;
   }
 

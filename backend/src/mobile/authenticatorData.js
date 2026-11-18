@@ -17,6 +17,27 @@ export const FLAG_BACKUP_STATE = 0x10;
 export const FLAG_ATTESTED_CREDENTIAL_DATA = 0x40;
 export const FLAG_EXTENSION_DATA = 0x80;
 
+/**
+ * Strict W3C WebAuthn Level 3 §7.2 flag validation for authentication
+ * assertions (issue #1380). User Presence is always mandatory; User
+ * Verification is mandatory on biometric-gated flows.
+ *
+ * @param {ReturnType<typeof parseAuthenticatorData>} parsed
+ * @param {{ requireBiometrics?: boolean }} [options]
+ * @returns {ReturnType<typeof parseAuthenticatorData>}
+ */
+export function assertAuthenticatorFlags(parsed, { requireBiometrics = false } = {}) {
+  if (!parsed.userPresence) {
+    throw new Error('WebAuthn: User Presence flag not set');
+  }
+  if (requireBiometrics && !parsed.userVerification) {
+    throw new Error(
+      'WebAuthn: User Verification flag not set (biometric confirmation required)',
+    );
+  }
+  return parsed;
+}
+
 const MIN_LENGTH = 37;
 
 /**
@@ -25,7 +46,7 @@ const MIN_LENGTH = 37;
  *   rpIdHash: Buffer, flags: number, userPresence: boolean, userVerification: boolean,
  *   backupEligible: boolean, backupState: boolean, attestedCredentialData: boolean,
  *   extensionData: boolean, signCount: number, aaguid?: Buffer, credentialId?: Buffer,
- *   credentialPublicKey?: Buffer, raw: Buffer
+ *   credentialPublicKey?: Buffer, extensions?: Buffer, raw: Buffer
  * }}
  */
 export function parseAuthenticatorData(input) {
@@ -62,6 +83,16 @@ export function parseAuthenticatorData(input) {
     }
     parsed.credentialId = buf.subarray(55, credentialIdEnd);
     parsed.credentialPublicKey = buf.subarray(credentialIdEnd);
+  }
+
+  if (parsed.extensionData) {
+    const extensionsStart = parsed.attestedCredentialData
+      ? 55 + parsed.credentialId.length + parsed.credentialPublicKey.length
+      : MIN_LENGTH;
+    if (buf.length <= extensionsStart) {
+      throw new Error('authenticatorData flags ED but extension data is truncated');
+    }
+    parsed.extensions = buf.subarray(extensionsStart);
   }
 
   return parsed;
