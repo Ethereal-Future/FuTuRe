@@ -6,8 +6,8 @@
     "node": ">=20 <21"
   },
   "scripts": {
-    "dev": "node init && vite",
-    "build": "node init && vite build",
+    "dev": "vite",
+    "build": "vite build",
     "analyze": "vite build && open stats.html",
     "preview": "vite preview",
     "test": "vitest run",
@@ -17,7 +17,7 @@
     "format": "prettier --write \"src/**/*.{js,jsx,ts,tsx}\"",
     "format:check": "prettier --check \"src/**/*.{js,jsx,ts,tsx}\"",
     "storybook": "storybook dev -p 6006",
-    "build-storybook": "node init && storybook build"
+    "build-storybook": "storybook build"
   },
   "dependencies": {
     "@sentry/react": "^8.3.0",
