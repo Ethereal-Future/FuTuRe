@@ -5,9 +5,16 @@ import { getRate } from '../../services/exchangeRate.js';
 import { createQuote, getValidQuote, consumeQuote } from '../../services/conversionQuote.js';
 import { sendPathPayment } from '../../services/pathPayment.js';
 import { validate, rules } from '../../middleware/validate.js';
+import { getIssuer } from '../../config/assets.js';
 import logger from '../../config/logger.js';
 
 const router = express.Router({ mergeParams: true });
+
+// Horizon requires the issuer public key for every non-native asset in a path
+// payment; resolve it from the supported assets configuration (ISSUE-229).
+function toAssetSpec(code) {
+  return code === 'XLM' ? { code } : { code, issuer: getIssuer(code) };
+}
 
 function logError(req, error, context = {}) {
   logger.error('route.error', {
@@ -99,9 +106,9 @@ router.post(
       const result = await sendPathPayment({
         sourceSecret,
         destination: recipient,
-        sendAsset: { code: quote.from },
+        sendAsset: toAssetSpec(quote.from),
         sendAmount: quote.amount,
-        destAsset: { code: quote.to },
+        destAsset: toAssetSpec(quote.to),
         minDestAmount: quote.converted,
       });
 
