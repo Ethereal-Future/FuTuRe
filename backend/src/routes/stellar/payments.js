@@ -13,6 +13,31 @@ import prisma from '../../db/client.js';
 
 const router = express.Router();
 
+// Horizon ledger ingestion can lag transaction submission by a few seconds.
+// Retry the balance read until the payment transaction is visible at the
+// confirming ledger, so broadcasts never show stale pre-payment balances.
+const BALANCE_CONFIRMATION_ATTEMPTS = 3;
+const BALANCE_CONFIRMATION_DELAY_MS = 1000;
+
+async function getConfirmedBalance(publicKey, txHash, ledger) {
+  let balance;
+  for (let attempt = 0; attempt < BALANCE_CONFIRMATION_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await new Promise((resolve) => setTimeout(resolve, BALANCE_CONFIRMATION_DELAY_MS * attempt));
+    }
+    balance = await StellarService.getBalance(publicKey);
+    if (!txHash || typeof StellarService.getTransactionByHash !== 'function') break;
+    try {
+      const tx = await StellarService.getTransactionByHash(txHash);
+      const txLedger = Number(tx?.ledger_attr ?? tx?.ledger);
+      if (Number.isFinite(txLedger) && (!ledger || txLedger >= Number(ledger))) break;
+    } catch (_) {
+      // Transaction not ingested yet — retry after a short delay.
+    }
+  }
+  return balance;
+}
+
 function logError(req, error, context = {}) {
   logger.error('route.error', {
     requestId: req.id,
@@ -133,7 +158,7 @@ router.post('/send', paymentRateLimiter, rules.sendPayment, validate, async (req
     };
 
     // Notify sender's updated balance + tx notification
-    const senderBalance = await StellarService.getBalance(senderKey);
+    const senderBalance = await getConfirmedBalance(senderKey, result.hash, result.ledger);
     broadcastToAccount(senderKey, {
       ...notification,
       direction: 'sent',
@@ -152,17 +177,18 @@ router.post('/send', paymentRateLimiter, rules.sendPayment, validate, async (req
 
     // Notify recipient of incoming tx + updated balance
     try {
-      const recipientBalance = await StellarService.getBalance(destination);
+      const recipientBalance = await getConfirmedBalance(destination, result.hash, result.ledger);
       broadcastToAccount(destination, {
         ...notification,
         direction: 'received',
         balance: recipientBalance.balances,
       });
-      dispatchEvent(destination, 'payment_received', {
+      await dispatchEvent(destination, 'payment_received', {
         hash: result.hash,
         amount,
         assetCode: assetCode || 'XLM',
         source: senderKey,
+        ledger: result.ledger,
       });
       const pushSub = getSubscriptionByPublicKey(destination);
       if (pushSub) {
