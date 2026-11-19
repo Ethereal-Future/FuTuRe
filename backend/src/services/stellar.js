@@ -596,7 +596,7 @@ export async function sendPayment(
         }
 
         const transaction = txBuilder.setTimeout(30).build();
-        sequenceManager.markBuilt(sourcePublicKey, sourceAccount, sourceBalances);
+        await sequenceManager.markBuilt(sourcePublicKey, sourceAccount, sourceBalances);
         transaction.sign(sourceKeypair);
 
         let txToSubmit = transaction;
