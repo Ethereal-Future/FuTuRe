@@ -4,7 +4,7 @@ import * as StellarSdk from '@stellar/stellar-sdk';
 import { horizonServer, getNetworkPassphrase } from '../config/stellar.js';
 import logger from '../config/logger.js';
 
-const XLM_ASSET = new StellarSdk.Asset.native();
+const XLM_ASSET = StellarSdk.Asset.native();
 
 function getAsset(code) {
   if (code === 'XLM') {
