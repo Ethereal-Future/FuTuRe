@@ -1,4 +1,40 @@
 import { randomUUID } from 'crypto';
+import logger from '../config/logger.js';
+
+// Push provider responses that mean a device token will never work again
+// (issue #1384). Such tokens are pruned from `UserDevice` after a broadcast.
+export const FCM_EXPIRED_TOKEN_CODES = new Set([
+  'messaging/registration-token-not-registered',
+  'messaging/invalid-argument',
+]);
+export const APNS_UNREGISTERED_STATUS = 410;
+const FCM_MULTICAST_LIMIT = 500;
+
+// Loaded lazily so the engine can be constructed (e.g. in unit tests)
+// without a configured database connection.
+async function loadPrisma() {
+  const { default: prisma } = await import('../db/client.js');
+  return prisma;
+}
+
+function chunk(items, size) {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+function isApnsPlatform(platform) {
+  return ['ios', 'apns'].includes(String(platform ?? '').toLowerCase());
+}
+
+/** Short, non-reversible token label for logs — never log full push tokens. */
+function tokenLabel(token) {
+  return `${String(token).slice(0, 8)}…`;
+}
+
+function toFcmData(data = {}) {
+  return Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v)]));
+}
 
 function hashToBucket(input) {
   let hash = 0;
@@ -17,7 +53,16 @@ function renderTemplate(template, payload) {
 }
 
 class NotificationEngine {
-  constructor() {
+  /**
+   * @param {{ fcm?: object, apns?: object, db?: object }} [options]
+   *   `fcm` is a Firebase Admin `messaging()` instance (uses `sendEachForMulticast`);
+   *   `apns` exposes `send(token, payload)` resolving to the HTTP/2 `{ status, reason }`;
+   *   `db` defaults to the shared Prisma client.
+   */
+  constructor({ fcm = null, apns = null, db = null } = {}) {
+    this.fcm = fcm;
+    this.apns = apns;
+    this.db = db;
     this.templates = new Map();
     this.userProfiles = new Map();
     this.userConsent = new Map();
@@ -200,6 +245,164 @@ class NotificationEngine {
     this.performance.minMs = Math.min(this.performance.minMs, elapsed);
 
     return { delivered: true, delivery };
+  }
+
+  /** Wire in real push providers (Firebase Admin messaging, APNS HTTP/2 client). */
+  configurePushTransports({ fcm, apns } = {}) {
+    if (fcm !== undefined) this.fcm = fcm;
+    if (apns !== undefined) this.apns = apns;
+  }
+
+  async getDb() {
+    if (!this.db) this.db = await loadPrisma();
+    return this.db;
+  }
+
+  /** Persist (or move) a push token for a user's device. */
+  async registerPushToken(userId, deviceId, token, platform) {
+    if (!userId || !deviceId || !token) throw new Error('userId, deviceId and token are required');
+    const db = await this.getDb();
+    return db.userDevice.upsert({
+      where: { token },
+      create: { userId, deviceId, token, platform },
+      update: { userId, deviceId, platform },
+    });
+  }
+
+  /** Broadcast a push to every registered device of `userIds`, pruning dead tokens. */
+  async broadcastPush(userIds, payload) {
+    const db = await this.getDb();
+    const devices = await db.userDevice.findMany({
+      where: { userId: { in: userIds } },
+      select: { token: true, platform: true },
+    });
+    return this.sendPushBatch(devices, payload);
+  }
+
+  /**
+   * Deliver one push payload to many devices over FCM (multicast) and APNS.
+   * A failure for one token never stops delivery to the others. Tokens the
+   * providers report as expired / unregistered are removed from the database
+   * in a single batch query afterwards (issue #1384).
+   *
+   * @param {Array<{ token: string, platform: string }>} devices
+   * @param {{ title: string, body: string, data?: object }} payload
+   * @returns {Promise<{ successCount: number, failureCount: number, prunedTokens: string[],
+   *   failures: Array<{ token: string, provider: string, code: string }> }>}
+   */
+  async sendPushBatch(devices, payload) {
+    const apnsTokens = [];
+    const fcmTokens = [];
+    for (const device of devices ?? []) {
+      if (!device?.token) continue;
+      (isApnsPlatform(device.platform) ? apnsTokens : fcmTokens).push(device.token);
+    }
+
+    const summary = { successCount: 0, failureCount: 0, prunedTokens: [], failures: [] };
+    const expiredTokens = new Set();
+    const fail = (token, provider, code, expired) => {
+      summary.failureCount += 1;
+      summary.failures.push({ token, provider, code });
+      if (expired) expiredTokens.add(token);
+    };
+
+    await Promise.all([
+      this.sendFcm(fcmTokens, payload, summary, fail),
+      this.sendApns(apnsTokens, payload, summary, fail),
+    ]);
+
+    if (summary.failures.length > 0) {
+      logger.warn('push.delivery.failures', {
+        failureCount: summary.failureCount,
+        failures: summary.failures.map((f) => ({ ...f, token: tokenLabel(f.token) })),
+      });
+    }
+
+    summary.prunedTokens = await this.pruneExpiredTokens([...expiredTokens]);
+    return summary;
+  }
+
+  async sendFcm(tokens, payload, summary, fail) {
+    if (tokens.length === 0) return;
+    if (!this.fcm) {
+      tokens.forEach((token) => fail(token, 'fcm', 'transport/not-configured', false));
+      return;
+    }
+    for (const batch of chunk(tokens, FCM_MULTICAST_LIMIT)) {
+      let response;
+      try {
+        response = await this.fcm.sendEachForMulticast({
+          tokens: batch,
+          notification: { title: payload.title, body: payload.body },
+          data: toFcmData(payload.data),
+        });
+      } catch (err) {
+        // Whole-batch transport failure: nothing here says the tokens are dead.
+        batch.forEach((token) => fail(token, 'fcm', err?.code ?? 'transport/error', false));
+        continue;
+      }
+      // Firebase returns `responses` in the same order as `tokens`.
+      batch.forEach((token, i) => {
+        const result = response?.responses?.[i];
+        if (result?.success) {
+          summary.successCount += 1;
+          return;
+        }
+        const code = result?.error?.code ?? 'unknown';
+        fail(token, 'fcm', code, FCM_EXPIRED_TOKEN_CODES.has(code));
+      });
+    }
+  }
+
+  async sendApns(tokens, payload, summary, fail) {
+    if (tokens.length === 0) return;
+    if (!this.apns) {
+      tokens.forEach((token) => fail(token, 'apns', 'transport/not-configured', false));
+      return;
+    }
+    const aps = { alert: { title: payload.title, body: payload.body } };
+    const results = await Promise.allSettled(
+      tokens.map((token) => this.apns.send(token, { aps, ...(payload.data ?? {}) })),
+    );
+    results.forEach((result, i) => {
+      const token = tokens[i];
+      // Clients may resolve with the HTTP/2 response or reject with an error carrying it.
+      const res = result.status === 'fulfilled' ? result.value : result.reason;
+      const status = Number(res?.status ?? res?.statusCode);
+      if (result.status === 'fulfilled' && (!status || (status >= 200 && status < 300))) {
+        summary.successCount += 1;
+        return;
+      }
+      const reason = res?.reason ?? res?.body?.reason ?? res?.message ?? 'unknown';
+      const code = status ? `${status} ${reason}` : reason;
+      fail(token, 'apns', code, status === APNS_UNREGISTERED_STATUS);
+    });
+  }
+
+  /**
+   * Remove expired device tokens in one query. Errors are logged rather
+   * than thrown so pruning can never fail a delivery that already happened.
+   *
+   * @param {string[]} expiredTokens
+   * @returns {Promise<string[]>} The tokens that were pruned.
+   */
+  async pruneExpiredTokens(expiredTokens) {
+    if (!expiredTokens?.length) return [];
+    try {
+      const db = await this.getDb();
+      const { count } = await db.userDevice.deleteMany({ where: { token: { in: expiredTokens } } });
+      logger.info('push.tokens.pruned', {
+        count,
+        tokens: expiredTokens.map(tokenLabel),
+      });
+      return expiredTokens;
+    } catch (err) {
+      logger.error('push.tokens.pruneFailed', {
+        error: err?.message,
+        tokens: expiredTokens.map(tokenLabel),
+      });
+      return [];
+    }
   }
 
   trackInteraction(deliveryId, type) {

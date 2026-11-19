@@ -4,6 +4,8 @@
  * Automated security scanning using OWASP ZAP
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { spawn } from 'child_process';
 import fs from 'fs/promises';
 import path from 'path';

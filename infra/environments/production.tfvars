@@ -7,8 +7,8 @@
 environment = "production"
 
 # ── ECS ───────────────────────────────────────────────────────────────────────
-backend_cpu           = 512
-backend_memory        = 1024
+backend_cpu           = 1024
+backend_memory        = 2048
 backend_desired_count = 2
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
@@ -18,4 +18,5 @@ db_backup_retention_days = 7
 
 # ── ElastiCache ───────────────────────────────────────────────────────────────
 redis_node_type       = "cache.t4g.small"
-redis_num_cache_nodes = 1
+# Primary + 2 replicas spread across AZs (Multi-AZ automatic failover).
+redis_num_cache_nodes = 3

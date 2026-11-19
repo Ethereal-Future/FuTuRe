@@ -2,8 +2,13 @@ import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { simulateAccountMerge, stroopsToXLM } from '../utils/accountMergeSimulation.js';
 import { formatAssetAmount } from '../utils/formatAmount';
+import { isValidStellarAddress } from '../utils/validateStellarAddress';
 
-const STELLAR_PUBLIC_KEY = /^G[A-Z2-7]{55}$/;
+export const MERGE_CONFIRM_WORD = 'MERGE';
+// Number of trailing destination characters the user must re-type.
+const ADDRESS_CHECK_LENGTH = 6;
+const IRREVERSIBLE_WARNING =
+  'This action is permanent and cannot be undone. Your current account will be permanently deleted from the Stellar ledger.';
 
 const STEP_WARN = 'warn';
 const STEP_DEST = 'dest';
@@ -21,9 +26,15 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
   const [simulationResult, setSimulationResult] = useState(null);
   const [simLoading, setSimLoading] = useState(false);
   const [understoodRisks, setUnderstoodRisks] = useState(false);
+  const [addressCheck, setAddressCheck] = useState('');
 
-  const isValidDestination = STELLAR_PUBLIC_KEY.test(destination);
-  const isConfirmed = confirmText.toUpperCase() === 'MERGE';
+  // Full StrKey validation (base32 + CRC16 checksum), not just a shape regex.
+  const isValidDestination = isValidStellarAddress(destination);
+  const isSelfMerge = destination === sourcePublicKey;
+  const destinationSuffix = destination.slice(-ADDRESS_CHECK_LENGTH);
+  const isAddressChecked = addressCheck.trim().toUpperCase() === destinationSuffix;
+  // Exact, case-sensitive match required.
+  const isConfirmed = confirmText === MERGE_CONFIRM_WORD && isAddressChecked;
   const isPasswordValid = password.length >= 1;
 
   const handleNext = async () => {
@@ -32,7 +43,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
         setStep(STEP_DEST);
         break;
       case STEP_DEST:
-        if (isValidDestination) {
+        if (isValidDestination && !isSelfMerge) {
           await runSimulation();
         }
         break;
@@ -58,6 +69,8 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
       const result = await simulateAccountMerge(sourcePublicKey, destination);
       setSimulationResult(result);
       setUnderstoodRisks(false);
+      setConfirmText('');
+      setAddressCheck('');
       setStep(STEP_SIMULATE);
     } catch (err) {
       setError(err?.message || 'Failed to simulate account merge');
@@ -74,7 +87,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
   };
 
   const handleMerge = async () => {
-    if (!isValidDestination || !isConfirmed || !isPasswordValid) return;
+    if (!isValidDestination || isSelfMerge || !simulationResult?.valid || !isConfirmed || !isPasswordValid) return;
 
     setLoading(true);
     setError(null);
@@ -112,7 +125,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
       <div className="replay-modal" style={{ maxWidth: 520, width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <h2 id="merge-title" style={{ margin: 0, color: '#dc2626' }}>
-            ⚠️ Merge Account (Step {stepNumber}/4)
+            ⚠️ Merge Account (Step {stepNumber}/5)
           </h2>
           <button type="button" className="qr-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
@@ -132,6 +145,9 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
             >
               <p style={{ margin: 0, fontWeight: 600, color: '#dc2626', marginBottom: 12, fontSize: '1rem' }}>
                 ⚠️ CRITICAL WARNING: This action is IRREVERSIBLE
+              </p>
+              <p style={{ margin: '0 0 12px', fontWeight: 600, color: '#991b1b' }}>
+                {IRREVERSIBLE_WARNING}
               </p>
               <ul style={{ margin: 0, paddingLeft: 20, color: '#991b1b', lineHeight: 1.6 }}>
                 <li><strong>All funds will be transferred</strong> to the destination account</li>
@@ -168,13 +184,18 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
               }}
             />
             {destination && !isValidDestination && (
-              <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                Invalid Stellar public key format
+              <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                Invalid Stellar public key (format or checksum mismatch)
               </p>
             )}
-            {destination && isValidDestination && (
+            {destination && isValidDestination && isSelfMerge && (
+              <p role="alert" style={{ color: '#dc2626', fontSize: '0.85rem', margin: '4px 0 0' }}>
+                Destination must be different from the account being merged
+              </p>
+            )}
+            {destination && isValidDestination && !isSelfMerge && (
               <p style={{ color: '#16a34a', fontSize: '0.85rem', margin: '4px 0 0' }}>
-                ✓ Valid public key
+                ✓ Valid public key checksum — on-chain existence will be verified next
               </p>
             )}
           </div>
@@ -183,6 +204,11 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
         {/* Step 3: Merge Simulation */}
         {step === STEP_SIMULATE && simulationResult && (
           <div style={{ marginBottom: 20 }}>
+            {simulationResult.error && (
+              <p role="alert" style={{ color: '#dc2626', marginBottom: 16, fontWeight: 500 }}>
+                Could not verify merge: {simulationResult.error}
+              </p>
+            )}
             {simulationResult.blockedReasons.length > 0 && (
               <div
                 style={{
@@ -280,22 +306,58 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
           </div>
         )}
 
-        {/* Step 4: Type "MERGE" */}
+        {/* Step 4: Type "MERGE" + confirm destination */}
         {step === STEP_CONFIRM && (
           <div style={{ marginBottom: 20 }}>
             <div
+              role="alert"
               style={{
                 background: '#fee2e2',
-                border: '1px solid #fca5a5',
+                border: '2px solid #dc2626',
                 borderRadius: 8,
                 padding: 12,
                 marginBottom: 16,
               }}
             >
+              <p style={{ margin: '0 0 8px', fontSize: '0.95rem', color: '#991b1b', fontWeight: 700 }}>
+                🚨 {IRREVERSIBLE_WARNING}
+              </p>
               <p style={{ margin: 0, fontSize: '0.9rem', color: '#991b1b' }}>
-                🚨 Type <strong>"MERGE"</strong> to confirm you understand this is irreversible
+                Type <strong>"{MERGE_CONFIRM_WORD}"</strong> and the last {ADDRESS_CHECK_LENGTH} characters of the
+                destination address to continue.
               </p>
             </div>
+            <p style={{ fontSize: '0.85rem', margin: '0 0 4px', fontWeight: 600 }}>Destination</p>
+            <p
+              data-testid="merge-destination"
+              style={{ fontFamily: 'monospace', fontSize: '0.8rem', wordBreak: 'break-all', margin: '0 0 12px' }}
+            >
+              {destination.slice(0, -ADDRESS_CHECK_LENGTH)}
+              <strong style={{ color: '#dc2626' }}>{destinationSuffix}</strong>
+            </p>
+            <label htmlFor="address-check" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
+              Last {ADDRESS_CHECK_LENGTH} characters of destination
+            </label>
+            <input
+              id="address-check"
+              type="text"
+              value={addressCheck}
+              onChange={e => setAddressCheck(e.target.value)}
+              maxLength={ADDRESS_CHECK_LENGTH}
+              autoComplete="off"
+              spellCheck={false}
+              style={{
+                fontFamily: 'monospace',
+                borderColor: addressCheck && !isAddressChecked ? '#dc2626' : undefined,
+                width: '100%',
+                marginBottom: 12,
+              }}
+            />
+            {addressCheck.length === ADDRESS_CHECK_LENGTH && !isAddressChecked && (
+              <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '-8px 0 12px' }}>
+                Does not match the destination address
+              </p>
+            )}
             <label htmlFor="confirm" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
               Confirmation (type "MERGE")
             </label>
@@ -304,14 +366,14 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
               type="text"
               value={confirmText}
               onChange={e => setConfirmText(e.target.value)}
-              placeholder="MERGE"
-              autoFocus
+              placeholder={MERGE_CONFIRM_WORD}
+              autoComplete="off"
               style={{
-                borderColor: confirmText && !isConfirmed ? '#dc2626' : undefined,
+                borderColor: confirmText && confirmText !== MERGE_CONFIRM_WORD ? '#dc2626' : undefined,
                 width: '100%',
               }}
             />
-            {confirmText && !isConfirmed && (
+            {confirmText && confirmText !== MERGE_CONFIRM_WORD && (
               <p style={{ color: '#dc2626', fontSize: '0.85rem', margin: '4px 0 0' }}>
                 Must type exactly "MERGE"
               </p>
@@ -383,7 +445,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
               type="button"
               onClick={handleNext}
               disabled={
-                (step === STEP_DEST && (!isValidDestination || simLoading)) ||
+                (step === STEP_DEST && (!isValidDestination || isSelfMerge || simLoading)) ||
                 (step === STEP_SIMULATE && (!understoodRisks || !simulationResult?.valid)) ||
                 (step === STEP_CONFIRM && !isConfirmed)
               }

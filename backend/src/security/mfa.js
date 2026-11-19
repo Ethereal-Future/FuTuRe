@@ -5,6 +5,15 @@ import prisma from '../db/client.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 import logger from '../config/logger.js';
 
+export class CryptographicError extends Error {
+  constructor(message, options = {}) {
+    super(message);
+    this.name = 'CryptographicError';
+    this.code = 'MFA_DECRYPTION_FAILED';
+    if (options.cause) this.cause = options.cause;
+  }
+}
+
 class MFAManager {
   constructor() {
     // Removed in-memory storage - now using database
@@ -25,8 +34,14 @@ class MFAManager {
     try {
       return decryptFromEnvValue(value, this.getEncryptionKey());
     } catch (err) {
-      logger.error({ err }, 'Failed to decrypt MFA field');
-      return value; // return as-is if decryption fails
+      logger.error(
+        { err, severity: 'CRITICAL' },
+        'CRITICAL SECURITY ALERT: Failed to decrypt MFA field - the encryption key does not match stored records'
+      );
+      throw new CryptographicError(
+        'Failed to decrypt MFA field: encryption key does not match stored records',
+        { cause: err }
+      );
     }
   }
 
@@ -73,7 +88,19 @@ class MFAManager {
     );
 
     // Encrypt and store secret in database
-    const encryptedSecret = this.encryptField(secret);
+    let encryptedSecret;
+    try {
+      encryptedSecret = this.encryptField(secret);
+    } catch (err) {
+      logger.error(
+        { err, userId, severity: 'CRITICAL' },
+        'CRITICAL SECURITY ALERT: Failed to encrypt MFA secret during enableMFA'
+      );
+      throw new CryptographicError(
+        'Failed to encrypt MFA secret: encryption key is invalid or unavailable',
+        { cause: err }
+      );
+    }
     
     await prisma.mFASettings.upsert({
       where: { userId },
@@ -106,8 +133,18 @@ class MFAManager {
       if (!mfaSettings || !mfaSettings.secret) {
         throw new Error('MFA not enabled for this user');
       }
-      
-      secretToVerify = this.decryptField(mfaSettings.secret);
+
+      try {
+        secretToVerify = this.decryptField(mfaSettings.secret);
+      } catch (err) {
+        if (err instanceof CryptographicError) {
+          logger.error(
+            { err, userId, severity: 'CRITICAL' },
+            'CRITICAL SECURITY ALERT: MFA secret decryption failed during TOTP verification - encryption key does not match stored records'
+          );
+        }
+        throw err;
+      }
     }
 
     const verified = speakeasy.totp.verify({
@@ -175,8 +212,18 @@ class MFAManager {
     if (!mfaSettings || !mfaSettings.secret) {
       return null;
     }
-    
-    return this.decryptField(mfaSettings.secret);
+
+    try {
+      return this.decryptField(mfaSettings.secret);
+    } catch (err) {
+      if (err instanceof CryptographicError) {
+        logger.error(
+          { err, userId, severity: 'CRITICAL' },
+          'CRITICAL SECURITY ALERT: MFA secret decryption failed in getMFASecret - encryption key does not match stored records'
+        );
+      }
+      throw err;
+    }
   }
 }
 

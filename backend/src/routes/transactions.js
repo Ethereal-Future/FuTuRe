@@ -4,7 +4,6 @@ import { validate, rules } from '../middleware/validate.js';
 import { broadcastToAccount } from '../services/websocket.js';
 import { requireAuth, requireOwnAccount } from '../middleware/auth.js';
 import logger from '../config/logger.js';
-import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
 

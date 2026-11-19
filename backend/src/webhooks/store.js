@@ -1,12 +1,48 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'crypto';
 import prisma from '../db/client.js';
 import logger from '../config/logger.js';
+import { encrypt, decrypt } from '../db/encryption.js';
 
 /**
  * Maximum number of webhooks a single account may register at once.
  * Enforced at registration time to prevent unbounded row growth.
  */
 export const MAX_WEBHOOKS_PER_ACCOUNT = 20;
+
+/**
+ * Key used to encrypt webhook signing secrets at rest.
+ * Falls back to the generic encryption key when a dedicated webhook key is
+ * not configured.
+ */
+const WEBHOOK_SECRET_KEY = process.env.WEBHOOK_SECRET_KEY || process.env.ENCRYPTION_KEY;
+
+/**
+ * Encrypt a plaintext signing secret for storage.
+ *
+ * @param {string} secret
+ * @returns {string} ciphertext
+ */
+function encryptSecret(secret) {
+  return encrypt(secret, WEBHOOK_SECRET_KEY);
+}
+
+/**
+ * Decrypt a stored signing secret.  Tolerates legacy plaintext values so that
+ * rows written before encryption was introduced keep working until the
+ * migration backfills them.
+ *
+ * @param {string} stored
+ * @returns {string} plaintext secret
+ */
+function decryptSecret(stored) {
+  if (!stored) return stored;
+  try {
+    return decrypt(stored, WEBHOOK_SECRET_KEY);
+  } catch {
+    // Not ciphertext (legacy plaintext row) — return as-is.
+    return stored;
+  }
+}
 
 // ---------------------------------------------------------------------------
 // CRUD
@@ -38,17 +74,18 @@ export async function registerWebhook({ url, accountId, events, secret }) {
       accountId,
       url,
       events: resolvedEvents,
-      signingSecret,
+      signingSecret: encryptSecret(signingSecret),
       previousSecrets: [],
     },
   });
 
+  // Return the plaintext secret to the caller exactly once, at creation time.
   return {
     id: webhook.id,
     url: webhook.url,
     accountId: webhook.accountId,
     events: webhook.events,
-    signingSecret: webhook.signingSecret,
+    signingSecret,
   };
 }
 
@@ -147,12 +184,12 @@ export async function verifyWebhookSignature(webhookId, signature, payload) {
     }
   };
 
-  // Check current secret.
-  if (safeEqual(signature, signPayload(webhook.signingSecret, payload))) return true;
+  // Check current secret (decrypted in-memory only).
+  if (safeEqual(signature, signPayload(decryptSecret(webhook.signingSecret), payload))) return true;
 
   // Check previous secrets (rotation grace period — up to 2 kept).
   for (const oldSecret of webhook.previousSecrets) {
-    if (safeEqual(signature, signPayload(oldSecret, payload))) return true;
+    if (safeEqual(signature, signPayload(decryptSecret(oldSecret), payload))) return true;
   }
 
   return false;
@@ -182,7 +219,7 @@ export async function rotateWebhookSecret(webhookId) {
   await prisma.webhook.update({
     where: { id: webhookId },
     data: {
-      signingSecret: newSecret,
+      signingSecret: encryptSecret(newSecret),
       previousSecrets,
       lastRotatedAt: new Date(),
     },

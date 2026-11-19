@@ -20,6 +20,12 @@ function setAccessToken(token) {
   }
 }
 
+function clearAccessToken() {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(ACCESS_TOKEN_KEY);
+  }
+}
+
 function getCorrelationId() {
   if (typeof window === 'undefined') return null;
   return sessionStorage.getItem(CORRELATION_ID_KEY) || null;
@@ -126,6 +132,12 @@ apiClient.interceptors.response.use(
         }
         return apiClient(originalRequest);
       } catch (refreshError) {
+        // The refresh token is invalid or expired — clear the stale access
+        // token from storage and notify the app so it can redirect to login.
+        clearAccessToken();
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:logout'));
+        }
         return Promise.reject(normalizeAxiosError(refreshError));
       }
     }

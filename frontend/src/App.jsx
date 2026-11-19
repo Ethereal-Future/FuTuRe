@@ -1,13 +1,11 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import apiClient from './api/client.js';
-import { getKycStatus } from './api/compliance.js';
 import {
   createAccount as createStellarAccount,
   importAccount as importStellarAccount,
   getAccount,
   getAccountLabel,
-  updateAccountLabel,
   sendPayment as sendStellarPayment,
   createTrustline,
   batchPayment,
@@ -24,6 +22,11 @@ import { useMessages } from './hooks/useMessages';
 import { usePWA } from './hooks/usePWA';
 import { useOfflineQueue } from './hooks/useOfflineQueue';
 import { useRTL } from './hooks/useRTL';
+import { useUIState } from './hooks/useUIState';
+import { useAccountLabel } from './hooks/useAccountLabel';
+import { useKycState } from './hooks/useKycState';
+import { useAccountSettings } from './hooks/useAccountSettings';
+import { usePaymentForm } from './hooks/usePaymentForm';
 import { makeVariants, tapScale } from './utils/animations';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { QRCodeModal } from './components/QRCodeModal';
@@ -92,10 +95,6 @@ const AccountSettings = lazy(() =>
 );
 
 const KYC_LARGE_TRANSACTION_LIMIT = 1000;
-// Default XLM amount above which a biometric re-auth is required before
-// ConfirmSendDialog opens. Overridden per-account via account settings
-// (see SettingsPage.jsx's Security section) and by the server default.
-const DEFAULT_BIOMETRIC_REAUTH_THRESHOLD = 100;
 
 function App() {
   if (window.location.pathname === '/admin') {
@@ -118,26 +117,60 @@ function App() {
   } = useAppState();
   const dispatch = useAppDispatch();
 
-  // Local state not in store
-  const [showConfirm, setShowConfirm] = useState(false);
-  const [showBiometricConfirm, setShowBiometricConfirm] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
-  const [confirmClear, setConfirmClear] = useState(false);
-  const [replaySecret, setReplaySecret] = useState('');
-  const [showReplayPrompt, setShowReplayPrompt] = useState(false);
-  const [editingLabel, setEditingLabel] = useState(false);
-  const [labelDraft, setLabelDraft] = useState('');
-  const [showCelebration, setShowCelebration] = useState(false);
-  const [kycStatus, setKycStatus] = useState(null);
-  const [kycLoading, setKycLoading] = useState(false);
-  const [kycError, setKycError] = useState(null);
-  const [showComplianceDashboard, setShowComplianceDashboard] = useState(false);
-  const [showBackupSettings, setShowBackupSettings] = useState(false);
-  const [userRole, setUserRole] = useState(null);
-  const [federationStatus, setFederationStatus] = useState('');
+  // ── UI overlay / modal state ───────────────────────────────────────────────
+  const {
+    showConfirm, setShowConfirm,
+    showBiometricConfirm, setShowBiometricConfirm,
+    showScanner, setShowScanner,
+    showCelebration, setShowCelebration,
+    showComplianceDashboard, setShowComplianceDashboard,
+    showBackupSettings, setShowBackupSettings,
+    showTxLookup, setShowTxLookup,
+    showSettings, setShowSettings,
+    showPaymentConfirmation, setShowPaymentConfirmation,
+    showRecoveryCodeEntry, setShowRecoveryCodeEntry,
+    activeSettingsSection, setActiveSettingsSection,
+    openSettings,
+    closeSettings,
+  } = useUIState();
+
+  // ── Payment form state (confirmClear, trustline, batch, replay, deep-link) ─
+  const {
+    confirmClear,
+    showClearConfirm,
+    hideClearConfirm,
+    trustlineAsset, setTrustlineAsset,
+    trustlineLoading, setTrustlineLoading,
+    batchMode, setBatchMode,
+    batchRecipients, setBatchRecipients,
+    addBatchRecipient: addToBatch,
+    removeBatchRecipient,
+    replaySecret, setReplaySecret,
+    showReplayPrompt, setShowReplayPrompt,
+    deepLinkHash, setDeepLinkHash,
+    recoveryCode, setRecoveryCode,
+  } = usePaymentForm();
+
+  // ── KYC state ──────────────────────────────────────────────────────────────
+  const { kycStatus, kycLoading, kycError, fetchKycStatus } = useKycState({
+    publicKey: account?.publicKey ?? null,
+  });
+
+  // ── Per-account settings (fiat currency, biometric threshold, user role) ──
+  const { fiatCurrency, biometricThreshold, userRole } = useAccountSettings({
+    publicKey: account?.publicKey ?? null,
+  });
+
+  // ── Balance cache metadata ─────────────────────────────────────────────────
   // Timestamp (ms) of the cached balance currently on screen, or null when
   // the displayed balance came from a live Horizon response.
   const [balanceCachedAt, setBalanceCachedAt] = useState(null);
+
+  // ── Federation address resolution status (tightly coupled to recipient field)
+  const [federationStatus, setFederationStatus] = useState('');
+
+  // ── Last WebSocket message (only used for exchange-rate hook trigger) ──────
+  const [lastWsMessage, setLastWsMessage] = useState(null);
 
   const { t } = useTranslation();
   const msg = useMessages();
@@ -152,18 +185,6 @@ function App() {
     enablePush,
   } = usePWA();
   const { queue: queueOffline, dequeue, pendingItems, pendingCount } = useOfflineQueue();
-  const [showTxLookup, setShowTxLookup] = useState(false);
-  const [deepLinkHash, setDeepLinkHash] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
-  const [lastWsMessage, setLastWsMessage] = useState(null);
-  const [activeSettingsSection, setActiveSettingsSection] = useState(null); // null, 'multisig', 'kyc', 'notifications'
-  const [showPaymentConfirmation, setShowPaymentConfirmation] = useState(false);
-  const [trustlineAsset, setTrustlineAsset] = useState(null);
-  const [trustlineLoading, setTrustlineLoading] = useState(false);
-  const [batchMode, setBatchMode] = useState(false);
-  const [batchRecipients, setBatchRecipients] = useState([]);
-  const [showRecoveryCodeEntry, setShowRecoveryCodeEntry] = useState(false);
-  const [recoveryCode, setRecoveryCode] = useState('');
   const { isDark, toggleTheme } = useTheme();
   useRTL();
   const prefersReduced = useReducedMotion();
@@ -187,29 +208,6 @@ function App() {
 
   const wsStatus = useWebSocket(account?.publicKey ?? null, handleWsMessage);
   const { status: networkStatus } = useNetworkStatusQuery();
-
-  // Load user's preferred fiat currency and biometric re-auth threshold from
-  // account settings (defaultAsset, biometricReauthThreshold)
-  const [fiatCurrency, setFiatCurrency] = useState('USD');
-  const [biometricThreshold, setBiometricThreshold] = useState(DEFAULT_BIOMETRIC_REAUTH_THRESHOLD);
-  useEffect(() => {
-    if (!account?.publicKey) return;
-    apiClient
-      .get(`/api/stellar/account/${account.publicKey}/settings`)
-      .then(({ data }) => {
-        const asset = data?.defaultAsset;
-        // Use defaultAsset as fiat currency if it's not a Stellar asset (XLM/USDC/etc.)
-        const STELLAR_ASSETS = new Set(['XLM', 'USDC', 'EURC']);
-        if (asset && !STELLAR_ASSETS.has(asset)) setFiatCurrency(asset);
-        else if (asset === 'EURC') setFiatCurrency('EUR');
-        if (typeof data?.biometricReauthThreshold === 'number') {
-          setBiometricThreshold(data.biometricReauthThreshold);
-        }
-      })
-      .catch(() => {
-        /* use defaults */
-      });
-  }, [account?.publicKey]);
 
   const { rate: xlmFiatRate, loading: rateLoading } = useExchangeRate(lastWsMessage, fiatCurrency);
 
@@ -305,18 +303,16 @@ function App() {
   const resetForm = () => dispatch({ type: A.RESET_FORM });
   const clearForm = () => {
     if (recipient || amount) {
-      setConfirmClear(true);
+      showClearConfirm();
       return;
     }
     resetForm();
   };
   const confirmClearYes = () => {
-    setConfirmClear(false);
+    hideClearConfirm();
     resetForm();
   };
-  const confirmClearNo = () => setConfirmClear(false);
-
-  const replayQueued = async () => {
+  const confirmClearNo = () => hideClearConfirm();
     if (!replaySecret) return;
     setShowReplayPrompt(false);
     let anyFailed = false;
@@ -345,8 +341,8 @@ function App() {
   const loadLabel = useCallback(
     async (publicKey) => {
       try {
-        const accountLabel = await getAccountLabel(publicKey);
-        dispatch({ type: A.SET_LABEL, payload: accountLabel });
+        const label = await getAccountLabel(publicKey);
+        dispatch({ type: A.SET_LABEL, payload: label });
       } catch {
         /* non-critical */
       }
@@ -354,53 +350,20 @@ function App() {
     [dispatch],
   );
 
-  const fetchKycStatus = useCallback(async () => {
-    if (!account?.publicKey) {
-      setKycStatus(null);
-      return;
-    }
-
-    setKycLoading(true);
-    try {
-      const status = await getKycStatus();
-      setKycStatus(status);
-      setKycError(null);
-    } catch (error) {
-      if (error.response?.status === 404) {
-        setKycStatus(null);
-      } else {
-        setKycError(error.response?.data?.error || 'Failed to load KYC status');
-        setKycStatus(null);
-      }
-    } finally {
-      setKycLoading(false);
-    }
-  }, [account?.publicKey]);
-
-  useEffect(() => {
-    fetchKycStatus();
-    // Check if user has admin role from JWT token
-    const token = localStorage.getItem('authToken');
-    if (token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        setUserRole(payload.role);
-      } catch (e) {
-        // Invalid token format
-      }
-    }
-  }, [fetchKycStatus]);
-
-  const saveLabel = async () => {
-    if (!account) return;
-    try {
-      await updateAccountLabel(account.publicKey, labelDraft);
-      dispatch({ type: A.SET_LABEL, payload: labelDraft });
-      setEditingLabel(false);
-    } catch (error) {
-      msg.error('Failed to save label');
-    }
-  };
+  // ── Account label editing (delegated to useAccountLabel hook) ──────────────
+  const {
+    editingLabel,
+    labelDraft,
+    setLabelDraft,
+    startEditing: startEditingLabel,
+    cancelEditing: cancelEditingLabel,
+    saveLabel,
+  } = useAccountLabel({
+    publicKey: account?.publicKey ?? null,
+    currentLabel: accountLabel ?? '',
+    onSave: (newLabel) => dispatch({ type: A.SET_LABEL, payload: newLabel }),
+    onError: (errMsg) => msg.error(errMsg),
+  });
 
   const createAccount = useCallback(async () => {
     dispatch({ type: A.SET_LOADING, payload: 'create' });
@@ -592,8 +555,7 @@ function App() {
           `Large transactions above ${KYC_LARGE_TRANSACTION_LIMIT} XLM require approved KYC.`,
         );
         setShowPaymentConfirmation(false);
-        setActiveSettingsSection('kyc');
-        setShowSettings(true);
+        openSettings('kyc');
       } else if (!navigator.onLine) {
         await queueOffline({
           destination: payload.destination,
@@ -643,13 +605,9 @@ function App() {
 
   const addBatchRecipient = () => {
     if (!recipientValid || !amountValid) return;
-    setBatchRecipients([...batchRecipients, { destination: recipient, amount, assetCode }]);
+    addToBatch({ destination: recipient, amount, assetCode });
     dispatch({ type: A.SET_RECIPIENT, payload: '' });
     dispatch({ type: A.SET_AMOUNT, payload: '' });
-  };
-
-  const removeBatchRecipient = (index) => {
-    setBatchRecipients(batchRecipients.filter((_, i) => i !== index));
   };
 
   const confirmBatchPayment = async () => {
@@ -860,7 +818,7 @@ function App() {
                           onChange={(e) => setLabelDraft(e.target.value.slice(0, 50))}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') saveLabel();
-                            if (e.key === 'Escape') setEditingLabel(false);
+                            if (e.key === 'Escape') cancelEditingLabel();
                           }}
                           placeholder="Add a nickname…"
                           maxLength={50}
@@ -878,7 +836,7 @@ function App() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => setEditingLabel(false)}
+                          onClick={cancelEditingLabel}
                           style={{ fontSize: '0.8rem' }}
                           aria-label="Cancel editing nickname"
                         >
@@ -888,10 +846,7 @@ function App() {
                     ) : (
                       <button
                         type="button"
-                        onClick={() => {
-                          setLabelDraft(accountLabel);
-                          setEditingLabel(true);
-                        }}
+                        onClick={startEditingLabel}
                         style={{
                           fontSize: '0.85rem',
                           background: 'none',

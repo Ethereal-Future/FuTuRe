@@ -2,7 +2,7 @@
  * Web Push sender — RFC 8291 payload encryption + VAPID authentication via
  * the `web-push` package (issue #1123).
  *
- * Subscriptions are stored in memory keyed by userId AND publicKey. This is
+ * Subscriptions are stored in Redis, keyed by userId AND publicKey. This is
  * fine for a single instance; a multi-instance deployment should move this
  * to the same shared store used elsewhere (see `mobile/redisStore.js`).
  *
@@ -12,6 +12,7 @@
  */
 import webpush from 'web-push';
 import logger from '../config/logger.js';
+import { RedisBackend } from '../cache/redis.js';
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY;
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY;
@@ -38,10 +39,6 @@ export function isVapidConfigured() {
   return vapidConfigured;
 }
 
-// userId -> { subscription, publicKey }
-const byUserId = new Map();
-// publicKey -> subscription
-const byPublicKey = new Map();
 /**
  * Web Push — stores push subscriptions in Redis, keyed by
  *   webpush:user:{userId}   — full { subscription, publicKey } object
@@ -53,8 +50,6 @@ const byPublicKey = new Map();
  *
  * Migrated as part of Issue #1125.
  */
-import { RedisBackend } from '../cache/redis.js';
-
 const redis = new RedisBackend();
 
 // ── Key helpers ───────────────────────────────────────────────────────────────
@@ -83,11 +78,6 @@ export async function saveSubscription(userId, subscription, publicKey) {
 }
 
 /**
- * Remove a subscription from all indexes. Called automatically when the push
- * service reports the endpoint is gone (HTTP 404/410) so we stop retrying a
- * dead subscription (issue #1123).
- * @param {{ endpoint: string }} subscription
- * @returns {number} Number of index entries removed
  * Look up the push subscription for a user.
  * @param {string} userId
  * @returns {Promise<object|null>} PushSubscription or null
@@ -118,31 +108,32 @@ export async function removeSubscriptionForUser(userId) {
   await redis.delete(userKey(userId));
 }
 
-// ── Delivery ──────────────────────────────────────────────────────────────────
-
 /**
- * Send a Web Push notification.
- * @param {object} subscription — PushSubscription { endpoint, keys? }
- * @param {object} payload      — { title, body, data? }
- * @returns {Promise<{ sent: boolean, status?: number, reason?: string, error?: string }>}
+ * Remove a subscription from all indexes. Called automatically when the push
+ * service reports the endpoint is gone (HTTP 404/410) so we stop retrying a
+ * dead subscription (issue #1123).
+ * @param {{ endpoint: string }} subscription
+ * @returns {Promise<number>} Number of index entries removed
  */
-export function removeSubscription(subscription) {
+export async function removeSubscription(subscription) {
   if (!subscription?.endpoint) return 0;
   let removed = 0;
-  for (const [userId, entry] of byUserId) {
-    if (entry?.subscription?.endpoint === subscription.endpoint) {
-      byUserId.delete(userId);
+  for (const [userId, record] of await redis.entries(userKey('*'))) {
+    if (record?.subscription?.endpoint === subscription.endpoint) {
+      await redis.delete(userKey(userId));
       removed++;
     }
   }
-  for (const [publicKey, sub] of byPublicKey) {
+  for (const [publicKey, sub] of await redis.entries(publicKeyKey('*'))) {
     if (sub?.endpoint === subscription.endpoint) {
-      byPublicKey.delete(publicKey);
+      await redis.delete(publicKeyKey(publicKey));
       removed++;
     }
   }
   return removed;
 }
+
+// ── Delivery ──────────────────────────────────────────────────────────────────
 
 /**
  * Send an RFC 8291-encrypted, VAPID-authenticated Web Push notification.
@@ -184,7 +175,7 @@ export async function sendWebPush(subscription, payload, options = {}) {
     // revoked, endpoint rotated past its lifetime, etc.) — retrying is
     // pointless, so prune it from storage (issue #1123).
     if (status === 404 || status === 410) {
-      const removed = removeSubscription(subscription);
+      const removed = await removeSubscription(subscription);
       logger.info('webpush.subscription.expired', {
         endpoint: subscription.endpoint,
         status,

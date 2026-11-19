@@ -150,7 +150,7 @@ resource "aws_security_group" "ecs_tasks" {
 
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-rds-sg"
-  description = "Allow PostgreSQL from ECS tasks only."
+  description = "Allow PostgreSQL from ECS tasks and the secrets rotation Lambda only."
   vpc_id      = aws_vpc.main.id
 
   ingress {
@@ -158,6 +158,15 @@ resource "aws_security_group" "rds" {
     to_port         = 5432
     protocol        = "tcp"
     security_groups = [aws_security_group.ecs_tasks.id]
+  }
+
+  # Rotation Lambda must reach RDS during the test-secret step
+  # (see infra/secrets-rotation.tf).
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lambda_rotation.id]
   }
 }
 

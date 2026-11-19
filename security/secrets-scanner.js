@@ -4,6 +4,8 @@
  * Scans codebase for accidentally committed secrets, API keys, and credentials
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';

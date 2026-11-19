@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Event store assigns unique, sequential versions per aggregate and rejects stale writes with `ConcurrencyError` when `expectedVersion` is passed, preventing lost updates from concurrent appends (#1357).
+- Projections track the last applied version per aggregate and skip already-applied events, so replaying events no longer inflates totals or duplicates entries (#1358).
+- Event archival holds the aggregate write lock while rewriting streams, so appends during archival are no longer lost.
+
+### Added
+
+- `projectionManager.rebuildFromGenesis(name)` to rebuild a projection from the full event history.
+- Event sourcing guide at `docs/guides/event-sourcing.md`.
+
 ## Deprecation Policy
 
 This project follows a **minimum 90-day deprecation notice** policy for all public API endpoints and configuration interfaces.

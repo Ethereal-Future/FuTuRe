@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,6 +12,7 @@ import {
   performanceAlerting,
   optimizationRecommender
 } from '../src/loadTesting/index.js';
+import { PerformanceAlertManager } from '../src/loadTesting/performanceAlerting.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
@@ -180,6 +181,82 @@ describe('Load Testing Framework', () => {
       expect(scaling.projectedThroughput).toBeGreaterThan(scaling.currentThroughput);
       expect(scaling.recommendations.length).toBeGreaterThan(0);
     });
+
+    it('should return finite metrics when avgResponseTime is zero (#1412)', () => {
+      const results = {
+        avgResponseTime: 0,
+        errorRate: 1,
+        throughput: 100
+      };
+
+      const capacity = capacityPlanner.calculateCapacity(results);
+
+      expect(Number.isFinite(capacity.currentThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxSafeThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxCapacity)).toBe(true);
+      expect(Number.isFinite(capacity.headroom)).toBe(true);
+      expect(Number.isNaN(capacity.currentThroughput)).toBe(false);
+      expect(Number.isNaN(capacity.maxSafeThroughput)).toBe(false);
+      expect(Number.isNaN(capacity.maxCapacity)).toBe(false);
+      expect(Number.isNaN(capacity.headroom)).toBe(false);
+      expect(capacity.currentThroughput).not.toBe(Infinity);
+      expect(capacity.maxSafeThroughput).not.toBe(Infinity);
+      expect(capacity.maxCapacity).not.toBe(Infinity);
+      expect(capacity.headroom).not.toBe(Infinity);
+    });
+
+    it('should return zeroed result when currentThroughput is zero (#1412)', () => {
+      const results = {
+        avgResponseTime: 100,
+        errorRate: 1,
+        throughput: 0
+      };
+
+      const capacity = capacityPlanner.calculateCapacity(results);
+
+      expect(capacity.currentThroughput).toBe(0);
+      expect(capacity.maxSafeThroughput).toBe(0);
+      expect(capacity.maxCapacity).toBe(0);
+      expect(capacity.headroom).toBe(0);
+      expect(Array.isArray(capacity.recommendations)).toBe(true);
+      expect(Number.isFinite(capacity.currentThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxSafeThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxCapacity)).toBe(true);
+      expect(Number.isFinite(capacity.headroom)).toBe(true);
+    });
+
+    it('should handle negative inputs without NaN or Infinity (#1412)', () => {
+      const results = {
+        avgResponseTime: -50,
+        errorRate: -5,
+        throughput: -10
+      };
+
+      const capacity = capacityPlanner.calculateCapacity(results);
+
+      expect(Number.isFinite(capacity.currentThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxSafeThroughput)).toBe(true);
+      expect(Number.isFinite(capacity.maxCapacity)).toBe(true);
+      expect(Number.isFinite(capacity.headroom)).toBe(true);
+      expect(Number.isNaN(capacity.currentThroughput)).toBe(false);
+      expect(Number.isNaN(capacity.maxSafeThroughput)).toBe(false);
+      expect(Number.isNaN(capacity.maxCapacity)).toBe(false);
+      expect(Number.isNaN(capacity.headroom)).toBe(false);
+      expect(capacity.currentThroughput).not.toBe(Infinity);
+      expect(capacity.maxSafeThroughput).not.toBe(Infinity);
+      expect(capacity.maxCapacity).not.toBe(Infinity);
+      expect(capacity.headroom).not.toBe(Infinity);
+    });
+
+    it('should return finite scaling metrics for zero current throughput (#1412)', () => {
+      const scaling = capacityPlanner.estimateScalingNeeds(0, 0.2, 12);
+
+      expect(Number.isFinite(Number(scaling.scalingFactor))).toBe(true);
+      expect(Number.isNaN(Number(scaling.scalingFactor))).toBe(false);
+      expect(Number.isFinite(scaling.projectedThroughput)).toBe(true);
+      expect(Number.isNaN(scaling.projectedThroughput)).toBe(false);
+      expect(scaling.projectedThroughput).not.toBe(Infinity);
+    });
   });
 
   describe('PerformanceAlerting', () => {
@@ -206,6 +283,143 @@ describe('Load Testing Framework', () => {
       performanceAlerting.checkMetrics(results);
       const file = await performanceAlerting.saveAlerts();
       expect(file).toBeDefined();
+    });
+  });
+
+  describe('PerformanceAlertManager distributed deduplication (#1414)', () => {
+    // In-memory emulation of Redis SET key value NX EX seconds.
+    function createRedisMock() {
+      const store = new Map();
+      return {
+        store,
+        setNX: vi.fn(async (key, value, ttlSeconds) => {
+          const existing = store.get(key);
+          if (existing && existing.expiresAt > Date.now()) {
+            return false;
+          }
+          store.set(key, {
+            value,
+            expiresAt: Date.now() + ttlSeconds * 1000
+          });
+          return true;
+        })
+      };
+    }
+
+    const breach = {
+      avgResponseTime: 2000,
+      p95ResponseTime: 3000,
+      errorRate: 10,
+      throughput: 5
+    };
+
+    it('dispatches exactly one alert across 5 concurrent workers sharing Redis', async () => {
+      const redis = createRedisMock();
+      const dispatched = [];
+
+      const workers = Array.from({ length: 5 }, () => {
+        const manager = new PerformanceAlertManager({
+          redis,
+          cooldownSeconds: 300,
+          onDispatch: (alert) => dispatched.push(alert)
+        });
+        return manager;
+      });
+
+      const results = await Promise.all(
+        workers.map((manager) => manager.checkMetrics({ ...breach }))
+      );
+
+      const totalAlerts = results.reduce((sum, alerts) => sum + alerts.length, 0);
+      expect(totalAlerts).toBe(1);
+      expect(dispatched).toHaveLength(1);
+    });
+
+    it('falls back to in-memory deduplication when Redis is not configured', async () => {
+      const dispatched = [];
+      const manager = new PerformanceAlertManager({
+        cooldownSeconds: 300,
+        onDispatch: (alert) => dispatched.push(alert)
+      });
+
+      const first = await manager.checkMetrics({ ...breach });
+      const second = await manager.checkMetrics({ ...breach });
+
+      expect(first.length).toBeGreaterThan(0);
+      expect(second).toHaveLength(0);
+      expect(dispatched).toHaveLength(1);
+    });
+
+    it('degrades gracefully to in-memory fallback when Redis setNX throws', async () => {
+      const dispatched = [];
+      const redis = {
+        setNX: vi.fn(async () => {
+          throw new Error('Redis connection lost');
+        })
+      };
+
+      const manager = new PerformanceAlertManager({
+        redis,
+        cooldownSeconds: 300,
+        onDispatch: (alert) => dispatched.push(alert)
+      });
+
+      const first = await manager.checkMetrics({ ...breach });
+      expect(first.length).toBeGreaterThan(0);
+
+      // Second call within cooldown should be deduplicated by the in-memory fallback.
+      const second = await manager.checkMetrics({ ...breach });
+      expect(second).toHaveLength(0);
+      expect(dispatched).toHaveLength(1);
+    });
+
+    it('dispatches a new alert after the cooldown expires', async () => {
+      const redis = createRedisMock();
+      const dispatched = [];
+      const manager = new PerformanceAlertManager({
+        redis,
+        cooldownSeconds: 1,
+        onDispatch: (alert) => dispatched.push(alert)
+      });
+
+      const first = await manager.checkMetrics({ ...breach });
+      expect(first.length).toBeGreaterThan(0);
+
+      // Expire the Redis keys to simulate cooldown elapsing.
+      for (const [key, entry] of redis.store.entries()) {
+        redis.store.set(key, { ...entry, expiresAt: Date.now() - 1 });
+      }
+
+      const second = await manager.checkMetrics({ ...breach });
+      expect(second.length).toBeGreaterThan(0);
+      expect(dispatched).toHaveLength(2);
+    });
+
+    it('consolidates multi-metric breaches across workers into one aggregated incident alert', async () => {
+      const redis = createRedisMock();
+      const dispatched = [];
+
+      const workers = Array.from({ length: 5 }, () => {
+        const manager = new PerformanceAlertManager({
+          redis,
+          cooldownSeconds: 300,
+          onDispatch: (alert) => dispatched.push(alert)
+        });
+        return manager;
+      });
+
+      const results = await Promise.all(
+        workers.map((manager) => manager.checkMetrics({ ...breach }))
+      );
+
+      const totalAlerts = results.reduce((sum, alerts) => sum + alerts.length, 0);
+      expect(totalAlerts).toBe(1);
+      expect(dispatched).toHaveLength(1);
+
+      const incident = dispatched[0];
+      expect(incident.aggregated).toBe(true);
+      expect(Array.isArray(incident.metrics)).toBe(true);
+      expect(incident.metrics.length).toBeGreaterThan(1);
     });
   });
 
@@ -237,7 +451,163 @@ describe('Load Testing Framework', () => {
     });
   });
 
+  describe('LoadTestRunner bounded concurrency (#166)', () => {
+    it('never exceeds the configured concurrency limit', async () => {
+      const http = await import('node:http');
+      let inFlight = 0;
+      let maxInFlight = 0;
+
+      const server = http.createServer((req, res) => {
+        inFlight += 1;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        setTimeout(() => {
+          inFlight -= 1;
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, 40);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('bounded', 'Bounded concurrency');
+        scenario.setConcurrency(5).setDuration(1).setRampUp(0);
+        scenario.addRequest('GET', '/health');
+
+        const summary = await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        expect(summary.totalRequests).toBeGreaterThan(5);
+        expect(maxInFlight).toBeLessThanOrEqual(5);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('does not surface EMFILE or ECONNRESET errors under high concurrency', async () => {
+      const http = await import('node:http');
+
+      const server = http.createServer((req, res) => {
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, 10);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('highConcurrency', 'High concurrency');
+        scenario.setConcurrency(200).setDuration(1).setRampUp(0);
+        scenario.addRequest('GET', '/health');
+
+        const summary = await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        const errors = (summary.results || [])
+          .filter((r) => !r.success)
+          .map((r) => String(r.error || ''));
+        expect(errors.some((e) => /EMFILE|ECONNRESET/.test(e))).toBe(false);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('reuses a shared keep-alive agent across requests', async () => {
+      const http = await import('node:http');
+      const sockets = new Set();
+      let requestCount = 0;
+
+      const server = http.createServer((req, res) => {
+        requestCount += 1;
+        sockets.add(req.socket);
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, 10);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('keepAlive', 'Keep-alive reuse');
+        scenario.setConcurrency(4).setDuration(1).setRampUp(0);
+        scenario.addRequest('GET', '/health');
+
+        await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        expect(requestCount).toBeGreaterThan(4);
+        expect(sockets.size).toBeLessThan(requestCount);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('paces request generation according to requestsPerSecond', async () => {
+      const http = await import('node:http');
+      const startTimes = [];
+
+      const server = http.createServer((req, res) => {
+        startTimes.push(Date.now());
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('ok');
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('paced', 'Paced requests');
+        scenario.setConcurrency(10).setDuration(1).setRampUp(0);
+        scenario.setRequestsPerSecond(20);
+        scenario.addRequest('GET', '/health');
+
+        const startedAt = Date.now();
+        await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        const elapsed = (Date.now() - startedAt) / 1000;
+        const observedRate = startTimes.length / elapsed;
+        expect(observedRate).toBeLessThanOrEqual(20 * 1.5);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+
+    it('measures server response time rather than client-side socket queuing', async () => {
+      const http = await import('node:http');
+      const serverDelay = 60;
+
+      const server = http.createServer((req, res) => {
+        setTimeout(() => {
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end('ok');
+        }, serverDelay);
+      });
+
+      await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+      const { port } = server.address();
+
+      try {
+        const runner = new LoadTestRunner();
+        const scenario = new LoadTestScenario('latency', 'Latency accuracy');
+        scenario.setConcurrency(5).setDuration(1).setRampUp(0);
+        scenario.addRequest('GET', '/health');
+
+        const summary = await runner.runScenario(scenario, `http://127.0.0.1:${port}`);
+        const successful = (summary.results || []).filter((r) => r.success);
+        expect(successful.length).toBeGreaterThan(0);
+        const avg = successful.reduce((sum, r) => sum + r.responseTime, 0) / successful.length;
+        expect(avg).toBeGreaterThanOrEqual(serverDelay * 0.5);
+        expect(avg).toBeLessThan(serverDelay * 5);
+      } finally {
+        await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+      }
+    });
+  });
+
   describe('LoadTestRunner concurrency (#1114)', () => {
+=======
     it('issues multiple requests in flight for concurrency > 1', async () => {
       const http = await import('node:http');
       let inFlight = 0;

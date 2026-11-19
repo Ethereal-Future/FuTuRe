@@ -125,6 +125,53 @@ rate-limit rules.
 | `RATE_CACHE_TTL_S` | integer | — | `60` | Cache TTL (seconds) for exchange-rate responses. | `60` |
 | `CACHE_TTL_FEE_S` | integer | — | `120` | Cache TTL (seconds) for fee-stat responses. | `120` |
 
+#### Redis Distributed Cache Architecture
+
+When Redis is configured (`REDIS_URL` or `REDIS_HOST` is set), critical subsystems use a **two-tier caching architecture** for cache coherence across multiple ECS tasks:
+
+- **L1 (In-memory)**: Fast process-local cache using native JavaScript `Map` for sub-millisecond lookups
+- **L2 (Redis)**: Shared cache across all instances with Redis Pub/Sub for invalidation
+
+**Subsystems using distributed cache:**
+
+1. **IP Whitelist** (`backend/src/security/ipWhitelist.js`)
+   - Cache key pattern: `ip_whitelist:<ip_address>`
+   - Pub/Sub channel: `ip_whitelist:updates`
+   - TTL: 1 hour
+   - Invalidation: Real-time via pub/sub on add/remove/clear operations
+
+2. **AMM Pool Reserves** (`backend/src/services/amm.js`)
+   - Cache key pattern: `amm:pool:<pool_id>`
+   - Pub/Sub channel: `amm:pool-updates`
+   - TTL: 5 minutes
+   - Invalidation: Version-based optimistic locking + pub/sub
+
+**How it works:**
+
+1. Each ECS task maintains its own L1 cache for fast reads
+2. When cache data is modified (add/remove/update), the instance:
+   - Updates its local L1 cache immediately
+   - Writes to Redis L2 cache
+   - Publishes an invalidation message via Redis Pub/Sub
+3. All other instances receive the pub/sub message and update their L1 caches accordingly
+4. On cache miss, instances check Redis L2 before falling back to the database
+
+**Graceful degradation:**
+
+- If Redis is unavailable, instances fall back to local-only L1 cache
+- Cache operations never fail the request; they log warnings and continue
+- Rate limiting and IP whitelisting remain functional with local cache only
+- AMM operations use database-backed optimistic locking as final authority
+
+**Production deployment notes:**
+
+- Ensure all ECS tasks can reach the same Redis instance/cluster
+- Use ElastiCache Replication Group with Multi-AZ for high availability
+- Monitor `ip_whitelist:updates` and `amm:pool-updates` pub/sub message rates
+- L1 cache entries are not bounded by size; monitor memory usage in tasks with large whitelists
+
+
+
 ### CDN
 
 | Variable | Type | Required | Default | Description | Example |

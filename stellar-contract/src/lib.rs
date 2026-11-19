@@ -1352,5 +1352,7 @@ impl PredictionMarket {
     }
 }
 
+pub mod stream_payment;
+
 #[cfg(test)]
 mod test;

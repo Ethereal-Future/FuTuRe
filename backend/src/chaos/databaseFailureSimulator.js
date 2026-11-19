@@ -2,6 +2,7 @@ class DatabaseFailureSimulator {
   constructor() {
     this.databaseFailures = new Map();
     this.queryFailures = new Map();
+    this.activeTimers = new Set();
   }
 
   failDatabase(databaseId, failureType = 'CONNECTION_TIMEOUT', recoveryTime = null) {
@@ -19,9 +20,14 @@ class DatabaseFailureSimulator {
     this.databaseFailures.set(databaseId, failure);
 
     if (recoveryTime) {
-      setTimeout(() => {
+      const handle = setTimeout(() => {
+        this.activeTimers.delete(handle);
         this.recoverDatabase(databaseId);
       }, recoveryTime);
+      this.activeTimers.add(handle);
+      if (typeof handle.unref === 'function') {
+        handle.unref();
+      }
     }
 
     return failure;
@@ -105,6 +111,19 @@ class DatabaseFailureSimulator {
 
   removeQueryFailure(queryPattern) {
     this.queryFailures.delete(queryPattern);
+  }
+
+  reset() {
+    for (const handle of this.activeTimers) {
+      clearTimeout(handle);
+    }
+    this.activeTimers.clear();
+    this.databaseFailures.clear();
+    this.queryFailures.clear();
+  }
+
+  dispose() {
+    this.reset();
   }
 }
 

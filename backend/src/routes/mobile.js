@@ -2,6 +2,7 @@ import express from 'express';
 import {
   mobileAuth,
   pushNotifications,
+  notificationEngine,
   mobileSessions,
   offlineQueue,
   mobileSecurity,
@@ -14,19 +15,78 @@ import {
   verifyAuthentication,
 } from '../mobile/webAuthn.js';
 import * as StellarService from '../services/stellar.js';
+import { ipKeyGenerator } from 'express-rate-limit';
+import { createRateLimiter } from '../middleware/rateLimiter.js';
 
 const router = express.Router();
 
+// Throttle offline-queue writes per authenticated mobile user to prevent
+// queue-flooding memory exhaustion (issue #1378).
+const offlineQueueLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 60,
+  message: 'Too many offline queue requests, please try again later.',
+  keyGenerator: (req) =>
+    req.mobile?.userId ? `mobile:${req.mobile.userId}` : ipKeyGenerator(req.ip),
+});
+
 // ─── Auth middleware ──────────────────────────────────────────────────────────
-function requireMobileAuth(req, res, next) {
+
+/**
+ * Mobile tokens are bound to a Prisma session and the device it was issued
+ * to (issue #1381): every request must carry a matching `X-Device-Id`, and
+ * the session must still be active — so a web "log out everywhere" also
+ * kills mobile tokens immediately.
+ */
+async function requireMobileAuth(req, res, next) {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) return res.status(401).json({ error: 'Missing token' });
+
+  let payload;
   try {
-    req.mobile = mobileAuth.verifyToken(token);
-    next();
+    payload = mobileAuth.verifyToken(token);
   } catch {
-    res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ error: 'Invalid or expired token' });
   }
+
+  if (!payload.sid || !payload.deviceId) {
+    return res
+      .status(401)
+      .json({ error: 'Token is not bound to a device session', code: 'SESSION_BINDING_REQUIRED' });
+  }
+  const deviceId = req.headers['x-device-id'];
+  if (!deviceId || deviceId !== payload.deviceId) {
+    return res.status(401).json({ error: 'Device mismatch', code: 'SESSION_DEVICE_MISMATCH' });
+  }
+
+  try {
+    const session = await mobileSessions.validate(payload.sid, deviceId);
+    if (!session || session.userId !== payload.userId) {
+      return res.status(401).json({ error: 'Session expired or revoked', code: 'SESSION_REVOKED' });
+    }
+    req.mobile = {
+      ...payload,
+      userId: payload.userId,
+      deviceId,
+      session,
+    };
+    next();
+  } catch (e) {
+    if (e.name === 'SessionDeviceMismatchError' || e.code === 'SESSION_DEVICE_MISMATCH') {
+      return res.status(401).json({ error: e.message, code: 'SESSION_DEVICE_MISMATCH' });
+    }
+    res.status(503).json({ error: 'Unable to verify session', code: 'SESSION_CHECK_FAILED' });
+  }
+}
+
+function deviceInfo(req) {
+  return {
+    deviceModel: req.headers['x-device-model'],
+    osVersion: req.headers['x-os-version'],
+    appVersion: req.headers['x-app-version'],
+    userAgent: req.headers['user-agent'],
+    ipAddress: req.ip,
+  };
 }
 
 // ─── PIN Auth ─────────────────────────────────────────────────────────────────
@@ -43,10 +103,10 @@ router.post('/auth/pin/set', requireMobileAuth, (req, res) => {
 });
 
 /** POST /api/mobile/auth/pin/verify */
-router.post('/auth/pin/verify', (req, res) => {
+router.post('/auth/pin/verify', async (req, res) => {
   try {
     const { userId, deviceId, pin } = req.body;
-    res.json(mobileAuth.verifyPin(userId, deviceId, pin));
+    res.json(await mobileAuth.verifyPin(userId, deviceId, pin, deviceInfo(req)));
   } catch (e) {
     res.status(401).json({ error: e.message });
   }
@@ -54,91 +114,147 @@ router.post('/auth/pin/verify', (req, res) => {
 
 // ─── Biometric Auth ───────────────────────────────────────────────────────────
 
-/** POST /api/mobile/auth/biometric/register */
-router.post('/auth/biometric/register', (req, res) => {
+// Biometrics authorize individual transactions (issue #1383): the device's
+// Secure Enclave / Keystore key signs a single-use challenge bound to one
+// transaction's hash, amount and destination. No reusable biometric token
+// is ever issued.
+
+/** POST /api/mobile/auth/biometric/register — binds the key to the caller's own device */
+router.post('/auth/biometric/register', requireMobileAuth, (req, res) => {
   try {
-    const { userId, deviceId, publicKeyPem } = req.body;
-    res.json(mobileAuth.registerBiometric(userId, deviceId, publicKeyPem));
+    const { publicKeyPem } = req.body;
+    res.json(mobileAuth.registerBiometric(req.mobile.userId, req.mobile.deviceId, publicKeyPem));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
-/** POST /api/mobile/auth/biometric/challenge */
-router.post('/auth/biometric/challenge', (req, res) => {
+/** POST /api/mobile/auth/biometric/challenge  Body: { transactionHash, amount, destination } */
+router.post('/auth/biometric/challenge', requireMobileAuth, async (req, res) => {
   try {
-    const { userId, deviceId } = req.body;
-    res.json(mobileAuth.createChallenge(userId, deviceId));
+    const { transactionHash, amount, destination } = req.body;
+    res.json(
+      await mobileAuth.createTransactionChallenge(req.mobile.userId, req.mobile.deviceId, {
+        transactionHash,
+        amount,
+        destination,
+      }),
+    );
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(e.status ?? 400).json({ error: e.message, code: e.code });
   }
 });
 
-/** POST /api/mobile/auth/biometric/verify */
-router.post('/auth/biometric/verify', (req, res) => {
+/**
+ * POST /api/mobile/auth/biometric/verify
+ * Body: { challengeId, signature, transactionHash, amount, destination }
+ */
+router.post('/auth/biometric/verify', requireMobileAuth, async (req, res) => {
   try {
-    const { challengeId, signature } = req.body;
-    res.json(mobileAuth.verifyBiometric(challengeId, signature));
+    const { challengeId, signature, transactionHash, amount, destination } = req.body;
+    res.json(
+      await mobileAuth.verifyTransactionSignature(
+        challengeId,
+        signature,
+        { transactionHash, amount, destination },
+        { userId: req.mobile.userId, deviceId: req.mobile.deviceId },
+      ),
+    );
   } catch (e) {
-    res.status(401).json({ error: e.message });
+    res.status(e.status ?? 401).json({ error: e.message, code: e.code });
   }
 });
 
 // ─── WebAuthn ─────────────────────────────────────────────────────────────────
 
+// Challenges are bound to a ceremony session id (issue #1379). Clients send
+// it back as `sessionId` (or the legacy `challengeId`, which carries the same
+// value) together with the response for phase 2.
+
 /**
  * POST /api/mobile/auth/webauthn/register
  * Phase 1 (no credential in body): returns registration options.
  * Phase 2 (credential in body):    verifies and persists credential in DB.
+ *
+ * The challenge is bound to the caller's authenticated mobile session
+ * (issue #1379): `sessionId` is derived from the verified token, never from
+ * the request body, so a challenge cannot be replayed across sessions.
  */
-router.post('/auth/webauthn/register', async (req, res) => {
+router.post('/auth/webauthn/register', requireMobileAuth, async (req, res) => {
   try {
-    const { userId, username, challengeId, credential, deviceName } = req.body;
+    const { userId, username, credential, deviceName } = req.body;
+    const sessionId = req.mobile.sid;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
+    if (userId !== req.mobile.userId) {
+      return res.status(403).json({ error: 'userId does not match session', code: 'SESSION_USER_MISMATCH' });
+    }
 
-    if (!challengeId) {
+    if (!credential) {
       // Phase 1 — return options for navigator.credentials.create()
-      return res.json(await generateRegistrationOptions(userId, username));
+      return res.json(await generateRegistrationOptions(userId, username, { sessionId }));
     }
 
     // Phase 2 — store the credential
-    const result = await verifyAndStoreRegistration(challengeId, credential, deviceName);
+    const result = await verifyAndStoreRegistration(sessionId, credential, deviceName, { userId });
     res.status(201).json(result);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    if (e.code === 'ChallengeExpired') {
+      return res.status(401).json({ error: e.message, code: e.code });
+    }
+    res.status(e.status ?? 400).json({ error: e.message, code: e.code });
   }
 });
 
 /**
  * POST /api/mobile/auth/webauthn/authenticate
  * Phase 1 (no assertion in body): returns authentication options.
- * Phase 2 (assertion in body):    verifies assertion and returns JWT.
+ * Phase 2 (assertion in body):    verifies assertion and returns a
+ *                                 device-bound session JWT (X-Device-Id required).
+ *
+ * As with registration, the challenge is bound to the authenticated mobile
+ * session (issue #1379) and consumed on first verification.
  */
-router.post('/auth/webauthn/authenticate', async (req, res) => {
+router.post('/auth/webauthn/authenticate', requireMobileAuth, async (req, res) => {
   try {
-    const { userId, challengeId, assertion } = req.body;
+    const { userId, assertion } = req.body;
+    const sessionId = req.mobile.sid;
     if (!userId) return res.status(400).json({ error: 'userId is required' });
+    if (userId !== req.mobile.userId) {
+      return res.status(403).json({ error: 'userId does not match session', code: 'SESSION_USER_MISMATCH' });
+    }
 
-    if (!challengeId) {
+    if (!assertion) {
       // Phase 1 — return options for navigator.credentials.get()
-      const options = await generateAuthenticationOptions(userId);
+      const options = await generateAuthenticationOptions(userId, { sessionId });
       return res.json(options);
     }
 
-    // Phase 2 — verify assertion and issue JWT
-    const result = await verifyAuthentication(challengeId, assertion);
+    const deviceId = req.headers['x-device-id'];
+    if (!deviceId) return res.status(400).json({ error: 'X-Device-Id header is required' });
+
+    // Phase 2 — verify assertion and issue a device-bound JWT
+    const result = await verifyAuthentication(sessionId, assertion, {
+      userId,
+      deviceId,
+      device: deviceInfo(req),
+    });
     res.json(result);
   } catch (e) {
-    res.status(401).json({ error: e.message });
+    if (e.code === 'ChallengeExpired') {
+      return res.status(401).json({ error: e.message, code: e.code });
+    }
+    res.status(e.status ?? 401).json({ error: e.message, code: e.code });
   }
 });
 
 // ─── Push Notifications ───────────────────────────────────────────────────────
 
 /** POST /api/mobile/notifications/register */
-router.post('/notifications/register', requireMobileAuth, (req, res) => {
+router.post('/notifications/register', requireMobileAuth, async (req, res) => {
   try {
     const { deviceId, token, platform } = req.body;
+    // Persisted so broadcasts can reach the device and prune its token once expired (#1384).
+    await notificationEngine.registerPushToken(req.mobile.userId, deviceId, token, platform);
     res.json(pushNotifications.registerDevice(req.mobile.userId, deviceId, token, platform));
   } catch (e) {
     res.status(400).json({ error: e.message });
@@ -164,7 +280,10 @@ router.post('/notifications/send', requireMobileAuth, async (req, res) => {
 
 /** POST /api/mobile/sessions */
 router.post('/sessions', requireMobileAuth, async (req, res) => {
-  const sessionId = await mobileSessions.create(req.mobile.userId, req.mobile.deviceId, req.body.metadata);
+  const sessionId = await mobileSessions.create(req.mobile.userId, req.mobile.deviceId, {
+    ...deviceInfo(req),
+    ...req.body.metadata,
+  });
   res.json({ sessionId });
 });
 
@@ -175,11 +294,13 @@ router.get('/sessions', requireMobileAuth, async (req, res) => {
 
 /** DELETE /api/mobile/sessions/:sessionId */
 router.delete('/sessions/:sessionId', requireMobileAuth, async (req, res) => {
-  await mobileSessions.revoke(req.params.sessionId);
+  // Scoped to the caller's own sessions.
+  const revoked = await mobileSessions.revoke(req.params.sessionId, req.mobile.userId);
+  if (!revoked) return res.status(404).json({ error: 'Session not found' });
   res.json({ revoked: true });
 });
 
-/** DELETE /api/mobile/sessions */
+/** DELETE /api/mobile/sessions — global logout (web + mobile) */
 router.delete('/sessions', requireMobileAuth, async (req, res) => {
   const count = await mobileSessions.revokeAll(req.mobile.userId);
   res.json({ revoked: count });
@@ -188,11 +309,17 @@ router.delete('/sessions', requireMobileAuth, async (req, res) => {
 // ─── Offline Queue ────────────────────────────────────────────────────────────
 
 /** POST /api/mobile/queue  — enqueue a transaction while offline */
-router.post('/queue', requireMobileAuth, (req, res) => {
+router.post('/queue', requireMobileAuth, offlineQueueLimiter, (req, res) => {
   try {
     const item = offlineQueue.enqueue(req.mobile.userId, req.body.transaction);
     res.json(item);
   } catch (e) {
+    if (e.code === 'OFFLINE_QUEUE_LIMIT_EXCEEDED') {
+      return res.status(429).json({ error: e.message, code: e.code });
+    }
+    if (e.code === 'OFFLINE_QUEUE_PAYLOAD_TOO_LARGE') {
+      return res.status(413).json({ error: e.message, code: e.code });
+    }
     res.status(400).json({ error: e.message });
   }
 });
@@ -202,59 +329,81 @@ router.get('/queue', requireMobileAuth, (req, res) => {
   res.json(offlineQueue.getQueue(req.mobile.userId));
 });
 
-/** POST /api/mobile/queue/flush — process all pending queued transactions */
-router.post('/queue/flush', requireMobileAuth, async (req, res) => {
-  const pending = offlineQueue.getQueue(req.mobile.userId).filter(i => i.status === 'pending');
-  const results = [];
-
-  for (const item of pending) {
-    try {
-      const { sourceSecret, destination, amount, assetCode } = item.transaction;
-      const result = await StellarService.sendPayment(sourceSecret, destination, amount, assetCode);
-      offlineQueue.updateStatus(req.mobile.userId, item.id, 'success', result);
-      results.push({ id: item.id, status: 'success', hash: result.hash });
-    } catch (e) {
-      offlineQueue.updateStatus(req.mobile.userId, item.id, 'failed', { error: e.message });
-      results.push({ id: item.id, status: 'failed', error: e.message });
-    }
+/** POST /api/mobile/queue/flush — process pending txs with sequence pre-flight */
+// Submitting queued transactions to the network is a high-risk operation:
+// require fresh server-verified hardware attestation (issue #1382).
+router.post('/queue/flush', requireMobileAuth, mobileSecurity.requireHardwareAttestation(), async (req, res) => {
+  try {
+    const outcome = await offlineQueue.flushQueue(req.mobile.userId);
+    const status = outcome.requiresResign ? 409 : 200;
+    res.status(status).json(outcome);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
   }
-
-  offlineQueue.clearProcessed(req.mobile.userId);
-  res.json({ processed: results.length, results });
 });
 
 // ─── Security ─────────────────────────────────────────────────────────────────
 
 /** POST /api/mobile/security/register */
-router.post('/security/register', (req, res) => {
+router.post('/security/register', async (req, res) => {
   try {
+    // Client-sent integrity booleans (isJailbroken / isRooted) are deliberately ignored.
     const { deviceId, fingerprint, pinnedCertHash } = req.body;
-    res.json(mobileSecurity.registerDevice(deviceId, fingerprint, pinnedCertHash));
+    res.json(await mobileSecurity.registerDevice(deviceId, fingerprint, pinnedCertHash));
   } catch (e) {
     res.status(400).json({ error: e.message });
   }
 });
 
 /** POST /api/mobile/security/validate */
-router.post('/security/validate', (req, res) => {
+router.post('/security/validate', async (req, res) => {
   try {
     const { deviceId, fingerprint, certHash } = req.body;
-    mobileSecurity.validateRequest(deviceId, fingerprint, certHash);
+    await mobileSecurity.validateRequest(deviceId, fingerprint, certHash);
     res.json({ valid: true });
   } catch (e) {
     res.status(403).json({ error: e.message });
   }
 });
 
-/** POST /api/mobile/security/jailbreak */
-router.post('/security/jailbreak', (req, res) => {
-  mobileSecurity.flagJailbroken(req.body.deviceId);
+/**
+ * POST /api/mobile/security/attest/challenge
+ * Issue a single-use nonce for Play Integrity / App Attest (5 min TTL).
+ * Also used before each high-risk operation to obtain a fresh nonce.
+ */
+router.post('/security/attest/challenge', async (req, res) => {
+  try {
+    res.json(await mobileSecurity.createAttestationChallenge(req.body.deviceId));
+  } catch (e) {
+    res.status(e.status ?? 400).json({ error: e.message, code: e.code });
+  }
+});
+
+/**
+ * POST /api/mobile/security/attest
+ * Body: { deviceId, platform: 'android', integrityToken }
+ *    or { deviceId, platform: 'ios', keyId, attestationObject }
+ */
+router.post('/security/attest', async (req, res) => {
+  try {
+    const { deviceId, platform, integrityToken, keyId, attestationObject } = req.body;
+    res.json(
+      await mobileSecurity.attestDevice(deviceId, { platform, integrityToken, keyId, attestationObject }),
+    );
+  } catch (e) {
+    res.status(e.status ?? 403).json({ error: e.message, code: e.code });
+  }
+});
+
+/** POST /api/mobile/security/jailbreak — self-report; can only restrict the caller's own device */
+router.post('/security/jailbreak', requireMobileAuth, async (req, res) => {
+  await mobileSecurity.flagJailbroken(req.mobile.deviceId);
   res.json({ flagged: true });
 });
 
 /** GET /api/mobile/security/alerts */
-router.get('/security/alerts', requireMobileAuth, (req, res) => {
-  res.json(mobileSecurity.getAlerts(req.query.deviceId));
+router.get('/security/alerts', requireMobileAuth, async (req, res) => {
+  res.json(await mobileSecurity.getAlerts(req.query.deviceId));
 });
 
 // ─── Mobile Account Endpoints ─────────────────────────────────────────────────
@@ -287,6 +436,21 @@ router.post('/analytics/track', requireMobileAuth, (req, res) => {
   try {
     const { event, properties } = req.body;
     res.json(mobileAnalytics.track(req.mobile.userId, req.mobile.deviceId, event, properties));
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+/**
+ * POST /api/mobile/analytics/telemetry
+ * Body: { type, event, metadata, crashDiagnostics?: { optIn } }
+ * Headers, IPs and hardware ids are sanitized before logging (#1386).
+ */
+router.post('/analytics/telemetry', requireMobileAuth, (req, res) => {
+  try {
+    const { type, event, metadata, crashDiagnostics } = req.body ?? {};
+    mobileAnalytics.recordTelemetry(req, { type, event, metadata, crashDiagnostics });
+    res.status(202).json({ recorded: true });
   } catch (e) {
     res.status(400).json({ error: e.message });
   }

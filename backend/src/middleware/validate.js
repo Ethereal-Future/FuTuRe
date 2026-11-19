@@ -320,17 +320,14 @@ export const rules = {
         return parseFloat(amount).toFixed(7);
       }),
     body('assetCode').optional().trim().matches(ASSET_CODE).withMessage('Invalid asset code'),
+    body('ttlSeconds').optional().isInt({ min: 60, max: 2592000 }).withMessage('ttlSeconds must be between 60 seconds and 30 days'),
+    body('channelAccount').optional().trim().matches(STELLAR_PUBLIC_KEY).withMessage('Invalid channel account'),
   ],
 
   signMultiSigTx: [
     body('txId').trim().notEmpty().withMessage('txId is required'),
-    body('signerSecret')
-      .if(body('signedXdr').not().exists())
-      .trim()
-      .matches(STELLAR_SECRET_KEY)
-      .withMessage('Invalid signer secret key'),
     body('signedXdr')
-      .optional()
+      .exists()
       .isString()
       .trim()
       .notEmpty()

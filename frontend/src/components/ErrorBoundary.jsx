@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import * as Sentry from '@sentry/react';
 import { logError } from '../utils/errorLogger';
+import { clearAppCache } from '../utils/cacheReset';
 import i18n from '../i18n';
 
 const SENSITIVE_RE = /S[0-9A-Z]{54}|(?:secret|privateKey|password|token)(?=\s*[:=])/gi;
@@ -65,6 +66,24 @@ export class ErrorBoundary extends Component {
     this.props.onReset?.();
   };
 
+  // "Try again" re-reads the same persisted state, so a crash caused by
+  // corrupted cache would loop forever. Purge it (keeping credentials) and reload.
+  handleClearCacheAndReload = async () => {
+    try {
+      await clearAppCache();
+    } finally {
+      window.location.reload();
+    }
+  };
+
+  renderClearCacheButton() {
+    return (
+      <button style={styles.secondaryButton} onClick={this.handleClearCacheAndReload}>
+        {i18n.t('errorBoundary.clearCache')}
+      </button>
+    );
+  }
+
   render() {
     if (!this.state.error) return this.props.children;
 
@@ -83,6 +102,7 @@ export class ErrorBoundary extends Component {
           <button style={styles.button} onClick={this.handleReset}>
             {i18n.t('errorBoundary.tryAgain')}
           </button>
+          {this.renderClearCacheButton()}
         </div>
       );
     }
@@ -96,6 +116,7 @@ export class ErrorBoundary extends Component {
         <button style={styles.button} onClick={this.handleReset}>
           {i18n.t('errorBoundary.tryAgain')}
         </button>
+        {this.renderClearCacheButton()}
       </div>
     );
   }
@@ -130,5 +151,15 @@ const styles = {
     borderRadius: 4,
     cursor: 'pointer',
     fontSize: 14,
+  },
+  secondaryButton: {
+    background: 'transparent',
+    color: '#b91c1c',
+    border: '1px solid #b91c1c',
+    padding: '8px 20px',
+    borderRadius: 4,
+    cursor: 'pointer',
+    fontSize: 14,
+    marginLeft: 8,
   },
 };

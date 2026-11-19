@@ -31,7 +31,9 @@ COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 # Copy application source
 COPY --from=build /app/src ./src
 
-# Drop root privileges
+# Drop root privileges: hand ownership of the app tree to the built-in
+# non-root `node` user (UID 1000) so the process has read-only access to
+# system binaries and write access only to required scratch paths.
 RUN chown -R node:node /app
 USER node
 

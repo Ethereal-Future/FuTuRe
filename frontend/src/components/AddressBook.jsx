@@ -1,8 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import apiClient from '../api/client.js';
 import { getContacts, createContact, deleteContact } from '../api/stellar.js';
-import { isValidStellarAddress } from '../utils/validateStellarAddress';
+import {
+  getStellarAddressError,
+  isFederationAddress,
+  findInvalidAddressChars,
+} from '../utils/validateStellarAddress';
 import { useMessages } from '../hooks/useMessages';
 
 /**
@@ -21,6 +26,8 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
   const [search, setSearch] = useState('');
   const [synced, setSynced] = useState(false);
   const [confirmingRemoveId, setConfirmingRemoveId] = useState(null);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState(null);
 
   useEffect(() => { if (prefillAddress) setNewAddress(prefillAddress); }, [prefillAddress]);
 
@@ -41,23 +48,50 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
     c.address.toLowerCase().includes(search.toLowerCase())
   );
 
-  const newAddressValid = isValidStellarAddress(newAddress);
+  const trimmedAddress = newAddress.trim();
+  const newAddressError = getStellarAddressError(newAddress);
+  const newAddressValid = newAddressError === null;
+  const showAddressError = newAddressTouched && trimmedAddress && !newAddressValid;
+  const invalidCharIdx = showAddressError && newAddressError === 'invalidChars'
+    ? new Set(findInvalidAddressChars(trimmedAddress))
+    : null;
 
   const add = useCallback(async () => {
-    if (!newName.trim() || !newAddress.trim()) return;
+    if (!newName.trim() || !trimmedAddress) return;
     if (!newAddressValid) return;
+    setResolveError(null);
+
+    // Federation addresses are resolved to a checksummed G... key before saving,
+    // so the stored contact always points at a concrete account.
+    let address = trimmedAddress;
+    if (isFederationAddress(trimmedAddress)) {
+      setResolving(true);
+      try {
+        const { data } = await apiClient.get('/api/stellar/federation', { params: { address: trimmedAddress } });
+        if (getStellarAddressError(data?.account_id ?? '') !== null) throw new Error('bad account_id');
+        address = data.account_id;
+      } catch {
+        setResolveError(t('addressBook.errors.federationUnresolved', { address: trimmedAddress }));
+        return;
+      } finally {
+        setResolving(false);
+      }
+    }
+
     try {
-      const contact = await createContact({ name: newName.trim(), address: newAddress.trim() });
+      const contact = await createContact({ name: newName.trim(), address });
       setContacts(prev => [...prev, contact]);
     } catch {
       // fallback: local only
-      const entry = { id: Date.now().toString(), name: newName.trim(), address: newAddress.trim() };
+      const entry = { id: Date.now().toString(), name: newName.trim(), address };
       setContacts(prev => [...prev, entry]);
     }
     setNewName('');
     setNewAddress('');
     setNewAddressTouched(false);
-  }, [newName, newAddress, newAddressValid]);
+  }, [newName, trimmedAddress, newAddressValid, t]);
+
+  const addDisabled = !newName.trim() || !trimmedAddress || !newAddressValid || resolving;
 
   const remove = useCallback(async (contact) => {
     setContacts(prev => prev.filter(c => c.address !== contact.address));
@@ -156,27 +190,44 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
                   aria-label={t('addressBook.addressPlaceholder')} 
                   placeholder={t('addressBook.addressLabel')} 
                   value={newAddress} 
-                  onChange={e => { setNewAddress(e.target.value); setNewAddressTouched(true); }} 
+                  onChange={e => { setNewAddress(e.target.value); setNewAddressTouched(true); setResolveError(null); }} 
                   onBlur={() => setNewAddressTouched(true)}
                   style={{ 
                     marginBottom: 6,
-                    border: newAddressTouched && newAddress ? (newAddressValid ? '1px solid #22c55e' : '1px solid #ef4444') : '1px solid #ccc'
+                    border: newAddressTouched && trimmedAddress ? (newAddressValid ? '1px solid #22c55e' : '1px solid #ef4444') : '1px solid #ccc'
                   }}
-                  aria-invalid={newAddressTouched && newAddress && !newAddressValid}
-                  aria-describedby={newAddressTouched && newAddress && !newAddressValid ? 'addr-book-address-error' : undefined}
+                  aria-invalid={Boolean(showAddressError)}
+                  aria-describedby={showAddressError ? 'addr-book-address-error' : 'addr-book-address-status'}
                 />
-                {newAddressTouched && newAddress && !newAddressValid && (
+                {invalidCharIdx && (
+                  <div aria-hidden="true" data-testid="addr-book-invalid-chars" style={{ fontFamily: 'monospace', fontSize: 11, wordBreak: 'break-all', marginBottom: 4 }}>
+                    {[...trimmedAddress].map((ch, i) => (
+                      <span key={i} style={invalidCharIdx.has(i) ? { background: '#fecaca', color: '#b91c1c', fontWeight: 700 } : undefined}>{ch}</span>
+                    ))}
+                  </div>
+                )}
+                {showAddressError && (
                   <p id="addr-book-address-error" role="alert" style={{ color: '#ef4444', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
-                    {t('addressBook.invalidAddress')}
+                    {t(`addressBook.errors.${newAddressError}`, { length: trimmedAddress.length })}
+                  </p>
+                )}
+                {newAddressTouched && trimmedAddress && newAddressValid && (
+                  <p id="addr-book-address-status" style={{ color: '#16a34a', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
+                    {isFederationAddress(trimmedAddress) ? t('addressBook.federationValid') : t('addressBook.checksumValid')}
+                  </p>
+                )}
+                {resolveError && (
+                  <p role="alert" style={{ color: '#ef4444', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
+                    {resolveError}
                   </p>
                 )}
                 <button 
                   type="button" 
                   onClick={add}
-                  disabled={!newName.trim() || !newAddress.trim() || !newAddressValid}
-                  style={{ opacity: (!newName.trim() || !newAddress.trim() || !newAddressValid) ? 0.5 : 1, cursor: (!newName.trim() || !newAddress.trim() || !newAddressValid) ? 'not-allowed' : 'pointer' }}
+                  disabled={addDisabled}
+                  style={{ opacity: addDisabled ? 0.5 : 1, cursor: addDisabled ? 'not-allowed' : 'pointer' }}
                 >
-                  {t('addressBook.addContact')}
+                  {resolving ? t('addressBook.resolving') : t('addressBook.addContact')}
                 </button>
               </div>
             </div>

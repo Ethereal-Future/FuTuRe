@@ -1,5 +1,8 @@
 import * as StellarSDK from '@stellar/stellar-sdk';
-import { createAccount, mergeAccount, getBalance, getTrustlines, getOpenOffers, isTestnet } from './stellar.js';
+import {
+  createAccount, mergeAccount, getBalance, getTrustlines, getOpenOffers, isTestnet,
+  getHorizonServer, getNetworkPassphrase, withHorizonRetry,
+} from './stellar.js';
 import { auditLogger } from '../security/index.js';
 import { sendNotification } from '../notifications/service.js';
 import prisma from '../db/client.js';
@@ -174,4 +177,120 @@ export async function rotateKeypair({ oldPublicKey, oldSecretKey, userId, adminE
     newSecretKey,
     mergeHash: mergeResult.hash,
   };
+}
+
+/**
+ * Rotate signing authority on a recovered account without its lost key (#1389).
+ *
+ * The user's account address is unchanged; instead a single `setOptions`
+ * transaction adds the client-generated `newPublicKey` as a signer with
+ * enough weight to meet the high threshold, and zeroes the weight of the lost
+ * key (the master key weight when the lost key is the account itself).
+ *
+ * Because the lost key cannot sign, the transaction is signed by the platform
+ * recovery signer (`RECOVERY_SIGNER_SECRET`), which must already be a signer
+ * on the account with weight >= the high threshold.
+ *
+ * @param {object} opts
+ * @param {string} opts.accountId     - Stellar account being recovered
+ * @param {string} opts.oldPublicKey  - Lost key to revoke
+ * @param {string} opts.newPublicKey  - Client-generated replacement key
+ * @param {string} [opts.correlationId]
+ * @returns {Promise<{ hash: string, ledger: number, newSignerWeight: number }>}
+ */
+export async function rotateRecoveredAccountSigner({
+  accountId,
+  oldPublicKey,
+  newPublicKey,
+  correlationId,
+}) {
+  const { StrKey } = StellarSDK;
+  for (const [name, key] of Object.entries({ accountId, oldPublicKey, newPublicKey })) {
+    if (!StrKey.isValidEd25519PublicKey(key || '')) throw new Error(`Invalid ${name}`);
+  }
+  if (newPublicKey === oldPublicKey || newPublicKey === accountId) {
+    throw new Error('newPublicKey must differ from the key being replaced');
+  }
+
+  const recoverySecret = process.env.RECOVERY_SIGNER_SECRET;
+  if (!recoverySecret) throw new Error('RECOVERY_SIGNER_SECRET is not configured');
+  const recoverySigner = StellarSDK.Keypair.fromSecret(recoverySecret);
+
+  const server = getHorizonServer();
+  const account = await withHorizonRetry(() => server.loadAccount(accountId));
+
+  const highThreshold = account.thresholds?.high_threshold ?? 0;
+  const recoveryEntry = account.signers.find((s) => s.key === recoverySigner.publicKey());
+  if (!recoveryEntry || recoveryEntry.weight < Math.max(highThreshold, 1)) {
+    throw new Error('Platform recovery signer lacks high-threshold weight on this account');
+  }
+
+  // The new key must be able to authorise high-threshold operations on its own,
+  // exactly as the lost key could.
+  const oldEntry = account.signers.find((s) => s.key === oldPublicKey);
+  const newSignerWeight = Math.min(255, Math.max(oldEntry?.weight ?? 1, highThreshold, 1));
+
+  const builder = new StellarSDK.TransactionBuilder(account, {
+    fee: StellarSDK.BASE_FEE,
+    networkPassphrase: getNetworkPassphrase(),
+  }).addOperation(
+    StellarSDK.Operation.setOptions({
+      signer: { ed25519PublicKey: newPublicKey, weight: newSignerWeight },
+    }),
+  );
+
+  if (oldPublicKey === accountId) {
+    // The master key can't be removed from its own account, only zero-weighted.
+    builder.addOperation(StellarSDK.Operation.setOptions({ masterWeight: 0 }));
+  } else if (oldEntry) {
+    builder.addOperation(
+      StellarSDK.Operation.setOptions({ signer: { ed25519PublicKey: oldPublicKey, weight: 0 } }),
+    );
+  }
+
+  let transaction;
+  try {
+    transaction = builder.setTimeout(30).build();
+    transaction.sign(recoverySigner);
+  } catch (err) {
+    logger.error('keypairRotation.recovery.build.failed', {
+      accountId,
+      correlationId,
+      error: err.message,
+    });
+    throw new Error(`Failed to build signer rotation transaction: ${err.message}`);
+  }
+
+  const txHash = transaction.hash().toString('hex');
+
+  let result;
+  try {
+    result = await withHorizonRetry(() => server.submitTransaction(transaction), txHash);
+  } catch (err) {
+    // Horizon returns a structured result_codes payload on rejected transactions;
+    // surface it so callers can distinguish e.g. tx_bad_auth from tx_insufficient_fee.
+    const resultCodes = err?.response?.data?.extras?.result_codes;
+    logger.error('keypairRotation.recovery.submit.failed', {
+      accountId,
+      correlationId,
+      txHash,
+      error: err.message,
+      resultCodes,
+    });
+    const detail = resultCodes ? ` (${JSON.stringify(resultCodes)})` : '';
+    throw new Error(`On-chain signer rotation failed${detail}: ${err.message}`);
+  }
+
+  if (!result || !result.hash) {
+    logger.error('keypairRotation.recovery.submit.noHash', {
+      accountId, correlationId, txHash,
+    });
+    throw new Error('On-chain signer rotation submitted but no transaction hash was returned');
+  }
+
+  logger.info('keypairRotation.recovery.success', {
+    accountId, newPublicKey, hash: result.hash, ledger: result.ledger, correlationId,
+  });
+
+  return { hash: result.hash, ledger: result.ledger, newSignerWeight };
 }

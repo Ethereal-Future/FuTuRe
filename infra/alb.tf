@@ -10,6 +10,11 @@ resource "aws_lb" "main" {
   enable_deletion_protection = var.environment == "production"
   drop_invalid_header_fields = true
 
+  # Long-lived SSE/WebSocket payment streams from Stellar Horizon can sit idle
+  # for minutes on quiet accounts. The default 60s idle timeout would drop
+  # these connections (504 / TCP RST), so extend it to 5 minutes.
+  idle_timeout = 300
+
   tags = { Name = "${local.name_prefix}-alb" }
 }
 

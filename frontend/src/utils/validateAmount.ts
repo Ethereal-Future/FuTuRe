@@ -12,8 +12,10 @@ export function validateAmount(value: string, availableBalance: number | null): 
   const decimals = value.includes('.') ? value.split('.')[1].length : 0;
   if (decimals > MAX_DECIMALS) return `Maximum ${MAX_DECIMALS} decimal places allowed`;
   if (availableBalance !== null) {
-    if (num > availableBalance) return 'Amount exceeds available balance';
-    if (availableBalance - num - BASE_FEE < MIN_RESERVE)
+    // The spendable cap is the balance minus the transaction fee and the
+    // Stellar minimum account reserve that must always remain.
+    const spendable = availableBalance - BASE_FEE - MIN_RESERVE;
+    if (num > spendable)
       return 'Insufficient balance: account must keep a 1 XLM minimum reserve';
   }
   return null;

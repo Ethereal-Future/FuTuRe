@@ -9,6 +9,8 @@
  *   node scripts/cleanup-test-artifacts.mjs --days 30 [--dry-run]
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { readdirSync, statSync, unlinkSync } from 'node:fs';
 import path from 'node:path';
 
@@ -65,4 +67,3 @@ for (const { dir, fileRegex } of targets) {
 }
 
 console.log(`cleanup complete: examined=${examined} deleted=${deleted} retentionDays=${retentionDays}`);
-

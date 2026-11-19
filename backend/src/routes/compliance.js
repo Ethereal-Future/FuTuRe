@@ -13,6 +13,89 @@ import {
 
 const router = Router();
 
+// ── Maker-Checker (Dual Authorization) ────────────────────────────────────────
+//
+// High-impact compliance decisions (KYC approve/reject, account unfreeze,
+// sanctions override, AML alert dismissal) must not be executed by a single
+// officer. The first officer (Maker) submits a ComplianceApprovalRequest in
+// PENDING_REVIEW; a DIFFERENT authorized officer (Checker) must approve it
+// before the underlying action is executed. This enforces the Four-Eyes
+// Principle required by FATF Recommendation 18.
+
+const MAKER_CHECKER_ACTIONS = new Set([
+  'KYC_APPROVE',
+  'KYC_REJECT',
+  'ACCOUNT_UNFREEZE',
+  'SANCTIONS_OVERRIDE',
+  'AML_ALERT_DISMISS',
+]);
+
+// Actions that always require explicit dual sign-off regardless of AML score.
+const HIGH_RISK_ACTIONS = new Set(['SANCTIONS_OVERRIDE', 'ACCOUNT_UNFREEZE']);
+
+// AML score above which an unfreeze is treated as high-risk and requires
+// explicit dual sign-off.
+const HIGH_RISK_AML_SCORE = 80;
+
+function isHighRiskAction(action, payload = {}) {
+  if (HIGH_RISK_ACTIONS.has(action)) return true;
+  if (action === 'ACCOUNT_UNFREEZE' && Number(payload.amlScore) > HIGH_RISK_AML_SCORE) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Submit a maker-checker approval request. The underlying action is NOT
+ * executed here — it is deferred until a distinct checker approves it.
+ */
+async function submitApprovalRequest({ action, targetUserId, makerId, payload = {} }) {
+  if (!MAKER_CHECKER_ACTIONS.has(action)) {
+    throw new Error(`Action ${action} does not require maker-checker approval`);
+  }
+  const request = await prisma.complianceApprovalRequest.create({
+    data: {
+      action,
+      targetUserId,
+      makerId,
+      checkerId: null,
+      status: 'PENDING_REVIEW',
+      payload,
+      highRisk: isHighRiskAction(action, payload),
+    },
+  });
+  await complianceAudit.log('COMPLIANCE_APPROVAL_REQUESTED', makerId, {
+    requestId: request.id,
+    action,
+    targetUserId,
+    highRisk: request.highRisk,
+  });
+  return request;
+}
+
+/**
+ * Execute the deferred action once a distinct checker has authorized it.
+ * Kept intentionally small: routes the approved request to the underlying
+ * compliance service.
+ */
+async function executeApprovedAction(request) {
+  const { action, targetUserId, payload } = request;
+  switch (action) {
+    case 'KYC_APPROVE':
+      return kycCollector.updateKycStatus(targetUserId, 'approved');
+    case 'KYC_REJECT':
+      return kycCollector.updateKycStatus(targetUserId, 'rejected');
+    case 'ACCOUNT_UNFREEZE':
+      return kycCollector.unfreezeAccount(targetUserId, payload);
+    case 'SANCTIONS_OVERRIDE':
+      return amlMonitor.overrideSanctions(targetUserId, payload);
+    case 'AML_ALERT_DISMISS':
+      return amlMonitor.dismissAlert(targetUserId, payload);
+    default:
+      throw new Error(`Unsupported approval action: ${action}`);
+  }
+}
+
 // ── KYC ──────────────────────────────────────────────────────────────────────
 
 /**
@@ -107,6 +190,189 @@ router.post('/kyc/verify', authMiddleware, async (req, res) => {
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
+});
+
+// ── Maker-Checker Approval Queue ──────────────────────────────────────────────
+
+/**
+ * @swagger
+ * /api/compliance/approvals:
+ *   post:
+ *     summary: Submit a high-impact compliance action for dual authorization (Maker step)
+ *     tags: [Compliance]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [action, targetUserId]
+ *             properties:
+ *               action:
+ *                 type: string
+ *                 enum: [KYC_APPROVE, KYC_REJECT, ACCOUNT_UNFREEZE, SANCTIONS_OVERRIDE, AML_ALERT_DISMISS]
+ *               targetUserId: { type: string }
+ *               payload: { type: object }
+ *     responses:
+ *       201:
+ *         description: Approval request created in PENDING_REVIEW
+ *       400:
+ *         description: Invalid action or payload
+ *       401:
+ *         description: Unauthorized
+ */
+router.post('/approvals', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
+  try {
+    const { action, targetUserId, payload } = req.body;
+    if (!action || !targetUserId) {
+      return res.status(400).json({ error: 'action and targetUserId are required' });
+    }
+    const request = await submitApprovalRequest({
+      action,
+      targetUserId,
+      makerId: req.user.id,
+      payload: payload || {},
+    });
+    res.status(201).json(request);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/compliance/approvals/pending:
+ *   get:
+ *     summary: List compliance approval requests awaiting a checker
+ *     tags: [Compliance]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending approval requests
+ *       401:
+ *         description: Unauthorized
+ */
+router.get('/approvals/pending', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
+  const pending = await prisma.complianceApprovalRequest.findMany({
+    where: { status: 'PENDING_REVIEW' },
+    orderBy: { createdAt: 'asc' },
+  });
+  res.json(pending);
+});
+
+/**
+ * @swagger
+ * /api/compliance/approvals/{id}/approve:
+ *   post:
+ *     summary: Approve a pending request (Checker step) and execute the deferred action
+ *     tags: [Compliance]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request approved and action executed
+ *       400:
+ *         description: Request not pending or self-approval attempted
+ *       403:
+ *         description: Maker and checker must be distinct officers
+ *       404:
+ *         description: Approval request not found
+ */
+router.post('/approvals/:id/approve', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const checkerId = req.user.id;
+
+  const request = await prisma.complianceApprovalRequest.findUnique({ where: { id } });
+  if (!request) return res.status(404).json({ error: 'Approval request not found' });
+  if (request.status !== 'PENDING_REVIEW') {
+    return res.status(400).json({ error: `Request is not pending (status: ${request.status})` });
+  }
+
+  // Four-Eyes Principle: the checker must be a different officer than the maker.
+  if (request.makerId === checkerId) {
+    return res.status(403).json({
+      error: 'Maker and checker must be distinct officers; self-approval is not permitted',
+    });
+  }
+
+  try {
+    const result = await executeApprovedAction(request);
+    const updated = await prisma.complianceApprovalRequest.update({
+      where: { id },
+      data: { checkerId, status: 'APPROVED', decidedAt: new Date() },
+    });
+    await complianceAudit.log('COMPLIANCE_APPROVAL_APPROVED', checkerId, {
+      requestId: id,
+      action: request.action,
+      targetUserId: request.targetUserId,
+      makerId: request.makerId,
+      checkerId,
+    });
+    res.json({ success: true, request: updated, result });
+  } catch (err) {
+    if (err instanceof RequestAbortedError) return;
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * @swagger
+ * /api/compliance/approvals/{id}/reject:
+ *   post:
+ *     summary: Reject a pending request (Checker step); the deferred action is not executed
+ *     tags: [Compliance]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: Request rejected
+ *       400:
+ *         description: Request not pending
+ *       403:
+ *         description: Maker and checker must be distinct officers
+ *       404:
+ *         description: Approval request not found
+ */
+router.post('/approvals/:id/reject', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
+  const { id } = req.params;
+  const checkerId = req.user.id;
+
+  const request = await prisma.complianceApprovalRequest.findUnique({ where: { id } });
+  if (!request) return res.status(404).json({ error: 'Approval request not found' });
+  if (request.status !== 'PENDING_REVIEW') {
+    return res.status(400).json({ error: `Request is not pending (status: ${request.status})` });
+  }
+  if (request.makerId === checkerId) {
+    return res.status(403).json({
+      error: 'Maker and checker must be distinct officers; self-review is not permitted',
+    });
+  }
+
+  const updated = await prisma.complianceApprovalRequest.update({
+    where: { id },
+    data: { checkerId, status: 'REJECTED', decidedAt: new Date() },
+  });
+  await complianceAudit.log('COMPLIANCE_APPROVAL_REJECTED', checkerId, {
+    requestId: id,
+    action: request.action,
+    targetUserId: request.targetUserId,
+    makerId: request.makerId,
+    checkerId,
+  });
+  res.json({ success: true, request: updated });
 });
 
 // ── AML ───────────────────────────────────────────────────────────────────────
@@ -272,251 +538,6 @@ router.get('/reports', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
   res.json(reports);
 });
 
-// ── Regulatory Reports (Admin Only) ──────────────────────────────────────────
+// ── Regulatory Reports (Admin Only) ───────────────────────────────────────
 
-/**
- * @swagger
- * /api/compliance/reports/sar:
- *   get:
- *     summary: Generate and download a Suspicious Activity Report (admin only)
- *     tags: [Compliance]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: format
- *         schema: { type: string, enum: [json, csv], default: json }
- *       - in: query
- *         name: from
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: to
- *         schema: { type: string, format: date-time }
- *     responses:
- *       200:
- *         description: SAR report
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Admin access required
- */
-router.get('/reports/sar', requireAdmin, async (req, res) => {
-  try {
-    const { format = 'json', from, to } = req.query;
-    const report = await complianceReporting.generateSAR({
-      from,
-      to,
-      generatedBy: req.user.id,
-    });
-
-    if (format === 'csv') {
-      const csv = complianceReporting.toCsv(
-        ['activityDate', 'activityType', 'description', 'userId'],
-        report.suspiciousActivities
-      );
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${report.id}.csv"`);
-      return res.send(csv);
-    }
-
-    res.json(report);
-  } catch (err) {
-    // Client disconnected — DB work was halted/rolled back; nobody to respond to.
-    if (err instanceof RequestAbortedError) return;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-/**
- * @swagger
- * /api/compliance/reports/ctr:
- *   get:
- *     summary: Generate and download a Currency Transaction Report (admin only)
- *     tags: [Compliance]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: query
- *         name: format
- *         schema: { type: string, enum: [json, csv], default: json }
- *       - in: query
- *         name: from
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: to
- *         schema: { type: string, format: date-time }
- *     responses:
- *       200:
- *         description: CTR report
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Admin access required
- */
-router.get('/reports/ctr', requireAdmin, async (req, res) => {
-  try {
-    const { format = 'json', from, to } = req.query;
-    const report = await complianceReporting.generateCTR({
-      from,
-      to,
-      generatedBy: req.user.id,
-    });
-
-    if (format === 'csv') {
-      const csv = complianceReporting.toCsv(
-        ['transactionId', 'amount', 'date', 'userId'],
-        report.transactions
-      );
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="${report.id}.csv"`);
-      return res.send(csv);
-    }
-
-    res.json(report);
-  } catch (err) {
-    // Client disconnected — DB work was halted/rolled back; nobody to respond to.
-    if (err instanceof RequestAbortedError) return;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Filing Status (Admin Only) ────────────────────────────────────────────────
-
-/**
- * @swagger
- * /api/compliance/reports/{id}/file:
- *   patch:
- *     summary: Mark a SAR/CTR report as filed with FinCEN (admin only)
- *     description: |
- *       Call this endpoint after completing manual BSA E-Filing submission at
- *       https://bsaefiling.fincen.treas.gov. Provide the filing reference number
- *       assigned by the portal. This updates filingStatus from
- *       MANUAL_REVIEW_REQUIRED → FILED and records the filing reference and date.
- *     tags: [Compliance]
- *     security:
- *       - bearerAuth: []
- *     parameters:
- *       - in: path
- *         name: id
- *         required: true
- *         schema: { type: string }
- *     requestBody:
- *       required: true
- *       content:
- *         application/json:
- *           schema:
- *             type: object
- *             required: [filingReference]
- *             properties:
- *               filingReference:
- *                 type: string
- *                 description: BSA E-Filing reference number
- *     responses:
- *       200:
- *         description: Report marked as filed
- *       400:
- *         description: filingReference is required
- *       401:
- *         description: Unauthorized
- *       403:
- *         description: Admin access required
- *       500:
- *         description: Server error
- */
-router.patch('/reports/:id/file', requireAdmin, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { filingReference } = req.body;
-    if (!filingReference) {
-      return res.status(400).json({ error: 'filingReference is required' });
-    }
-    const record = await complianceReporting.markFiled(id, filingReference, req.user.id);
-    res.json({
-      id: record.id,
-      reportType: record.reportType,
-      filingStatus: record.filingStatus,
-      filingReference: record.filingReference,
-      filedAt: record.filedAt,
-    });
-  } catch (err) {
-    // Client disconnected — DB work was halted/rolled back; nobody to respond to.
-    if (err instanceof RequestAbortedError) return;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── AML Alerts Dashboard (Admin Only) ────────────────────────────────────────
-
-// List all AML alerts with pagination
-router.get('/aml/alerts', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
-  try {
-    const { page = 1, limit = 20, severity, reviewed } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const where = {};
-    if (severity) where.severity = severity;
-
-    const alerts = await prisma.aMLAlert.findMany({
-      where,
-      include: {
-        transaction: {
-          select: {
-            hash: true,
-            amount: true,
-            assetCode: true,
-            createdAt: true,
-          },
-        },
-        user: {
-          select: {
-            publicKey: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: parseInt(limit),
-    });
-
-    const total = await prisma.aMLAlert.count({ where });
-
-    res.json({
-      alerts,
-      pagination: {
-        page: parseInt(page),
-        limit: parseInt(limit),
-        total,
-        pages: Math.ceil(total / parseInt(limit)),
-      },
-    });
-  } catch (err) {
-    // Client disconnected — DB work was halted/rolled back; nobody to respond to.
-    if (err instanceof RequestAbortedError) return;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// Mark alert as reviewed (compliance or admin only)
-router.patch('/aml/alerts/:id/review', requireRole('COMPLIANCE', 'ADMIN'), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { notes } = req.body;
-
-    // For now, we'll log the review action in the audit trail
-    // In a production system, you'd add a 'reviewed' field to the AMLAlert model
-    await complianceAudit.log('AML_ALERT_REVIEWED', req.user.id, {
-      alertId: id,
-      reviewedBy: req.user.id,
-      notes: notes || '',
-      reviewedAt: new Date().toISOString(),
-    });
-
-    res.json({ success: true, message: 'Alert marked as reviewed' });
-  } catch (err) {
-    // Client disconnected — DB work was halted/rolled back; nobody to respond to.
-    if (err instanceof RequestAbortedError) return;
-    res.status(500).json({ error: err.message });
-  }
-});
-
-export default router;
+/* … truncated 7429 chars — edit only what you need near the top … */

@@ -4,14 +4,15 @@
 # parity and to prevent an unbounded container from starving its siblings or
 # OOM-killing unrelated processes on a shared CI runner or a developer machine:
 #
-#   - backend:  0.5 vCPU / 1024 MiB — intentionally mirrors infra/variables.tf's
-#               backend_cpu (512 CPU units) / backend_memory (1024 MiB) defaults,
+#   - backend:  1 vCPU / 2048 MiB — intentionally mirrors infra/variables.tf's
+#               backend_cpu (1024 CPU units) / backend_memory (2048 MiB) defaults,
 #               which size the production ECS Fargate task in infra/ecs.tf. This
 #               lets memory-pressure bugs surface locally instead of only in prod.
 #   - postgres: 1 vCPU / 1 GiB   — headroom for local dev workloads without being
 #               able to consume the whole host.
 #   - redis:    0.5 vCPU / 512 MiB — cache + rate-limit store; bounded to avoid
-#               unbounded local growth.
+#               unbounded local growth. Persisted to the redis_data volume with
+#               AOF so sessions and rate-limit state survive restarts.
 #   - frontend: 0.25 vCPU / 256 MiB — lightweight, just Vite/Nginx serving static
 #               assets.
 #
@@ -48,8 +49,13 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
+    # AOF persistence so sessions, cached balances and rate-limit counters
+    # survive `docker compose restart` / `down` (without -v).
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli ping"]
       interval: 5s
@@ -83,10 +89,10 @@ services:
       resources:
         limits:
           # Mirrors infra/variables.tf backend_cpu/backend_memory defaults
-          # (512 CPU units = 0.5 vCPU, 1024 MiB) so local memory-pressure
+          # (1024 CPU units = 1 vCPU, 2048 MiB) so local memory-pressure
           # behavior matches the production Fargate task.
-          cpus: "0.5"
-          memory: 1024M
+          cpus: "1.0"
+          memory: 2048M
         reservations:
           cpus: "0.25"
           memory: 512M
@@ -111,6 +117,8 @@ services:
       DB_POOL_MAX: "10"
       DB_SHARD_COUNT: "1"
       CDN_ENABLED: "false"
+      # 75% of the 2048M limit, matching infra/ecs.tf.
+      NODE_OPTIONS: "--max-old-space-size=1536"
     command: sh -c "npx prisma migrate deploy && node --watch src/server.js"
 
   frontend:
@@ -141,3 +149,4 @@ services:
 
 volumes:
   db_data:
+  redis_data:

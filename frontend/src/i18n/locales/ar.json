@@ -259,7 +259,8 @@
   "errorBoundary": {
     "sectionError": "{{context}} Error",
     "tryAgain": "Try again",
-    "fullPageTitle": "Something went wrong"
+    "fullPageTitle": "Something went wrong",
+    "clearCache": "Clear cache & reload"
   },
   "qrScanner": {
     "title": "Scan QR Code",

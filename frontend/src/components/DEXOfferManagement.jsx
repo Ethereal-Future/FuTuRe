@@ -3,6 +3,14 @@ import apiClient from '../api/client.js';
 import { AmountInput } from './AmountInput.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { formatAssetAmount } from '../utils/formatAmount';
+import { getFriendlyError } from '../utils/errorMessages';
+
+// Per-offer cancellation lifecycle. Offers are never removed from the table
+// until Horizon confirms the cancel; failures roll back to an interactive row.
+export const CANCEL_STATUS = {
+  CANCELLING: 'cancelling',
+  FAILED: 'failed',
+};
 
 /**
  * Component for creating, viewing, modifying, and canceling DEX offers
@@ -23,18 +31,34 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
   const [price, setPrice] = useState('');
   const [offerId, setOfferId] = useState('0');
   const [submitting, setSubmitting] = useState(false);
+  // { [offerId]: { status: CANCEL_STATUS.*, error?: string } }
+  const [cancelState, setCancelState] = useState({});
 
-  const fetchOffers = async () => {
-    setLoading(true);
-    setError('');
+  const fetchOffers = async ({ silent = false } = {}) => {
+    if (!silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const { data } = await apiClient.get(`/api/stellar/offers/${accountId}`);
-      setOffers(data.offers || []);
+      const next = data.offers || [];
+      setOffers(next);
+      return next;
     } catch (err) {
-      setError('Failed to fetch offers');
+      if (!silent) setError('Failed to fetch offers');
+      return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
+  };
+
+  const setOfferCancelState = (id, value) => {
+    setCancelState((prev) => {
+      const next = { ...prev };
+      if (value) next[id] = value;
+      else delete next[id];
+      return next;
+    });
   };
 
   const fetchAssets = async () => {
@@ -129,26 +153,41 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
   };
 
   const handleCancelOffer = async (offer) => {
+    if (cancelState[offer.id]?.status === CANCEL_STATUS.CANCELLING) return;
     if (!window.confirm(`Cancel offer ${offer.id}?`)) return;
 
-    setSubmitting(true);
     setError('');
     setSuccess('');
+    // Keep the row visible with a pending badge until the ledger confirms.
+    setOfferCancelState(offer.id, { status: CANCEL_STATUS.CANCELLING });
 
     try {
-      await apiClient.post('/api/stellar/offers/cancel', {
+      const { data } = await apiClient.post('/api/stellar/offers/cancel', {
         sourceSecret: '', // In production, from secure context
-        offerId: offer.id,
+        offerId: String(offer.id),
       });
+      if (!data?.success || !data?.hash) {
+        throw new Error('Cancellation was not confirmed by the network');
+      }
 
-      setSuccess('Offer canceled successfully!');
-      setMode('view');
-      await fetchOffers();
+      setOffers((prev) => prev.filter((o) => o.id !== offer.id));
+      setOfferCancelState(offer.id, null);
+      setSuccess(`Offer ${offer.id} canceled (ledger ${data.ledger ?? '—'}).`);
+      fetchOffers({ silent: true });
       if (onSuccess) onSuccess();
     } catch (err) {
-      setError(err.normalized?.message || 'Failed to cancel offer');
-    } finally {
-      setSubmitting(false);
+      const message = getFriendlyError(err) || 'Failed to cancel offer';
+      // Reconcile with Horizon: the tx may have landed despite a timeout, or the
+      // offer may have been filled meanwhile. Only the orderbook is authoritative.
+      const latest = await fetchOffers({ silent: true });
+      const stillOpen = latest ? latest.some((o) => o.id === offer.id) : true;
+      if (stillOpen) {
+        setOfferCancelState(offer.id, { status: CANCEL_STATUS.FAILED, error: message });
+        setError(`Offer ${offer.id} is still OPEN on the DEX — cancellation failed: ${message}`);
+      } else {
+        setOfferCancelState(offer.id, null);
+        setSuccess(`Offer ${offer.id} is no longer open on the DEX (filled or already canceled).`);
+      }
     }
   };
 
@@ -241,16 +280,32 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
                 gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
               }}
             >
-              {offers.map((offer) => (
+              {offers.map((offer) => {
+                const cancel = cancelState[offer.id];
+                const isCancelling = cancel?.status === CANCEL_STATUS.CANCELLING;
+                const cancelFailed = cancel?.status === CANCEL_STATUS.FAILED;
+                return (
                 <div
                   key={offer.id}
                   role="listitem"
+                  aria-busy={isCancelling || undefined}
+                  data-cancel-status={cancel?.status}
                   style={{
                     padding: 12,
-                    border: '1px solid #e5e7eb',
+                    border: `1px solid ${cancelFailed ? '#fca5a5' : '#e5e7eb'}`,
                     borderRadius: 6,
+                    opacity: isCancelling ? 0.6 : 1,
                   }}
                 >
+                  {isCancelling && (
+                    <span role="status" style={badgeStyle('#fef3c7', '#92400e')}>Cancelling… awaiting ledger confirmation</span>
+                  )}
+                  {cancelFailed && (
+                    <div role="alert" style={{ marginBottom: 8 }}>
+                      <span style={badgeStyle('#fee2e2', '#b91c1c')}>Cancel failed — offer still open</span>
+                      <p style={{ margin: '4px 0 0', fontSize: '0.8rem', color: '#b91c1c' }}>{cancel.error}</p>
+                    </div>
+                  )}
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                     <div>
                       <h3 style={{ margin: '0 0 8px 0', fontSize: '0.95rem' }}>
@@ -283,7 +338,7 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
                     <button
                       type="button"
                       onClick={() => handleEditOffer(offer)}
-                      disabled={submitting}
+                      disabled={submitting || isCancelling}
                       style={{ flex: 1, padding: 6, fontSize: '0.85rem' }}
                     >
                       Modify
@@ -291,7 +346,7 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
                     <button
                       type="button"
                       onClick={() => handleCancelOffer(offer)}
-                      disabled={submitting}
+                      disabled={submitting || isCancelling}
                       style={{
                         flex: 1,
                         padding: 6,
@@ -300,11 +355,12 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
                         color: '#dc2626',
                       }}
                     >
-                      Cancel
+                      {isCancelling ? 'Cancelling…' : cancelFailed ? 'Retry Cancel' : 'Cancel'}
                     </button>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </>
@@ -409,4 +465,17 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
       ) : null}
     </section>
   );
+}
+
+function badgeStyle(background, color) {
+  return {
+    display: 'inline-block',
+    marginBottom: 8,
+    padding: '2px 8px',
+    borderRadius: 999,
+    fontSize: '0.75rem',
+    fontWeight: 600,
+    background,
+    color,
+  };
 }

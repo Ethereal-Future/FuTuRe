@@ -6,3 +6,9 @@ export { default as bottleneckAnalyzer } from './bottleneckAnalyzer.js';
 export { default as capacityPlanner } from './capacityPlanner.js';
 export { default as performanceAlerting } from './performanceAlerting.js';
 export { default as optimizationRecommender } from './optimizationRecommender.js';
+export {
+  buildAlertDedupKey,
+  createAlertRedisBackend,
+  getAlertRedisBackend,
+} from './performanceAlerting.js';
+export { createSemaphore, createRateLimiter } from './loadTestRunner.js';

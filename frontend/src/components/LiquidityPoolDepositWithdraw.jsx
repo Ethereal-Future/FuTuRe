@@ -1,8 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import apiClient from '../api/client.js';
 import { AmountInput } from './AmountInput.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { formatAssetAmount } from '../utils/formatAmount';
+import {
+  computeDepositPriceBounds,
+  poolRatio,
+  ratioChangePct,
+  QUOTE_STALE_THRESHOLD_PCT,
+} from '../utils/poolPriceBounds.js';
+
+/** How often pool reserves are re-fetched while a pool is selected (~1 ledger). */
+export const POOL_REFRESH_INTERVAL_MS = 5000;
 
 /**
  * Component for depositing into and withdrawing from Stellar liquidity pools
@@ -20,6 +29,8 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
   const [slippageTolerance, setSlippageTolerance] = useState('1');
   const [feeEstimate, setFeeEstimate] = useState(null);
   const [poolRatioWarn, setPoolRatioWarn] = useState(false);
+  // Pool ratio (reserveB / reserveA) the current deposit amounts were computed from.
+  const [quoteRatio, setQuoteRatio] = useState(null);
 
   const fetchPools = async () => {
     try {
@@ -34,10 +45,43 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
     fetchPools();
   }, [accountId]);
 
-  const calculateDepositAmounts = (amount, isAmountA) => {
-    if (!selectedPool || !amount) return;
+  const fetchPoolState = useCallback(async (poolId) => {
+    const { data } = await apiClient.get(`/api/stellar/amm/pools/${encodeURIComponent(poolId)}`);
+    return data;
+  }, []);
 
-    const ratio = selectedPool.reserveB / selectedPool.reserveA;
+  // Keep reserves fresh while a pool is selected: ratios shift every ledger on
+  // active pools, and a stale quote causes op_bad_price / op_cross_bounds.
+  const selectedPoolId = selectedPool?.poolId;
+  useEffect(() => {
+    if (!selectedPoolId) return undefined;
+    let cancelled = false;
+    const refresh = async () => {
+      if (typeof document !== 'undefined' && document.hidden) return;
+      try {
+        const fresh = await fetchPoolState(selectedPoolId);
+        if (!cancelled && fresh?.poolId === selectedPoolId) setSelectedPool(fresh);
+      } catch {
+        // Transient failure — keep last known reserves and retry next tick.
+      }
+    };
+    const id = setInterval(refresh, POOL_REFRESH_INTERVAL_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [selectedPoolId, fetchPoolState]);
+
+  const currentRatio = poolRatio(selectedPool);
+  const quoteDriftPct = quoteRatio && currentRatio ? ratioChangePct(quoteRatio, currentRatio) : 0;
+  const quoteStale = mode === 'deposit' && Boolean(amountA && amountB) && quoteDriftPct > QUOTE_STALE_THRESHOLD_PCT;
+  const priceBounds = mode === 'deposit' ? computeDepositPriceBounds(amountA, amountB, slippageTolerance) : null;
+
+  const calculateDepositAmounts = (amount, isAmountA, pool = selectedPool) => {
+    if (!pool || !amount) {
+      if (isAmountA) setAmountA(amount ?? ''); else setAmountB(amount ?? '');
+      return;
+    }
+
+    const ratio = poolRatio(pool);
+    setQuoteRatio(ratio);
     if (isAmountA) {
       const calculatedB = (parseFloat(amount) * ratio).toFixed(7);
       setAmountA(amount);
@@ -47,6 +91,12 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
       setAmountB(amount);
       setAmountA(calculatedA);
     }
+  };
+
+  /** Re-quote amount B from amount A at the latest pool ratio. */
+  const acceptUpdatedQuote = () => {
+    setFeeEstimate(null);
+    calculateDepositAmounts(amountA, true);
   };
 
   const estimateDepositFees = async () => {
@@ -93,6 +143,19 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
     setError('');
     setSuccess('');
 
+    // Pre-flight: re-check reserves right before submitting so we never send a
+    // deposit priced against a stale ratio.
+    try {
+      const fresh = await fetchPoolState(selectedPool.poolId);
+      setSelectedPool(fresh);
+      if (ratioChangePct(quoteRatio, poolRatio(fresh)) > QUOTE_STALE_THRESHOLD_PCT) {
+        setLoading(false);
+        return; // quoteStale notice now asks the user to re-confirm
+      }
+    } catch {
+      // Fall through and rely on the price bounds below.
+    }
+
     try {
       const { data } = await apiClient.post('/api/stellar/amm/deposit', {
         sourceSecret: '', // In production, this would come from the secure context
@@ -105,6 +168,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
       setSuccess(`Deposit successful! Received ${data.sharesReceived} LP tokens`);
       setAmountA('');
       setAmountB('');
+      setQuoteRatio(null);
       setFeeEstimate(null);
       if (onSuccess) onSuccess();
     } catch (err) {
@@ -193,6 +257,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
             setAmountA('');
             setAmountB('');
             setShares('');
+            setQuoteRatio(null);
           }}
           style={{ marginLeft: 10, padding: 8 }}
         >
@@ -267,6 +332,33 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
                 />
               </div>
 
+              {priceBounds && (
+                <p data-testid="deposit-price-bounds" style={{ fontSize: '0.85rem', color: '#4b5563', marginBottom: 15 }}>
+                  Accepted price range ({selectedPool.assetA}/{selectedPool.assetB}): {priceBounds.minPrice} – {priceBounds.maxPrice}
+                </p>
+              )}
+
+              {quoteStale && (
+                <div
+                  role="status"
+                  aria-live="polite"
+                  style={{
+                    padding: 10,
+                    background: '#fff7ed',
+                    border: '1px solid #fdba74',
+                    borderRadius: 6,
+                    marginBottom: 15,
+                    fontSize: '0.875rem',
+                    color: '#9a3412',
+                  }}
+                >
+                  Pool price moved {quoteDriftPct.toFixed(2)}% since your quote. Review the updated amounts before depositing.
+                  <button type="button" onClick={acceptUpdatedQuote} style={{ marginLeft: 8, width: 'auto' }}>
+                    Update quote
+                  </button>
+                </div>
+              )}
+
               <div style={{ display: 'flex', gap: 10, marginBottom: 15 }}>
                 <button
                   type="button"
@@ -276,7 +368,7 @@ export function LiquidityPoolDepositWithdraw({ accountId, onSuccess }) {
                 >
                   Estimate Fees
                 </button>
-                <button type="submit" disabled={loading || !amountA || !amountB} style={{ flex: 1 }}>
+                <button type="submit" disabled={loading || !amountA || !amountB || quoteStale} style={{ flex: 1 }}>
                   {loading ? 'Depositing...' : 'Deposit'}
                 </button>
               </div>

@@ -171,12 +171,12 @@ export function requestSizeLimits() {
  * IP filtering middleware
  */
 export function ipFilterMiddleware() {
-  return (req, res, next) => {
+  return async (req, res, next) => {
     const config = getConfig();
     const clientIP = req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
 
     // Check if IP is whitelisted
-    if (!isWhitelisted(clientIP)) {
+    if (!(await isWhitelisted(clientIP))) {
       // Check for blocked IPs (you can extend this with a database or config)
       const blockedIPs = config.security?.blockedIPs || [];
       

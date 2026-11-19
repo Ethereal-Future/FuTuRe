@@ -32,7 +32,12 @@ vi.mock('../src/config/logger.js', () => ({
     info: vi.fn(),
     error: vi.fn(),
     warn: vi.fn(),
+    debug: vi.fn(),
   },
+}));
+
+vi.mock('../src/cache/redis.js', () => ({
+  resolveRedisConfig: () => null, // No Redis in basic tests
 }));
 
 import prisma from '../src/db/client.js';
@@ -86,13 +91,18 @@ describe('IP Whitelist', () => {
   });
 
   describe('Whitelist Operations', () => {
-    it('should check if IP is whitelisted', () => {
+    it('should check if IP is whitelisted', async () => {
       // Mock the cache with pre-loaded IPs
       vi.mocked(prisma.iPWhitelist.findMany).mockResolvedValueOnce([
         { ipAddress: '192.168.1.1' },
       ]);
 
-      expect(isWhitelisted('192.168.1.1')).toBe(false); // Not loaded yet
+      // Initialize cache first
+      const { initializeCache } = await import('../src/security/ipWhitelist.js');
+      await initializeCache();
+
+      const result = await isWhitelisted('192.168.1.1');
+      expect(result).toBe(true);
     });
 
     it('should add IP to whitelist with validation', async () => {

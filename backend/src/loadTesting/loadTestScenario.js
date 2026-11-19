@@ -13,6 +13,8 @@ class LoadTestScenario {
     this.duration = 60; // seconds
     this.rampUp = 10; // seconds
     this.concurrency = 10;
+    this.requestsPerSecond = null; // null = unconstrained
+    this.rateMode = 'open'; // 'open' | 'closed'
   }
 
   addRequest(method, routePath, body = null, weight = 1) {
@@ -35,6 +37,16 @@ class LoadTestScenario {
     return this;
   }
 
+  setRequestsPerSecond(rps) {
+    this.requestsPerSecond = rps;
+    return this;
+  }
+
+  setRateMode(mode) {
+    this.rateMode = mode;
+    return this;
+  }
+
   async save() {
     await fs.mkdir(SCENARIOS_DIR, { recursive: true });
     const file = path.join(SCENARIOS_DIR, `${this.name}.json`);
@@ -50,6 +62,9 @@ class LoadTestScenario {
     scenario.duration = data.duration;
     scenario.rampUp = data.rampUp;
     scenario.concurrency = data.concurrency;
+    scenario.requestsPerSecond =
+      data.requestsPerSecond !== undefined ? data.requestsPerSecond : null;
+    scenario.rateMode = data.rateMode !== undefined ? data.rateMode : 'open';
     return scenario;
   }
 }

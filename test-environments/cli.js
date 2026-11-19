@@ -12,6 +12,8 @@
  *   node test-environments/cli.js history
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { provision, teardown, teardownAll, getActive, monitor, listConfigs, getHistory } from './registry.js';
 
 const [, , cmd, arg] = process.argv;

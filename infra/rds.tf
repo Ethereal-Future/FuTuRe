@@ -6,6 +6,28 @@ resource "aws_db_subnet_group" "main" {
   subnet_ids  = aws_subnet.private[*].id
 }
 
+# ── RDS Enhanced Monitoring Role ─────────────────────────────────────────────
+# Required whenever monitoring_interval > 0; without it the AWS API rejects the
+# instance with "MonitoringInterval was specified without MonitoringRoleArn".
+
+resource "aws_iam_role" "rds_monitoring" {
+  name = "${local.name_prefix}-rds-monitoring-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action = "sts:AssumeRole"
+      Effect = "Allow"
+      Principal = {
+        Service = "monitoring.rds.amazonaws.com"
+      }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "rds_monitoring" {
+  role       = aws_iam_role.rds_monitoring.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
 # ── RDS Parameter Group ──────────────────────────────────────────────────────
 # Enforce a server-wide default statement_timeout so runaway queries are
 # cancelled even when a connection (e.g. via PgBouncer transaction pooling)
@@ -59,6 +81,9 @@ resource "aws_db_instance" "postgres" {
 
   performance_insights_enabled = true
   monitoring_interval          = 60
+  monitoring_role_arn          = aws_iam_role.rds_monitoring.arn
 
   tags = { Name = "${local.name_prefix}-postgres" }
+
+  depends_on = [aws_iam_role_policy_attachment.rds_monitoring]
 }

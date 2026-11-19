@@ -3,6 +3,7 @@
  * Orchestrates template rendering, preference checks, channel dispatch, and delivery tracking.
  */
 import logger from '../config/logger.js';
+import prisma from '../config/prisma.js';
 import { getRenderedTemplate } from './templates.js';
 import { isChannelEnabled, getPreferences } from './preferences.js';
 import { recordDelivery } from './delivery.js';
@@ -14,6 +15,45 @@ import { getSubscription, sendWebPush } from './webPush.js';
 
 const CHANNELS = ['email', 'push', 'sms', 'inApp'];
 
+// Retention policy (issue #1350): read notifications are kept for 30 days,
+// unread notifications for 90 days. Older records are pruned by the daily
+// cleanup worker so notification storage growth stays bounded.
+export const READ_RETENTION_DAYS = 30;
+export const UNREAD_RETENTION_DAYS = 90;
+
+const DAY_MS = 24 * 3600 * 1000;
+
+/**
+ * Prune stale in-app notifications according to the retention policy.
+ * Deletes read notifications older than 30 days and unread notifications
+ * older than 90 days.
+ *
+ * @param {object} [options]
+ * @param {Date} [options.now] - Reference time (defaults to now); useful for tests.
+ * @returns {Promise<number>} Number of deleted notification records
+ */
+export async function cleanupStaleNotifications({ now = new Date() } = {}) {
+  const readCutoff = new Date(now.getTime() - READ_RETENTION_DAYS * DAY_MS);
+  const unreadCutoff = new Date(now.getTime() - UNREAD_RETENTION_DAYS * DAY_MS);
+
+  try {
+    const { count } = await prisma.notification.deleteMany({
+      where: {
+        OR: [
+          { read: true, createdAt: { lte: readCutoff } },
+          { read: false, createdAt: { lte: unreadCutoff } },
+        ],
+      },
+    });
+
+    logger.info('notification.cleanup', { deleted: count, readCutoff, unreadCutoff });
+    return count;
+  } catch (err) {
+    logger.error('notification.cleanup.error', { error: err.message });
+    throw err;
+  }
+}
+
 /**
  * Send a notification to a user across all enabled channels.
  *
@@ -22,7 +62,8 @@ const CHANNELS = ['email', 'push', 'sms', 'inApp'];
  * @param {string} params.type - Template key (e.g. 'transaction_received')
  * @param {object} params.data - Template interpolation data
  * @param {string} [params.email] - User's email address (for email channel)
- * @param {string} [params.phone] - User's phone number in E.164 (for SMS channel)
+ * @param {string} [params.phone] - User's phone number, E.164 preferred (for SMS channel)
+ * @param {string} [params.phoneRegion] - ISO 3166-1 alpha-2 region used to normalize a national-format phone
  * @param {string} [params.publicKey] - Stellar public key (for in-app WebSocket broadcast)
  * @param {string} [params.actionUrl] - Action URL for in-app notifications
  * @param {object} [params.actionRetryParams] - Retry parameters for failed transactions
@@ -30,7 +71,7 @@ const CHANNELS = ['email', 'push', 'sms', 'inApp'];
  * @param {string} [params.locale] - Override locale; if omitted, read from user preferences
  * @returns {Promise<object>} Results per channel
  */
-export async function sendNotification({ userId, type, data = {}, email, phone, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
+export async function sendNotification({ userId, type, data = {}, email, phone, phoneRegion, publicKey, actionUrl, actionRetryParams, channels = CHANNELS, locale }) {
   const results = {};
 
   // Resolve locale: caller may supply it explicitly (e.g. from a webhook
@@ -88,7 +129,7 @@ export async function sendNotification({ userId, type, data = {}, email, phone, 
           }
           case 'sms':
             if (!phone) { results[channel] = { skipped: true, reason: 'no_phone' }; return; }
-            result = await sendSms(phone, content);
+            result = await sendSms(phone, content, { defaultRegion: phoneRegion });
             break;
           case 'inApp':
             result = await sendInApp(userId, publicKey, { ...content, type, actionUrl, actionRetryParams });

@@ -10,6 +10,7 @@ import { processSep31StatusPolls } from './services/sep31.js';
 import { refreshAllRates, RATE_REFRESH_INTERVAL_MS } from './services/exchangeRate.js';
 import { syncSanctionsList } from './compliance/sanctionsSync.js';
 import { drainAmlAlertDlq } from './compliance/amlMonitor.js';
+import { cleanupStaleNotifications } from './notifications/service.js';
 
 let intervals = [];
 
@@ -193,6 +194,19 @@ export async function startScheduler() {
     }
   }, 60 * 1000); // Every minute
   intervals.push(amlDlqInterval);
+
+  // Notification retention cleanup (#1350) - prune read notifications older
+  // than 30 days and unread notifications older than 90 days so per-user
+  // notification histories stay bounded. Runs daily.
+  const notificationCleanupInterval = setInterval(async () => {
+    try {
+      const count = await cleanupStaleNotifications();
+      if (count > 0) logger.info('scheduler.notifications.pruned', { count });
+    } catch (err) {
+      logger.error('scheduler.notifications.prune.failed', { error: err.message });
+    }
+  }, 24 * 60 * 60 * 1000); // Every 24 hours
+  intervals.push(notificationCleanupInterval);
 }
 
 export function stopScheduler() {

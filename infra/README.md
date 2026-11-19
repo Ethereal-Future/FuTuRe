@@ -439,8 +439,8 @@ Prefer fixing the underlying misconfiguration over suppressing it whenever the f
 | `availability_zones`      | 3 AZs             | AZs for subnet distribution          |
 | `backend_image`           | _(required)_      | Docker image URI for backend         |
 | `frontend_image`          | _(required)_      | Docker image URI for frontend        |
-| `backend_cpu`             | `512`             | CPU units (512 = 0.5 vCPU)          |
-| `backend_memory`          | `1024`            | Memory in MiB                        |
+| `backend_cpu`             | `1024`            | CPU units (1024 = 1 vCPU)           |
+| `backend_memory`          | `2048`            | Memory in MiB; `NODE_OPTIONS=--max-old-space-size` is set to 75% of this |
 | `backend_desired_count`   | `2`               | Initial number of ECS tasks (autoscaling adjusts this post-deployment) |
 | `backend_min_count`       | `2`               | Minimum number of ECS tasks (autoscaling floor, preserves zero-downtime guarantee) |
 | `backend_max_count`       | `10`              | Maximum number of ECS tasks (autoscaling ceiling) |
@@ -449,10 +449,7 @@ Prefer fixing the underlying misconfiguration over suppressing it whenever the f
 | `db_allocated_storage`    | `20`              | Storage in GiB                       |
 | `db_backup_retention_days`| `7`               | RDS automated backup retention       |
 | `redis_node_type`         | `cache.t4g.small` | ElastiCache node type                |
-| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
-| `redis_num_cache_nodes`   | `2`               | Cache clusters (primary + replicas) in the Redis replication group; must be >= 2 for Multi-AZ failover |
-| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |
+| `redis_num_cache_nodes`   | `2`               | Cache clusters (primary + replicas) in the Redis replication group; Multi-AZ automatic failover is enabled when >= 2 |
 | `log_archive_glacier_transition_days`      | `90`   | Days before archived logs move to Glacier          |
 | `log_archive_deep_archive_transition_days` | `365`  | Days before archived logs move to Glacier Deep Archive |
 | `log_archive_expiration_days`              | `2555` | Days before archived logs are permanently deleted  |
-| `redis_num_cache_nodes`   | `1`               | Number of Redis cache nodes          |

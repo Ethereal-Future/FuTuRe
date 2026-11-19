@@ -19,6 +19,9 @@ import { securityHeaders, helmetMiddleware, cspNonceMiddleware } from '../src/mi
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, '../data');
 
+const { createSecurityRouter } = await import('../src/routes/security.js');
+const { auditLogger: routeAuditLogger } = await import('../src/security/index.js');
+
 async function cleanup() {
   try {
     await fs.rm(DATA_DIR, { recursive: true, force: true });
@@ -149,6 +152,65 @@ describe('Security Features', () => {
     });
   });
 
+  describe('Threat Detector memory behavior', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      threatDetector.requestTracker.clear();
+      threatDetector.anomalyScores.clear();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      threatDetector.requestTracker.clear();
+      threatDetector.anomalyScores.clear();
+    });
+
+    it('evicts inactive IPs after the evaluation window expires', () => {
+      const ipCount = 500;
+      for (let i = 0; i < ipCount; i++) {
+        threatDetector.recordRequest(`10.0.${Math.floor(i / 256)}.${i % 256}`);
+      }
+      expect(threatDetector.requestTracker.size).toBe(ipCount);
+
+      // Advance time well past the evaluation window and run the sweep.
+      vi.advanceTimersByTime(60 * 60 * 1000);
+      threatDetector.cleanup();
+
+      expect(threatDetector.requestTracker.size).toBe(0);
+      expect(threatDetector.anomalyScores.size).toBe(0);
+      expect([...threatDetector.requestTracker.keys()]).toHaveLength(0);
+      expect([...threatDetector.anomalyScores.keys()]).toHaveLength(0);
+    });
+
+    it('keeps map sizes bounded under continuous unique-IP traffic', () => {
+      const windowMs = threatDetector.windowMs ?? 60 * 1000;
+      const batchSize = 100;
+      const batches = 20;
+
+      for (let b = 0; b < batches; b++) {
+        for (let i = 0; i < batchSize; i++) {
+          threatDetector.recordRequest(`10.1.${b}.${i}`);
+        }
+        // Advance beyond the window so older IPs become stale.
+        vi.advanceTimersByTime(windowMs + 1000);
+        threatDetector.cleanup();
+      }
+
+      // After each sweep, only the most recent batch should remain.
+      expect(threatDetector.requestTracker.size).toBeLessThanOrEqual(batchSize);
+      expect(threatDetector.anomalyScores.size).toBeLessThanOrEqual(batchSize);
+    });
+
+    it('does not keep the process alive via the cleanup timer', () => {
+      const timer = threatDetector.cleanupTimer ?? threatDetector._cleanupTimer;
+      expect(timer).toBeDefined();
+      // A timer with unref() returns the timer object; hasRef() should be false.
+      if (typeof timer.hasRef === 'function') {
+        expect(timer.hasRef()).toBe(false);
+      }
+    });
+  });
+
   describe('Security Scanner', () => {
     it('should scan dependencies', async () => {
       const scan = await securityScanner.scanDependencies();
@@ -274,5 +336,133 @@ describe('Security headers middleware', () => {
   it('sets Strict-Transport-Security on API responses', async () => {
     const res = await request(securedApp).get('/ping');
     expect(res.headers['strict-transport-security']).toBeDefined();
+  });
+});
+
+function buildSecurityApp({ user, stepUp = true } = {}) {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.user = user;
+    next();
+  });
+  app.use(
+    '/api/security',
+    createSecurityRouter({
+      requireAuth: (req, res, next) => {
+        if (!req.user) {
+          return res.status(401).json({ error: 'Unauthorized' });
+        }
+        return next();
+      },
+      requireRole: (roles) => (req, res, next) => {
+        if (!req.user || !roles.includes(req.user.role)) {
+          return res.status(403).json({ error: 'Forbidden' });
+        }
+        return next();
+      },
+      requireStepUpAuth: (req, res, next) => {
+        if (!stepUp || !req.user?.stepUpVerified) {
+          return res.status(403).json({ error: 'Step-up authentication required' });
+        }
+        return next();
+      }
+    })
+  );
+  return app;
+}
+
+describe('Emergency playbook RBAC enforcement', () => {
+  beforeEach(async () => {
+    await cleanup();
+    await routeAuditLogger.initialize();
+  });
+
+  afterEach(async () => {
+    await cleanup();
+  });
+
+  it('returns 403 for a standard authenticated user executing a playbook', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'user-1', role: 'USER', stepUpVerified: true }
+    });
+    const res = await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'ISOLATE_SYSTEM' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 for a standard authenticated user triggering an incident action', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'user-1', role: 'USER', stepUpVerified: true }
+    });
+    const res = await request(app)
+      .post('/api/security/incidents/incident-1/actions')
+      .send({ action: 'REVOKE_ALL_SESSIONS' });
+    expect(res.status).toBe(403);
+  });
+
+  it('returns 403 for SUPER_ADMIN without step-up MFA', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'admin-1', role: 'SUPER_ADMIN', stepUpVerified: false }
+    });
+    const res = await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'ISOLATE_SYSTEM' });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows SUPER_ADMIN with valid step-up MFA to execute a playbook', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'admin-1', role: 'SUPER_ADMIN', stepUpVerified: true }
+    });
+    const res = await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'ISOLATE_SYSTEM' });
+    expect(res.status).toBeLessThan(400);
+  });
+
+  it('allows SECURITY_LEAD with valid step-up MFA to execute a playbook', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'lead-1', role: 'SECURITY_LEAD', stepUpVerified: true }
+    });
+    const res = await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'REVOKE_ALL_SESSIONS' });
+    expect(res.status).toBeLessThan(400);
+  });
+
+  it('writes denied execution attempts to the admin audit log', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'user-1', role: 'USER', stepUpVerified: true }
+    });
+    await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'ISOLATE_SYSTEM' });
+    const logs = await routeAuditLogger.getAuditLog();
+    const denied = logs.filter(
+      (entry) =>
+        entry.userId === 'user-1' &&
+        (entry.eventType === 'PLAYBOOK_EXECUTION_DENIED' ||
+          entry.eventType === 'UNAUTHORIZED_ACCESS')
+    );
+    expect(denied.length).toBeGreaterThan(0);
+  });
+
+  it('writes allowed execution attempts to the admin audit log', async () => {
+    const app = buildSecurityApp({
+      user: { id: 'admin-1', role: 'SUPER_ADMIN', stepUpVerified: true }
+    });
+    await request(app)
+      .post('/api/security/incidents/incident-1/playbook/execute')
+      .send({ action: 'ISOLATE_SYSTEM' });
+    const logs = await routeAuditLogger.getAuditLog();
+    const allowed = logs.filter(
+      (entry) =>
+        entry.userId === 'admin-1' &&
+        (entry.eventType === 'PLAYBOOK_EXECUTION' ||
+          entry.eventType === 'PLAYBOOK_EXECUTED')
+    );
+    expect(allowed.length).toBeGreaterThan(0);
   });
 });

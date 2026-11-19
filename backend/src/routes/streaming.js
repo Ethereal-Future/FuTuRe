@@ -5,12 +5,53 @@ import * as StreamingService from '../services/streaming.js';
 import logger from '../config/logger.js';
 import { idempotencyMiddleware } from '../middleware/idempotency.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireStreamAccess, requireStreamOwner } from '../middleware/streamAuth.js';
 
 const router = express.Router();
 
 // Streaming payments are per-sender user data (the swagger spec already
 // documents 401 responses here); require a logged-in caller (#1102).
 router.use(requireAuth);
+
+// SSE keepalive heartbeat interval. The ALB idle_timeout is 300s, but
+// intermediate proxies and clients may drop connections that stay silent for
+// shorter periods. Emitting a comment heartbeat every 15s keeps bytes flowing
+// on idle streams (e.g. quiet Stellar accounts) so long-polling payment
+// streams are not terminated prematurely (#1442).
+const SSE_KEEPALIVE_INTERVAL_MS = 15000;
+
+/**
+ * Attach a periodic SSE comment heartbeat to a streaming response.
+ * Returns a cleanup function that clears the interval; callers must invoke it
+ * when the client disconnects to avoid leaking timers.
+ */
+function attachSseKeepalive(res, intervalMs = SSE_KEEPALIVE_INTERVAL_MS) {
+  const timer = setInterval(() => {
+    if (res.writableEnded || res.destroyed) {
+      clearInterval(timer);
+      return;
+    }
+    try {
+      // SSE comment line: ignored by clients but keeps the connection active.
+      res.write(':keepalive\n\n');
+    } catch (error) {
+      logger.error('streaming.route.keepalive.failed', { error: error.message });
+      clearInterval(timer);
+    }
+  }, intervalMs);
+
+  // Do not keep the event loop alive solely for heartbeats.
+  if (typeof timer.unref === 'function') {
+    timer.unref();
+  }
+
+  const cleanup = () => clearInterval(timer);
+  res.on('close', cleanup);
+  res.on('finish', cleanup);
+  res.on('error', cleanup);
+
+  return cleanup;
+}
 
 function withNextPaymentAt(stream) {
   return {
@@ -36,9 +77,20 @@ const streamRules = {
     body('senderPublicKey').matches(STELLAR_PUBLIC_KEY).withMessage('Invalid sender public key'),
     body('recipientPublicKey').matches(STELLAR_PUBLIC_KEY).withMessage('Invalid recipient public key'),
     body('assetCode').optional().isString().isLength({ min: 1, max: 12 }),
-    body('rateAmount').isFloat({ gt: 0 }).withMessage('rateAmount must be a positive number'),
+    body('rateAmount')
+      .isFloat({ min: 0.00001 })
+      .withMessage('rateAmount must be at least 0.00001')
+      .custom((value) => {
+        if (!/^\d+(\.\d{1,7})?$/.test(String(value))) {
+          throw new Error('rateAmount cannot exceed 7 decimal places (1 stroop)');
+        }
+        return true;
+      }),
     body('intervalSeconds').optional().isInt({ min: 10 }).withMessage('intervalSeconds must be at least 10'),
     body('endTime').optional().isISO8601().withMessage('endTime must be a valid ISO8601 date'),
+    body('escrowContractId').isString().notEmpty().withMessage('escrowContractId is required for delegated streaming'),
+    body('contractStreamId').notEmpty().withMessage('contractStreamId is required for delegated streaming'),
+    body('senderSecret').not().exists().withMessage('senderSecret is not accepted; use delegated escrow'),
   ],
   idParam: [
     param('id').isUUID().withMessage('Invalid stream ID'),
@@ -98,6 +150,17 @@ router.post('/', idempotencyMiddleware, streamRules.create, validate, async (req
     logger.error('streaming.route.create.failed', { error: error.message });
     if (error.code === 'STREAM_LIMIT_EXCEEDED') {
       return res.status(429).json({ error: error.message });
+    }
+    if (
+      error.code === 'CUSTODIAL_SECRET_REJECTED' ||
+      error.code === 'DELEGATED_STREAM_REQUIRED' ||
+      error.code === 'RATE_AMOUNT_INVALID' ||
+      error.code === 'STREAM_SENDER_BALANCE_INSUFFICIENT' ||
+      error.code === 'STREAM_RECIPIENT_TRUSTLINE_MISSING' ||
+      error.code === 'STREAM_RECIPIENT_TRUSTLINE_INSUFFICIENT' ||
+      error.code === 'STREAM_PREFLIGHT_HORIZON_ERROR'
+    ) {
+      return res.status(400).json({ error: error.message, code: error.code });
     }
     res.status(500).json({ error: error.message });
   }
@@ -262,14 +325,9 @@ router.get('/analytics', async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/:id', streamRules.idParam, validate, async (req, res) => {
+router.get('/:id', streamRules.idParam, validate, requireStreamAccess, async (req, res) => {
   try {
-    const stream = await StreamingService.prisma.paymentStream.findUnique({
-      where: { id: req.params.id },
-      include: { sender: true, recipient: true },
-    });
-    if (!stream) return res.status(404).json({ error: 'Stream not found' });
-    res.json(withNextPaymentAt(stream));
+    res.json(withNextPaymentAt(req.stream));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -315,7 +373,7 @@ router.get('/:id', streamRules.idParam, validate, async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
+router.post('/:id/pause', streamRules.idParam, validate, requireStreamAccess, requireStreamOwner, async (req, res) => {
   try {
     const stream = await StreamingService.pauseStream(req.params.id);
     res.json(withNextPaymentAt(stream));
@@ -364,7 +422,7 @@ router.post('/:id/pause', streamRules.idParam, validate, async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
+router.post('/:id/resume', streamRules.idParam, validate, requireStreamAccess, requireStreamOwner, async (req, res) => {
   try {
     const stream = await StreamingService.resumeStream(req.params.id);
     res.json(withNextPaymentAt(stream));
@@ -395,13 +453,8 @@ router.post('/:id/resume', streamRules.idParam, validate, async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.get('/:id/failures', streamRules.idParam, validate, async (req, res) => {
+router.get('/:id/failures', streamRules.idParam, validate, requireStreamAccess, async (req, res) => {
   try {
-    const stream = await StreamingService.prisma.paymentStream.findUnique({
-      where: { id: req.params.id },
-    });
-    if (!stream) return res.status(404).json({ error: 'Stream not found' });
-
     const failures = await StreamingService.getStreamFailures(req.params.id);
     res.json(failures);
   } catch (error) {
@@ -450,11 +503,16 @@ router.get('/:id/failures', streamRules.idParam, validate, async (req, res) => {
  *       500:
  *         $ref: '#/components/responses/InternalServerError'
  */
-router.post('/:id/cancel', streamRules.idParam, validate, async (req, res) => {
+router.post('/:id/cancel', streamRules.idParam, validate, requireStreamAccess, requireStreamOwner, async (req, res) => {
   try {
-    const stream = await StreamingService.cancelStream(req.params.id);
+    const settleProrated =
+      req.body?.settleProrated === true || req.query?.settleProrated === 'true';
+    const stream = await StreamingService.cancelStream(req.params.id, { settleProrated });
     res.json(withNextPaymentAt(stream));
   } catch (error) {
+    if (error.code === 'STREAM_PRORATED_SETTLEMENT_FAILED') {
+      return res.status(502).json({ error: error.message, code: error.code });
+    }
     res.status(500).json({ error: error.message });
   }
 });
@@ -513,7 +571,7 @@ router.patch('/:id', streamRules.idParam, [
   body('rateAmount').optional().isFloat({ gt: 0 }).withMessage('rateAmount must be a positive number'),
   body('intervalSeconds').optional().isInt({ min: 10 }).withMessage('intervalSeconds must be at least 10'),
   body('endTime').optional().isISO8601().withMessage('endTime must be a valid ISO8601 date'),
-], validate, async (req, res) => {
+], validate, requireStreamAccess, requireStreamOwner, async (req, res) => {
   try {
     const stream = await StreamingService.updateStream(req.params.id, req.body);
     res.json(withNextPaymentAt(stream));

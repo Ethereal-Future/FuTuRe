@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { createRedisBackend } from '../cache/redis.js';
 import logger from '../config/logger.js';
+import { getConfig } from '../config/env.js';
 
 const CSRF_TOKEN_LENGTH = 32;
 const CSRF_HEADER = 'x-csrf-token';
@@ -104,7 +105,7 @@ export async function csrfTokenMiddleware(req, res, next) {
  */
 export async function validateCSRFMiddleware(req, res, next) {
   // Skip CSRF validation for GET, HEAD, OPTIONS
-  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+  if (SAFE_METHODS.includes(req.method)) {
     return next();
   }
 
@@ -124,6 +125,42 @@ export async function validateCSRFMiddleware(req, res, next) {
     return res.status(403).json({ error: 'CSRF token validation failed' });
   }
 
+  next();
+}
+
+const SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
+
+function requestOrigin(req) {
+  const origin = req.headers.origin;
+  if (origin && origin !== 'null') return origin;
+  if (origin === 'null') return 'null';
+  const referer = req.headers.referer;
+  if (!referer) return null;
+  try {
+    return new URL(referer).origin;
+  } catch {
+    return 'null';
+  }
+}
+
+/**
+ * Rejects state-changing requests whose Origin/Referer is not an allowed
+ * origin. Browsers always attach Origin to cross-site POST/PUT/PATCH/DELETE
+ * (including text/plain "simple" form posts), so this blocks CSRF even where
+ * the JSON parser would accept a forged body. Requests with neither header
+ * (server-to-server, mobile) fall through to the CSRF token check.
+ */
+export function validateOriginMiddleware(req, res, next) {
+  if (SAFE_METHODS.includes(req.method)) return next();
+
+  const origin = requestOrigin(req);
+  if (!origin) return next();
+
+  const allowed = getConfig().cors?.allowedOrigins || [];
+  if (!allowed.includes(origin)) {
+    logger.warn('Blocked cross-origin state-changing request', { origin, path: req.path });
+    return res.status(403).json({ error: 'Cross-origin request rejected', code: 'CSRF_ORIGIN_MISMATCH' });
+  }
   next();
 }
 

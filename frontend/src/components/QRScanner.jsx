@@ -90,8 +90,13 @@ export function QRScanner({ onScan, onClose }) {
           }
 
           if (raw !== null) {
+            // Cancel the animation loop and release the camera before
+            // calling onScan, so the stream is cleaned up even if the
+            // parent unmounts synchronously inside the callback.
+            cancelAnimationFrame(rafRef.current);
+            streamRef.current?.getTracks().forEach(t => t.stop());
             onScan(parseStellarQR(raw));
-            return; // stop scanning after first hit
+            return;
           }
 
           rafRef.current = requestAnimationFrame(tick);

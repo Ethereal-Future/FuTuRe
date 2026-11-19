@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import { createRedisBackend } from '../cache/redis.js';
 import logger from '../config/logger.js';
+import { canonicalJson } from '../utils/canonicalJson.js';
 import { incrementCounter } from '../monitoring/metrics.js';
 
 const IDEMPOTENCY_TTL = 24 * 60 * 60; // 24 hours in seconds
@@ -72,7 +73,7 @@ export const idempotencyMiddleware = async (req, res, next) => {
 
   const route = req.baseUrl + req.path;
   const cacheKey = `idempotency:${userId}:${route}:${idempotencyKey}`;
-  const bodyHash = crypto.createHash('sha256').update(JSON.stringify(req.body)).digest('hex');
+  const bodyHash = crypto.createHash('sha256').update(canonicalJson(req.body)).digest('hex');
 
   try {
     const claimed = await redisBackend.setNX(cacheKey, { bodyHash, status: 'in-progress' }, IN_PROGRESS_TTL);

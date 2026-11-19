@@ -74,7 +74,7 @@ export function NotificationPreferences() {
     setLoading(true);
     try {
       const { preferences: prefs } = await apiClient.get('/api/notifications/preferences');
-      setPreferences({
+      const fetched = {
         email: prefs.emailEnabled ?? true,
         push: prefs.pushEnabled ?? true,
         sms: prefs.smsEnabled ?? false,
@@ -87,7 +87,10 @@ export function NotificationPreferences() {
         lowBalanceAlertEnabled: prefs.lowBalanceAlertEnabled ?? false,
         lowBalanceThreshold: prefs.lowBalanceThreshold ?? 10.0,
         lowBalanceAsset: prefs.lowBalanceAsset ?? 'XLM',
-      });
+      };
+      setPreferences(fetched);
+      // Record the server-confirmed state so failed saves always revert to it.
+      setSavedPreferences(fetched);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load preferences');
     } finally {
@@ -98,6 +101,9 @@ export function NotificationPreferences() {
   useEffect(() => {
     fetchPreferences();
   }, [fetchPreferences]);
+
+  // Tracks the last successfully saved preferences so we can revert on API failure.
+  const [savedPreferences, setSavedPreferences] = useState(null);
 
   const handleToggle = (channel) => {
     setPreferences((prev) => ({ ...prev, [channel]: !prev[channel] }));
@@ -111,6 +117,9 @@ export function NotificationPreferences() {
     e.preventDefault();
     setSaving(true);
     setError(null);
+
+    // Snapshot current state so we can revert if the API call fails.
+    const snapshot = { ...preferences };
 
     try {
       await apiClient.put('/api/notifications/preferences', {
@@ -128,10 +137,16 @@ export function NotificationPreferences() {
         lowBalanceAsset: preferences.lowBalanceAsset,
       });
 
+      // Persist the successfully saved state so future failures revert correctly.
+      setSavedPreferences(snapshot);
       setSuccess('Notification preferences saved successfully!');
       setTimeout(() => setSuccess(null), 3000);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to save preferences');
+      // Revert toggles to the last server-confirmed state so the UI accurately
+      // reflects what is actually stored in the database.
+      const revertTo = savedPreferences ?? snapshot;
+      setPreferences(revertTo);
+      setError(err.response?.data?.error || 'Failed to save preferences. Your changes have been reverted.');
     } finally {
       setSaving(false);
     }

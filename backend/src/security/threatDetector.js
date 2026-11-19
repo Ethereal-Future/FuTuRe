@@ -1,6 +1,8 @@
 class ThreatDetector {
   constructor() {
     this.failedAttempts = new Map();
+    this.requestTracker = new Map(); // ip -> [timestamps]
+    this.anomalyScores = new Map(); // ip -> score
     this.suspiciousPatterns = [];
     this.blockedIPs = new Set();
     this.thresholds = {
@@ -9,6 +11,70 @@ class ThreatDetector {
       rapidRequests: 100,
       rapidRequestWindow: 60 * 1000 // 1 minute
     };
+
+    // Periodically prune inactive IPs so memory stays bounded under
+    // continuous unique-IP traffic. unref() keeps the timer from holding
+    // the event loop open.
+    this.cleanupInterval = setInterval(
+      () => this.cleanupInactiveIPs(),
+      10 * 60 * 1000 // 10 minutes
+    );
+    if (typeof this.cleanupInterval.unref === 'function') {
+      this.cleanupInterval.unref();
+    }
+  }
+
+  recordRequest(ipAddress) {
+    const now = Date.now();
+
+    if (!this.requestTracker.has(ipAddress)) {
+      this.requestTracker.set(ipAddress, []);
+    }
+
+    const timestamps = this.requestTracker.get(ipAddress);
+    timestamps.push(now);
+
+    // Keep only timestamps inside the evaluation window.
+    const recentTimestamps = timestamps.filter(
+      t => now - t < this.thresholds.rapidRequestWindow
+    );
+
+    if (recentTimestamps.length === 0) {
+      // No recent traffic for this IP: drop the key entirely.
+      this.requestTracker.delete(ipAddress);
+      this.anomalyScores.delete(ipAddress);
+    } else {
+      this.requestTracker.set(ipAddress, recentTimestamps);
+    }
+
+    return recentTimestamps.length;
+  }
+
+  cleanupInactiveIPs() {
+    const now = Date.now();
+    const window = this.thresholds.rapidRequestWindow;
+
+    for (const [ip, timestamps] of this.requestTracker) {
+      const newest = timestamps.length > 0 ? timestamps[timestamps.length - 1] : 0;
+      if (newest === 0 || now - newest >= window) {
+        this.requestTracker.delete(ip);
+        this.anomalyScores.delete(ip);
+      }
+    }
+
+    // Prune anomaly scores for IPs no longer being tracked.
+    for (const ip of this.anomalyScores.keys()) {
+      if (!this.requestTracker.has(ip)) {
+        this.anomalyScores.delete(ip);
+      }
+    }
+  }
+
+  stopCleanup() {
+    if (this.cleanupInterval) {
+      clearInterval(this.cleanupInterval);
+      this.cleanupInterval = null;
+    }
   }
 
   recordFailedLogin(userId, ipAddress) {

@@ -34,8 +34,10 @@ model User {
   contacts               Contact[]
   role                   UserRole                @default(USER)
   sessions               Session[]
+  userDevices            UserDevice[]
   mfaSettings            MFASettings?
   recoveryCodes          RecoveryCode[]
+  recoveryRequests       RecoveryRequest[]
 
   @@index([deletedAt])
   @@index([amlStatus])
@@ -121,11 +123,18 @@ model PaymentStream {
   startTime       DateTime       @default(now())
   endTime         DateTime?
   lastProcessedAt DateTime       @default(now())
+  /// When set, worker skips the stream until this timestamp (failure backoff).
+  nextAttemptAt   DateTime?
   totalStreamed    Decimal        @default(0)
   status          StreamStatus   @default(ACTIVE)
   failureCount    Int            @default(0)
   metadata        Json?
+  /// DEPRECATED: never stored. Kept nullable for migration compatibility; always null.
   senderSecret    String?
+  /// Soroban StreamPayment contract address (C...) holding escrowed allowance.
+  escrowContractId String?
+  /// On-chain stream id within the escrow contract.
+  contractStreamId String?
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
   failures        StreamFailure[]
@@ -133,6 +142,7 @@ model PaymentStream {
   @@index([senderId])
   @@index([recipientId])
   @@index([status, lastProcessedAt])
+  @@index([status, nextAttemptAt])
 }
 
 model StreamFailure {
@@ -188,6 +198,7 @@ model NotificationPreference {
   lowBalanceAsset           String   @default("XLM")
   lastLowBalanceAlertAt     DateTime?
   lastLowBalanceAlertLevel  Decimal?
+  lastBalanceCheckedAt      DateTime?
   updatedAt                 DateTime @updatedAt
 }
 
@@ -320,6 +331,12 @@ model Session {
   device       String?
   ipAddress    String?
   userAgent    String?
+  // Mobile device binding (issue #1381). Null for web sessions; when set,
+  // every request on this session must present a matching X-Device-Id.
+  deviceId     String?
+  deviceModel  String?
+  osVersion    String?
+  appVersion   String?
   lastActiveAt DateTime  @default(now())
   createdAt    DateTime  @default(now())
   expiresAt    DateTime
@@ -327,6 +344,25 @@ model Session {
 
   @@index([userId])
   @@index([userId, revokedAt])
+  @@index([deviceId])
+  @@index([deviceId, revokedAt])
+}
+
+// Push notification device tokens (FCM / APNS). Rows whose token the push
+// provider reports as expired or unregistered are pruned after each
+// broadcast (issue #1384).
+model UserDevice {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  deviceId  String
+  token     String   @unique
+  platform  String   // "ios" (APNS) | "android" (FCM)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([userId, deviceId])
 }
 
 // Immutable audit trail for all admin actions (no UPDATE/DELETE should be issued against this table)
@@ -352,7 +388,10 @@ model AdminAuditLog {
 model OAuth2Client {
   id           String   @id @default(uuid())
   clientId     String   @unique
-  clientSecret String
+  /// bcrypt/argon2id hash of the client secret. Never store the raw secret.
+  /// Existing plaintext values must be converted to hashes by the migration
+  /// before this column is used for authentication (see oauth2.js).
+  clientSecretHash String
   redirectUris String[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -373,6 +412,8 @@ model OAuth2AuthorizationCode {
   client    OAuth2Client  @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
   userId    String
   scope     String
+  codeChallenge       String?
+  codeChallengeMethod String?
   expiresAt DateTime
   createdAt DateTime      @default(now())
 
@@ -614,13 +655,17 @@ model EventStore {
 // Aggregate snapshots – replaces the per-aggregate JSON files written to
 // backend/data/snapshots/ by eventStore.js.
 model EventSnapshot {
-  id          String   @id @default(uuid())
-  aggregateId String   @unique
-  state       Json
-  version     Int
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String   @id @default(uuid())
+  aggregateId    String
+  state          Json
+  version        Int
+  // Version of the replayer fold logic that produced `state`; snapshots from
+  // another reducer version are ignored.
+  reducerVersion Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
+  @@unique([aggregateId, version])
   @@index([aggregateId])
 }
 
@@ -635,6 +680,9 @@ model EventArchive {
   metadata    Json     @default("{}")
   originalCreatedAt DateTime
   archivedAt  DateTime @default(now())
+  // S3 object holding the verified cold copy of this row's batch, if any (#1361)
+  archiveKey    String?
+  archiveSha256 String?
 
   @@index([aggregateId])
   @@index([archivedAt])
@@ -650,6 +698,38 @@ model EventProjection {
   updatedAt DateTime @updatedAt
 
   @@index([name])
+}
+
+// Sync health per projection/listener, updated on every delivery (#1360).
+model ProjectionStatus {
+  name          String    @id
+  lastEventId   String?
+  lastEventAt   DateTime?
+  lastSuccessAt DateTime?
+  lastErrorAt   DateTime?
+  lastError     String?
+  failureCount  Int       @default(0)
+  updatedAt     DateTime  @updatedAt
+}
+
+// Dead-letter queue (projection:dlq:<projection>) for events a projection or
+// listener failed to apply. Unresolved rows block later events for that
+// projection so it never folds out of order (#1360).
+model ProjectionDeadLetter {
+  id            String    @id @default(uuid())
+  projection    String
+  eventId       String
+  aggregateId   String
+  eventType     String
+  event         Json
+  error         String
+  attempts      Int       @default(1)
+  createdAt     DateTime  @default(now())
+  lastAttemptAt DateTime  @default(now())
+  resolvedAt    DateTime?
+
+  @@unique([projection, eventId])
+  @@index([projection, resolvedAt, createdAt])
 }
 
 // ─── Load Testing (#1125) ────────────────────────────────────────────────────
@@ -706,13 +786,24 @@ model DeviceRegistry {
   deviceId     String   @unique
   fingerprint  String
   certHash     String?
+  // Server-derived only: set by a failed hardware attestation or a client
+  // self-report, and cleared solely by a successful server-verified
+  // attestation. Never accepted from the client as "clean" (issue #1382).
   isJailbroken Boolean  @default(false)
+  // Server-verified hardware attestation state (issue #1382).
+  attestationPlatform String? // "android" (Play Integrity) | "ios" (App Attest)
+  attestationVerdict  String? // e.g. "MEETS_STRONG_INTEGRITY", "APP_ATTEST_VERIFIED"
+  attestedAt          DateTime?
+  appAttestKeyId      String?   @unique
+  appAttestPublicKey  String?
+  appAttestCounter    BigInt    @default(0)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   alerts SecurityAlert[]
 
   @@index([deviceId])
+  @@index([attestationPlatform, attestedAt])
 }
 
 // Suspicious-event log – replaces the in-process array (this.alerts) in
@@ -754,6 +845,26 @@ model ComplianceReport {
   @@index([generatedAt])
 }
 
+// ─── Penetration Test Results (#1405) ────────────────────────────────────────
+
+// Durable storage for penetration test / security scan artifacts. Replaces the
+// ephemeral local-disk writes to backend/data/pentests/ in
+// security/penetrationTester.js so results survive container recycles and are
+// visible to every cluster node. Large payloads / full execution logs are
+// uploaded to the compliance S3 bucket and referenced via s3Key.
+model SecurityScanResult {
+  id        String   @id @default(uuid())
+  testId    String   @unique // e.g. PENTEST-<timestamp>
+  timestamp DateTime @default(now())
+  results   Json     // full result payload
+  summary   Json     // pass/fail/critical counts
+  s3Key     String?  // S3 object key for large payloads / execution logs
+  createdAt DateTime @default(now())
+
+  @@index([testId])
+  @@index([timestamp])
+}
+
 // ─── Multi-Sig Pending Transactions (#1287) ──────────────────────────────────
 
 // Envelopes awaiting signatures from multiple signers. Rows past expiresAt are
@@ -762,18 +873,34 @@ model ComplianceReport {
 model PendingMultiSigTx {
   txId            String   @id
   txXdr           String
+  baseTxXdr       String?
   sourcePublicKey String
+  submissionSourcePublicKey String?
+  sourceSequence  BigInt?
   destination     String
   amount          String
   assetCode       String   @default("XLM")
   signatures      Json     @default("[]")
-  status          String   @default("pending") // pending | submitted | failed | expired
+  status          String   @default("pending") // pending | submitting | submitted | failed | expired
   expiresAt       DateTime
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
+  signaturesByKey MultiSigSignature[]
 
   @@index([status, expiresAt])
   @@index([sourcePublicKey, status])
+}
+
+model MultiSigSignature {
+  id              String           @id @default(uuid())
+  txId            String
+  signerPublicKey String
+  signature       String
+  createdAt       DateTime         @default(now())
+  pending         PendingMultiSigTx @relation(fields: [txId], references: [txId], onDelete: Cascade)
+
+  @@unique([txId, signerPublicKey])
+  @@index([txId])
 }
 
 // ─── AMM Pools (#1290) ───────────────────────────────────────────────────────
@@ -843,13 +970,98 @@ model RefreshToken {
   @@index([expiresAt])
 }
 
-model Session {
-  id           String    @id @default(uuid())
-  userId       String
-  createdAt    DateTime  @default(now())
-  lastActiveAt DateTime  @default(now())
-  expiresAt    DateTime
-  revokedAt    DateTime?
+// Durable storage for mobile clients' offline transaction queues. Items are
+// persisted so they survive container restarts / redeploys and can be flushed
+// from any cluster instance. See issue #1376.
+model MobileOfflineQueueItem {
+  id              String    @id @default(uuid())
+  userId          String
+  transactionData Json
+  status          String    @default("pending") // pending | success | failed | SEQUENCE_MISMATCH
+  result          Json?
+  error           String?
+  enqueuedAt      DateTime  @default(now())
+  processedAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  @@index([userId])
+  @@index([userId, status, enqueuedAt])
+  @@index([status])
+}
+
+// Events that repeatedly failed projection processing and were quarantined
+// so the rest of the projection pipeline can keep moving. Admins repair and
+// replay them via POST /api/v1/events/poison-pills/:id/retry. See issue #1365.
+model ProjectionPoisonPill {
+  id             String    @id @default(uuid())
+  projectionName String
+  eventId        String
+  aggregateId    String
+  eventType      String
+  event          Json
+  errorMessage   String
+  errorStack     String?
+  retryCount     Int       @default(0)
+  status         String    @default("QUARANTINED")
+  resolvedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([projectionName, eventId])
+  @@index([status])
+}
+
+// Account recovery lifecycle (issue #1387). Previously held in process
+// memory, which lost in-flight recoveries on restart and could not be shared
+// across API nodes. At most one active (pending/approved/completing) request
+// per user is enforced by a partial unique index in the migration.
+enum RecoveryStatus {
+  pending
+  approved
+  completing
+  completed
+  cancelled
+  expired
+  locked
+}
+
+model RecoveryRequest {
+  id             String             @id @default(uuid())
+  userId         String
+  user           User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  method         String             // phrase | social
+  status         RecoveryStatus     @default(pending)
+  attempts       Int                @default(0)
+  ipAddress      String?
+  // Client-generated Stellar key that replaces the lost key on completion (#1389)
+  newPublicKey   String?
+  oldPublicKey   String?
+  rotationTxHash String?
+  initiatedAt    DateTime           @default(now())
+  executeAfter   DateTime
+  expiresAt      DateTime
+  completedAt    DateTime?
+  cancelledAt    DateTime?
+  updatedAt      DateTime           @updatedAt
+  approvals      RecoveryApproval[]
+
+  @@index([userId, status])
+  @@index([expiresAt])
+  @@index([status, executeAfter])
+}
+
+// One row per guardian contact invited to approve a social recovery (#1388).
+// Only the SHA-256 hash of the out-of-band approval token is stored.
+model RecoveryApproval {
+  id         String          @id @default(uuid())
+  requestId  String
+  request    RecoveryRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  contactId  String
+  tokenHash  String
+  approvedAt DateTime?
+  createdAt  DateTime        @default(now())
+
+  @@unique([requestId, contactId])
+  @@index([requestId])
+  @@index([requestId, approvedAt])
 }

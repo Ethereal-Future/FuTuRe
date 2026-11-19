@@ -16,6 +16,9 @@ const counters = {
   payments_failed_total: 0,
   accounts_created_total: 0,
   idempotency_bypass_total: 0,
+  projection_poison_pill_quarantined_total: 0,
+  stream_payment_claim_conflicts_total: 0,
+  active_streams_processed_total: 0,
 };
 
 // ── Business gauges ──────────────────────────────────────────────────────────
@@ -28,6 +31,7 @@ const gauges = {
 // Each histogram stores { sum, count, buckets: Map<le, count> }
 const PAYMENT_AMOUNT_BUCKETS = [1, 10, 100, 1000, 10000, Infinity];
 const STELLAR_API_DURATION_BUCKETS = [0.01, 0.05, 0.1, 0.5, 1, 5, Infinity];
+const STREAMING_WORKER_DURATION_BUCKETS = [0.1, 0.5, 1, 5, 15, 30, 60, Infinity];
 
 function makeHistogram(bounds) {
   const buckets = new Map(bounds.map((b) => [b, 0]));
@@ -37,6 +41,7 @@ function makeHistogram(bounds) {
 const histograms = {
   payment_amount_xlm: makeHistogram(PAYMENT_AMOUNT_BUCKETS),
   stellar_api_duration_seconds: makeHistogram(STELLAR_API_DURATION_BUCKETS),
+  streaming_worker_duration_seconds: makeHistogram(STREAMING_WORKER_DURATION_BUCKETS),
 };
 
 function observeHistogram(name, value) {
@@ -70,6 +75,10 @@ export function recordPayment({ amountXlm, failed = false }) {
 
 export function recordStellarApiCall(durationSeconds) {
   observeHistogram('stellar_api_duration_seconds', durationSeconds);
+}
+
+export function recordStreamingWorkerDuration(durationSeconds) {
+  observeHistogram('streaming_worker_duration_seconds', durationSeconds);
 }
 
 export function recordAccountCreated() {
@@ -163,6 +172,9 @@ export function toPrometheusText() {
   counter('payments_failed_total', 'Total number of failed payments', counters.payments_failed_total);
   counter('accounts_created_total', 'Total number of accounts created', counters.accounts_created_total);
   counter('idempotency_bypass_total', 'Total requests where idempotency protection was bypassed due to a Redis failure', counters.idempotency_bypass_total);
+  counter('projection_poison_pill_quarantined_total', 'Total events quarantined after repeatedly failing projection processing', counters.projection_poison_pill_quarantined_total);
+  counter('stream_payment_claim_conflicts_total', 'Total stream payment ticks skipped because another worker already claimed the interval', counters.stream_payment_claim_conflicts_total);
+  counter('active_streams_processed_total', 'Total payment stream ticks successfully claimed and processed by the worker', counters.active_streams_processed_total);
 
   // Business gauges
   gauge('active_streams', 'Number of currently active payment streams', gauges.active_streams);
@@ -171,6 +183,7 @@ export function toPrometheusText() {
   // Business histograms
   histogram('payment_amount_xlm', 'Distribution of payment amounts in XLM', histograms.payment_amount_xlm);
   histogram('stellar_api_duration_seconds', 'Duration of Stellar API calls in seconds', histograms.stellar_api_duration_seconds);
+  histogram('streaming_worker_duration_seconds', 'Duration of streaming worker ticks in seconds', histograms.streaming_worker_duration_seconds);
 
   // Infrastructure: memory
   const mem = process.memoryUsage();
@@ -248,4 +261,5 @@ export function resetMetrics() {
   for (const k of Object.keys(gauges)) gauges[k] = 0;
   histograms.payment_amount_xlm = makeHistogram(PAYMENT_AMOUNT_BUCKETS);
   histograms.stellar_api_duration_seconds = makeHistogram(STELLAR_API_DURATION_BUCKETS);
+  histograms.streaming_worker_duration_seconds = makeHistogram(STREAMING_WORKER_DURATION_BUCKETS);
 }

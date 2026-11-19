@@ -85,6 +85,15 @@ export class RedisBackend {
     return this.tlsEnabled && this.client != null;
   }
 
+  /**
+   * Whether a Redis client is configured. Callers use this to choose between
+   * the distributed (Redis) path and an in-memory fallback without having to
+   * inspect adapter internals.
+   */
+  isConfigured() {
+    return this.client != null;
+  }
+
   async connect() {
     if (!this.client) return;
     try { await this.client.connect(); } catch { /* fall through */ }

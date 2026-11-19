@@ -205,7 +205,8 @@
   "errorBoundary": {
     "sectionError": "{{context}} Error",
     "tryAgain": "Try again",
-    "fullPageTitle": "Something went wrong"
+    "fullPageTitle": "Something went wrong",
+    "clearCache": "Clear cache & reload"
   },
   "qrScanner": {
     "title": "Scan QR Code",
@@ -571,7 +572,20 @@
     "addressLabel": "Stellar Address",
     "addressPlaceholder": "Stellar address",
     "addContact": "+ Add Contact",
-    "removeContact": "Remove {{name}}"
+    "removeContact": "Remove {{name}}",
+    "checksumValid": "✓ Valid public key checksum",
+    "federationValid": "✓ Valid federation address format — will be resolved when saved",
+    "resolving": "Resolving…",
+    "errors": {
+      "empty": "Address is required",
+      "secretKey": "This is a SECRET key (starts with S). Never share it — enter the public key (starts with G) instead",
+      "federationFormat": "Invalid federation address — expected the form name*domain.com",
+      "prefix": "Stellar public keys must start with \"G\"",
+      "invalidChars": "Contains characters that are not allowed (only A–Z and 2–7)",
+      "length": "Public keys must be exactly 56 characters (got {{length}})",
+      "checksum": "Checksum mismatch — this key contains a typo",
+      "federationUnresolved": "Could not resolve federation address {{address}}"
+    }
   },
   "largeTxWarning": {
     "title": "Large Transaction",

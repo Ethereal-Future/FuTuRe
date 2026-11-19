@@ -16,6 +16,8 @@
  * still blocking *new* hardcoded strings in CI.
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

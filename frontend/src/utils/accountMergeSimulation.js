@@ -84,6 +84,19 @@ export async function simulateAccountMerge(sourcePublicKey, destinationPublicKey
     result.xlmToTransfer = Math.max(0, xlmAmount - xlmRequired);
 
     // Check for blocking conditions
+    if (destinationPublicKey === sourcePublicKey) {
+      result.blockedReasons.push('Destination must be different from the account being merged.');
+    }
+
+    // Pre-flight: destination must already exist on-chain. Merging into a
+    // typo'd or unfunded address would destroy this account irrecoverably.
+    if (data.destinationExists !== true) {
+      result.blockedReasons.push(
+        'Destination account was not found on the Stellar ledger. Check the address for typos — ' +
+        'the destination must be an existing, funded account you control.'
+      );
+    }
+
     if (trustlines.length > 0) {
       result.blockedReasons.push(
         `Cannot merge account with positive trustlines. Remove ${trustlines.length} trustline(s) first.`

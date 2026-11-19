@@ -5,7 +5,9 @@
  *
  * Migrated as part of Issue #1125.
  */
+import http from 'node:http';
 import { throughputRps } from './throughput.js';
+import { createSemaphore, createRateLimiter } from '../utils/concurrency.js';
 import prisma from '../db/client.js';
 
 class LoadTestRunner {
@@ -13,6 +15,7 @@ class LoadTestRunner {
     this.results = [];
     this.startTime = null;
     this.endTime = null;
+    this.maxInFlight = 0;
   }
 
   /**
@@ -29,6 +32,7 @@ class LoadTestRunner {
   async runScenario(scenario, baseUrl = 'http://localhost:3001') {
     this.results = [];
     this.startTime = Date.now();
+    this.maxInFlight = 0;
 
     const concurrency = Math.max(1, Number(scenario.concurrency) || 1);
     const durationSec = Math.max(0, Number(scenario.duration) || 0);
@@ -44,7 +48,30 @@ class LoadTestRunner {
       return this.getResults();
     }
 
+    // Bounded concurrency: at most `concurrency` requests in flight at once.
+    const semaphore = createSemaphore(concurrency);
+
+    // Optional rate schedule. `requestsPerSecond` drives an open-loop token
+    // bucket; `rateMode: 'open'` uses the same limiter, while 'closed' relies
+    // purely on the semaphore (closed-loop) pacing.
+    const requestsPerSecond = Number(scenario.requestsPerSecond) || 0;
+    const rateMode = scenario.rateMode === 'open' || scenario.rateMode === 'closed'
+      ? scenario.rateMode
+      : null;
+    const rateLimiter = requestsPerSecond > 0 && rateMode !== 'closed'
+      ? createRateLimiter(requestsPerSecond)
+      : null;
+
+    // Shared keep-alive agent so TCP sockets are reused across requests
+    // instead of being opened per request (avoids EMFILE under high load).
+    const agent = new http.Agent({
+      keepAlive: true,
+      maxSockets: concurrency,
+      maxFreeSockets: concurrency,
+    });
+
     let issued = 0;
+    let inFlight = 0;
 
     const worker = async (workerIndex) => {
       if (rampUpMs > 0 && concurrency > 1) {
@@ -55,13 +82,31 @@ class LoadTestRunner {
       while (Date.now() < deadline) {
         const n = issued++;
         if (n >= totalRequests) break;
-        const request = this.selectRequest(requests);
-        const result = await this.executeRequest(baseUrl, request);
-        this.results.push(result);
+
+        if (rateLimiter) {
+          await rateLimiter.acquire();
+        }
+
+        await semaphore.acquire();
+        inFlight += 1;
+        if (inFlight > this.maxInFlight) this.maxInFlight = inFlight;
+
+        try {
+          const request = this.selectRequest(requests);
+          const result = await this.executeRequest(baseUrl, request, agent);
+          this.results.push(result);
+        } finally {
+          inFlight -= 1;
+          semaphore.release();
+        }
       }
     };
 
-    await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
+    try {
+      await Promise.all(Array.from({ length: concurrency }, (_, i) => worker(i)));
+    } finally {
+      agent.destroy();
+    }
 
     this.endTime = Date.now();
     return this.getResults();
@@ -79,7 +124,7 @@ class LoadTestRunner {
     return requests[0];
   }
 
-  async executeRequest(baseUrl, request) {
+  async executeRequest(baseUrl, request, agent) {
     const startTime = Date.now();
 
     try {
@@ -88,6 +133,10 @@ class LoadTestRunner {
         method: request.method,
         headers: { 'Content-Type': 'application/json' },
       };
+
+      if (agent) {
+        options.dispatcher = agent;
+      }
 
       if (request.body) {
         options.body = JSON.stringify(request.body);
@@ -138,6 +187,7 @@ class LoadTestRunner {
         p95ResponseTime: 0,
         p99ResponseTime: 0,
         throughput: 0,
+        maxInFlight: this.maxInFlight,
         duration: this.endTime && this.startTime ? (this.endTime - this.startTime) / 1000 : 0,
       };
     }
@@ -156,6 +206,7 @@ class LoadTestRunner {
       p99ResponseTime: responseTimes[Math.floor(total * 0.99)],
       /** Throughput in requests per second (req/s). */
       throughput: throughputRps(total, this.endTime - this.startTime),
+      maxInFlight: this.maxInFlight,
       duration: (this.endTime - this.startTime) / 1000,
     };
   }

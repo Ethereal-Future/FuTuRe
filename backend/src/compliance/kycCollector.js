@@ -2,6 +2,7 @@ import { z } from 'zod';
 import prisma from '../db/client.js';
 import { encryptToEnvValue, decryptFromEnvValue } from '../config/secrets.js';
 import auditLogger from '../security/auditLogger.js';
+import { normalizePhoneNumber, isSupportedRegion } from '../utils/phone.js';
 
 const KYC_STATUS = { PENDING: 'PENDING', APPROVED: 'APPROVED', REJECTED: 'REJECTED', UNDER_REVIEW: 'UNDER_REVIEW' };
 
@@ -12,8 +13,24 @@ const kycSchema = z.object({
   documentType:   z.enum(['PASSPORT', 'NATIONAL_ID', 'DRIVERS_LICENSE', 'RESIDENCE_PERMIT']),
   documentNumber: z.string().min(1),
   address:        z.string().min(1),
-  phoneNumber:    z.string().regex(/^\+[1-9]\d{1,14}$/).optional(),
+  phoneNumber:    z.string().optional(),
+  // ISO 3166-1 alpha-2 region of the phone number; needed for national-format input like '0712345678'
+  phoneCountry:   z.string().length(2).optional(),
   email:          z.string().email().optional(),
+}).transform((data, ctx) => {
+  if (data.phoneNumber === undefined) return data;
+  // Fall back to nationality when it is an ISO region code
+  const region = data.phoneCountry ?? (isSupportedRegion(data.nationality) ? data.nationality : undefined);
+  const phoneNumber = normalizePhoneNumber(data.phoneNumber, region);
+  if (!phoneNumber) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['phoneNumber'],
+      message: 'Invalid phone number; use international format (e.g. +2348031234567) or provide phoneCountry',
+    });
+    return z.NEVER;
+  }
+  return { ...data, phoneNumber };
 });
 
 function getEncryptionKey() {

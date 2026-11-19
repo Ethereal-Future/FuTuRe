@@ -155,26 +155,6 @@ function createClient(p, target) {
 const prismaWrite = createClient(pool, 'primary');
 const prismaRead = readPool ? createClient(readPool, 'replica') : prismaWrite;
 
-// Primary client that transparently routes read-only model queries to the replica.
-// Writes and interactive $transaction always hit the primary. Use `withPrimary()`
-// (or prismaWrite directly) for read-your-own-writes flows.
-let forcePrimaryDepth = 0;
-const prisma = readPool
-  ? prismaWrite.$extends({
-      query: {
-        $allModels: {
-          async $allOperations({ model, operation, args, query }) {
-            if (forcePrimaryDepth === 0 && READ_OPS.has(operation)) {
-              const delegate = prismaRead[model.charAt(0).toLowerCase() + model.slice(1)];
-              return delegate[operation](args);
-            }
-            return query(args);
-          },
-        },
-      },
-    })
-  : prismaWrite;
-
 /** Run fn with all queries pinned to the primary (read-your-own-writes). */
 export async function withPrimary(fn) {
   forcePrimaryDepth += 1;
@@ -192,18 +172,6 @@ export function getDBMetrics() {
 
 export { prismaRead, prismaWrite };
 
-export async function connectDB() {
-  await prismaWrite.$connect();
-  if (readPool) await prismaRead.$connect();
-  logger.info('db.connected', { replica: Boolean(readPool) });
-}
-
-export async function disconnectDB() {
-  await prismaWrite.$disconnect();
-  if (readPool) {
-    await prismaRead.$disconnect();
-    await readPool.end();
-  }
 // Layer 1 — PostgreSQL server-side timeout.
 // Primary enforcement is the startup `options` parameter set in
 // buildConnectionString. The session-level SET below is only a fallback for

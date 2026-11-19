@@ -7,6 +7,8 @@
  * - Exits with code 1 if score drops below threshold or regresses
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

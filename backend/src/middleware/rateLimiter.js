@@ -20,7 +20,7 @@ function createRateLimiter(options = {}) {
     message = 'Too many requests, please try again later.',
     standardHeaders = true,
     legacyHeaders = false,
-    skip = (req) => isWhitelisted(getClientIP(req)),
+    skip = async (req) => await isWhitelisted(getClientIP(req)),
     keyGenerator = (req) => ipKeyGenerator(getClientIP(req)),
   } = options;
 
@@ -36,7 +36,7 @@ function createRateLimiter(options = {}) {
     legacyHeaders,
     skip,
     keyGenerator,
-    handler: (req, res, _next, opts) => {
+    handler: async (req, res, _next, opts) => {
       const clientIP = getClientIP(req);
       const username = req.body?.username || 'unknown';
 
@@ -46,7 +46,7 @@ function createRateLimiter(options = {}) {
         path: req.path,
         method: req.method,
         username,
-        whitelist: isWhitelisted(clientIP),
+        whitelist: await isWhitelisted(clientIP),
       }, 'Rate limit exceeded');
       
       const retryAfter = Math.ceil(windowMs / 1000);

@@ -5,20 +5,13 @@ import prisma from '../db/client.js';
 import logger from '../config/logger.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PENTEST_DIR = path.join(__dirname, '../../data/pentests');
 
 class PenetrationTester {
   constructor() {
     this.baseUrl = process.env.APP_URL || 'http://localhost:3000';
   }
 
-  async initialize() {
-    await fs.mkdir(PENTEST_DIR, { recursive: true });
-  }
-
   async runSecurityTests() {
-    await this.initialize();
-
     const testId = `PENTEST-${Date.now()}`;
     const results = {
       id: testId,
@@ -56,8 +49,7 @@ class PenetrationTester {
     results.summary.failed = results.tests.filter(t => t.status === 'FAIL').length;
     results.summary.criticalIssues = results.tests.filter(t => t.severity === 'CRITICAL' && t.status === 'FAIL').length;
 
-    const testFile = path.join(PENTEST_DIR, `${testId}.json`);
-    await fs.writeFile(testFile, JSON.stringify(results, null, 2));
+    await this.saveResults(testId, results);
 
     logger.info({
       testId,
@@ -67,6 +59,59 @@ class PenetrationTester {
     }, 'Security penetration test completed');
 
     return results;
+  }
+
+  async saveResults(testId, results) {
+    const timestamp = new Date(results.timestamp);
+
+    let s3Key = null;
+    try {
+      s3Key = await this.uploadToS3(testId, results);
+    } catch (error) {
+      logger.warn({ error, testId }, 'Failed to upload pentest results to S3, persisting to database only');
+    }
+
+    try {
+      await prisma.securityScanResult.upsert({
+        where: { testId },
+        update: {
+          timestamp,
+          results,
+          summary: results.summary,
+          s3Key
+        },
+        create: {
+          testId,
+          timestamp,
+          results,
+          summary: results.summary,
+          s3Key
+        }
+      });
+    } catch (error) {
+      logger.error({ error, testId }, 'Failed to persist pentest results to database');
+      throw error;
+    }
+  }
+
+  async uploadToS3(testId, results) {
+    const bucket = process.env.PENTEST_S3_BUCKET;
+    if (!bucket) {
+      return null;
+    }
+
+    const { S3Client, PutObjectCommand } = await import('@aws-sdk/client-s3');
+    const client = new S3Client({ region: process.env.AWS_REGION });
+    const key = `pentests/${testId}.json`;
+
+    await client.send(new PutObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Body: JSON.stringify(results, null, 2),
+      ContentType: 'application/json'
+    }));
+
+    return key;
   }
 
   async testSQLInjection() {
@@ -644,18 +689,19 @@ class PenetrationTester {
   }
 
   async getLatestResults(limit = 5) {
-    await this.initialize();
-
     try {
-      const files = await fs.readdir(PENTEST_DIR);
-      const results = [];
+      const records = await prisma.securityScanResult.findMany({
+        orderBy: { timestamp: 'desc' },
+        take: limit
+      });
 
-      for (const file of files.slice(-limit)) {
-        const content = await fs.readFile(path.join(PENTEST_DIR, file), 'utf-8');
-        results.push(JSON.parse(content));
-      }
-
-      return results.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+      return records.map(record => ({
+        id: record.testId,
+        timestamp: record.timestamp.toISOString(),
+        tests: record.results?.tests ?? [],
+        summary: record.summary ?? record.results?.summary ?? null,
+        s3Key: record.s3Key ?? null
+      }));
     } catch (error) {
       logger.error('Failed to get pentest results:', error);
       return [];

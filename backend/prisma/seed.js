@@ -13,6 +13,8 @@
  * (identified by publicKey / hash unique constraints).
  */
 
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 

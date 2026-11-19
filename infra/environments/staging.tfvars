@@ -7,8 +7,8 @@
 environment = "staging"
 
 # ── ECS ───────────────────────────────────────────────────────────────────────
-backend_cpu           = 256
-backend_memory        = 512
+backend_cpu           = 1024
+backend_memory        = 2048
 backend_desired_count = 1
 
 # ── RDS ───────────────────────────────────────────────────────────────────────
@@ -18,4 +18,5 @@ db_backup_retention_days = 3
 
 # ── ElastiCache ───────────────────────────────────────────────────────────────
 redis_node_type       = "cache.t4g.micro"
-redis_num_cache_nodes = 1
+# Primary + 1 replica so staging exercises the same failover path as prod.
+redis_num_cache_nodes = 2

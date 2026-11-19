@@ -8,7 +8,7 @@ import { SkeletonCard } from './Skeleton';
 import { useFocusTrap } from '../hooks/useFocusTrap';
 import { CopyButton } from './CopyButton';
 import { makeVariants, tapScale } from '../utils/animations';
-import { VirtualList } from './VirtualList';
+import { InfiniteVirtualList } from './VirtualList';
 
 function truncateKey(key) {
   if (!key || key.length <= 8) return key;
@@ -80,53 +80,8 @@ function downloadCsv(rows, filename) {
   URL.revokeObjectURL(url);
 }
 
-function TxRow({ tx, onClick, onRetry }) {
-  const prefersReduced = useReducedMotion();
-  const tap = tapScale(prefersReduced);
-  const isReceived = tx.direction === 'received';
-  const isSent = tx.direction === 'sent';
-  const label = `${TYPE_LABELS[tx.type] ?? tx.type}, ${tx.direction ?? ''}, ${tx.amount ? `${tx.amount} ${tx.asset ?? 'XLM'}` : ''}, ${fmt(tx.date)}, ${tx.successful ? 'successful' : 'failed'}`;
-
-  return (
-    <motion.div
-      className="tx-row"
-      onClick={() => onClick(tx)}
-      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick(tx)}
-      {...tap}
-      layout
-      role="button"
-      tabIndex={0}
-      aria-label={label}
-    >
-      <span
-        className={`tx-dir ${isReceived ? 'tx-in' : isSent ? 'tx-out' : 'tx-neutral'}`}
-        aria-hidden="true"
-      >
-        {isReceived ? '↓' : isSent ? '↑' : '•'}
-      </span>
-      <span className="tx-type">{TYPE_LABELS[tx.type] ?? tx.type}</span>
-      <span className="tx-amount">{tx.amount ? `${tx.amount} ${tx.asset ?? ''}` : '—'}</span>
-      <span className="tx-date">{fmt(tx.date)}</span>
-      <span className={`tx-status ${tx.successful ? 'tx-ok' : 'tx-fail'}`} aria-hidden="true">
-        {tx.successful ? '✓' : '✗'}
-      </span>
-      {!tx.successful && onRetry && (
-        <button
-          className="tx-retry-btn"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRetry(tx);
-          }}
-          aria-label={`Retry failed transaction ${tx.hash}`}
-        >
-          Retry
-        </button>
-      )}
-    </motion.div>
-  );
-}
-
-export function TransactionHistory({ publicKey, network = 'public' }) {
+// TxModal is defined at module scope — NOT inside TransactionHistory — so
+// React never re-creates the component definition on every render.
 function TxModal({ tx, onClose }) {
   const modalRef = useRef(null);
   useFocusTrap(modalRef, true);
@@ -215,7 +170,53 @@ function TxModal({ tx, onClose }) {
   );
 }
 
-export function TransactionHistory({ publicKey }) {
+function TxRow({ tx, onClick, onRetry }) {
+  const prefersReduced = useReducedMotion();
+  const tap = tapScale(prefersReduced);
+  const isReceived = tx.direction === 'received';
+  const isSent = tx.direction === 'sent';
+  const label = `${TYPE_LABELS[tx.type] ?? tx.type}, ${tx.direction ?? ''}, ${tx.amount ? `${tx.amount} ${tx.asset ?? 'XLM'}` : ''}, ${fmt(tx.date)}, ${tx.successful ? 'successful' : 'failed'}`;
+
+  return (
+    <motion.div
+      className="tx-row"
+      onClick={() => onClick(tx)}
+      onKeyDown={(e) => (e.key === 'Enter' || e.key === ' ') && onClick(tx)}
+      {...tap}
+      layout
+      role="button"
+      tabIndex={0}
+      aria-label={label}
+    >
+      <span
+        className={`tx-dir ${isReceived ? 'tx-in' : isSent ? 'tx-out' : 'tx-neutral'}`}
+        aria-hidden="true"
+      >
+        {isReceived ? '↓' : isSent ? '↑' : '•'}
+      </span>
+      <span className="tx-type">{TYPE_LABELS[tx.type] ?? tx.type}</span>
+      <span className="tx-amount">{tx.amount ? `${tx.amount} ${tx.asset ?? ''}` : '—'}</span>
+      <span className="tx-date">{fmt(tx.date)}</span>
+      <span className={`tx-status ${tx.successful ? 'tx-ok' : 'tx-fail'}`} aria-hidden="true">
+        {tx.successful ? '✓' : '✗'}
+      </span>
+      {!tx.successful && onRetry && (
+        <button
+          className="tx-retry-btn"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRetry(tx);
+          }}
+          aria-label={`Retry failed transaction ${tx.hash}`}
+        >
+          Retry
+        </button>
+      )}
+    </motion.div>
+  );
+}
+
+export function TransactionHistory({ publicKey, network = 'public' }) {
   const [txs, setTxs] = useState([]);
   const [nextCursor, setNextCursor] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -227,7 +228,6 @@ export function TransactionHistory({ publicKey }) {
   const [error, setError] = useState(null);
   const [retrying, setRetrying] = useState({});
   const [exporting, setExporting] = useState(false);
-  const sentinelRef = useRef(null);
   const prefersReduced = useReducedMotion();
   const tap = tapScale(prefersReduced);
 
@@ -300,21 +300,6 @@ export function TransactionHistory({ publicKey }) {
     }
   }, [publicKey, nextCursor, loadingMore, buildParams]);
 
-  useEffect(() => {
-    if (!loaded || reachedEnd || loadingMore || !nextCursor) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) loadMore();
-      },
-      { rootMargin: '200px' },
-    );
-    const el = sentinelRef.current;
-    if (el) observer.observe(el);
-    return () => {
-      if (el) observer.unobserve(el);
-    };
-  }, [loaded, reachedEnd, loadingMore, nextCursor, loadMore]);
-
   const handleLoad = () => loadFirst();
   const applyFilters = (e) => {
     e.preventDefault();
@@ -331,6 +316,69 @@ export function TransactionHistory({ publicKey }) {
       setRetrying((r) => ({ ...r, [tx.id]: 'error' }));
     }
   }, []);
+
+  // Stable renderItem callback — avoids re-creating the function on every render
+  // which would otherwise invalidate InfiniteVirtualList's internal cache.
+  const renderItem = useCallback(
+    (tx) => (
+      <TxRow
+        tx={tx}
+        onClick={setSelected}
+        onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null}
+      />
+    ),
+    [retrying, handleRetry],
+  );
+
+  const emptyState = (
+    <div
+      className="tx-empty"
+      role="status"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: 12,
+        padding: '24px 0',
+      }}
+    >
+      <svg
+        width="80"
+        height="80"
+        viewBox="0 0 80 80"
+        fill="none"
+        aria-hidden="true"
+        xmlns="http://www.w3.org/2000/svg"
+      >
+        <circle cx="40" cy="40" r="38" stroke="#e5e7eb" strokeWidth="2" />
+        <rect x="22" y="28" width="36" height="6" rx="3" fill="#e5e7eb" />
+        <rect x="22" y="38" width="28" height="6" rx="3" fill="#e5e7eb" />
+        <rect x="22" y="48" width="20" height="6" rx="3" fill="#e5e7eb" />
+        <circle cx="58" cy="54" r="10" fill="#f3f4f6" stroke="#e5e7eb" strokeWidth="2" />
+        <line
+          x1="55"
+          y1="54"
+          x2="61"
+          y2="54"
+          stroke="#9ca3af"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <line
+          x1="58"
+          y1="51"
+          x2="58"
+          y2="57"
+          stroke="#9ca3af"
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+      </svg>
+      <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>
+        No transactions yet — send your first payment above.
+      </p>
+    </div>
+  );
 
   return (
     <section className="section" aria-labelledby="tx-history-heading">
@@ -453,105 +501,39 @@ export function TransactionHistory({ publicKey }) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
           >
-            {txs.length === 0 ? (
-              <div
-                className="tx-empty"
+            {/* InfiniteVirtualList always virtualises the DOM regardless of list
+                length — eliminates scroll jank and OOM crashes on large accounts.
+                The loadingRow sentinel and hasMore/onLoadMore props wire up
+                pagination directly inside the virtual window so no separate
+                IntersectionObserver is needed. */}
+            <InfiniteVirtualList
+              items={txs}
+              renderItem={renderItem}
+              itemHeight={64}
+              height={480}
+              hasMore={!reachedEnd && !!nextCursor}
+              onLoadMore={loadMore}
+              emptyState={emptyState}
+              ariaLabel={`Transaction list, ${txs.length} item${txs.length !== 1 ? 's' : ''}`}
+              loadingRow={
+                <div aria-label="Loading more transactions" aria-busy="true">
+                  <SkeletonCard />
+                </div>
+              }
+            />
+            {reachedEnd && txs.length > 0 && (
+              <p
+                className="tx-end-message"
                 role="status"
                 style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '24px 0',
+                  textAlign: 'center',
+                  color: '#6b7280',
+                  fontSize: 14,
+                  padding: '12px 0',
                 }}
               >
-                <svg
-                  width="80"
-                  height="80"
-                  viewBox="0 0 80 80"
-                  fill="none"
-                  aria-hidden="true"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle cx="40" cy="40" r="38" stroke="#e5e7eb" strokeWidth="2" />
-                  <rect x="22" y="28" width="36" height="6" rx="3" fill="#e5e7eb" />
-                  <rect x="22" y="38" width="28" height="6" rx="3" fill="#e5e7eb" />
-                  <rect x="22" y="48" width="20" height="6" rx="3" fill="#e5e7eb" />
-                  <circle cx="58" cy="54" r="10" fill="#f3f4f6" stroke="#e5e7eb" strokeWidth="2" />
-                  <line
-                    x1="55"
-                    y1="54"
-                    x2="61"
-                    y2="54"
-                    stroke="#9ca3af"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                  <line
-                    x1="58"
-                    y1="51"
-                    x2="58"
-                    y2="57"
-                    stroke="#9ca3af"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <p style={{ margin: 0, fontSize: 14, color: '#6b7280' }}>
-                  No transactions yet — send your first payment above.
-                </p>
-              </div>
-            ) : (
-              <>
-                {txs.length > 50 ? (
-                  <VirtualList
-                    items={txs}
-                    renderItem={(tx) => (
-                      <TxRow
-                        tx={tx}
-                        onClick={setSelected}
-                        onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null}
-                      />
-                    )}
-                    itemHeight={64}
-                    height={Math.min(txs.length * 64 + 1, 480)}
-                  />
-                ) : (
-                  <ul className="tx-list">
-                    {txs.map((tx) => (
-                      <li key={tx.id || tx.hash}>
-                        <TxRow
-                          tx={tx}
-                          onClick={setSelected}
-                          onRetry={retrying[tx.id] !== 'pending' ? handleRetry : null}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
-                {loadingMore && (
-                  <div aria-label="Loading more transactions" aria-busy="true">
-                    {Array.from({ length: 3 }, (_, i) => (
-                      <SkeletonCard key={i} />
-                    ))}
-                  </div>
-                )}
-                {reachedEnd && (
-                  <p
-                    className="tx-end-message"
-                    role="status"
-                    style={{
-                      textAlign: 'center',
-                      color: '#6b7280',
-                      fontSize: 14,
-                      padding: '12px 0',
-                    }}
-                  >
-                    You've reached the end
-                  </p>
-                )}
-              </>
+                You've reached the end
+              </p>
             )}
           </motion.div>
         )}
@@ -560,7 +542,7 @@ export function TransactionHistory({ publicKey }) {
       <SlideOver open={!!selected} onClose={() => setSelected(null)} title="Transaction Details">
         <TransactionDetailPanel tx={selected} network={network} />
       </SlideOver>
-    </div>
+
       <AnimatePresence>
         {selected && <TxModal tx={selected} onClose={() => setSelected(null)} />}
       </AnimatePresence>

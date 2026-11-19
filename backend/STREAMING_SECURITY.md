@@ -1,87 +1,47 @@
 # Streaming Payment Security
 
-## Per-Stream Secret Implementation
+## Delegated Soroban Escrow (current)
 
-As an interim improvement before full delegated signing, the streaming worker now uses per-stream secrets stored encrypted at rest in the database.
+Payment streams are **non-custodial**. The backend never stores user private keys.
 
 ### Architecture
 
-- Each `PaymentStream` has an encrypted `senderSecret` field
-- Secrets are encrypted using `STREAM_SECRET_ENCRYPTION_KEY` environment variable
-- The streaming worker decrypts secrets only when processing payments
-- Decrypted secrets are never persisted to disk or logs
+1. User deploys / interacts with the `StreamPayment` Soroban contract
+   (`stellar-contract/src/stream_payment.rs`).
+2. User deposits an allowance into contract escrow via `create_stream`
+   (requires sender auth on-chain only).
+3. Backend stores only `escrowContractId` + `contractStreamId` — never `senderSecret`.
+4. The streaming worker calls permissionless `tick_stream(stream_id)` to release
+   one interval payment. Compromise of the backend cannot drain the user's
+   primary account — only the remaining escrowed allowance is at risk, and only
+   via the contract's rate/interval rules.
 
-### Security Trade-offs
+### Rejected / purged
 
-#### Current Implementation (Per-Stream Secrets)
+- `senderSecret` column is always `NULL`. Existing encrypted secrets are purged
+  by migration `20261015160000_delegated_stream_escrow`.
+- API rejects any request that still sends `senderSecret`
+  (`CUSTODIAL_SECRET_REJECTED`).
 
-**Advantages:**
-- Each stream can use a different sender's secret
-- Enables multi-user streaming scenarios
-- Secrets are encrypted at rest in the database
-- Reduces blast radius if one stream's secret is compromised
-
-**Disadvantages:**
-- Secrets must be decrypted in application memory during payment processing
-- If the application is compromised, all decrypted secrets in memory are at risk
-- Encryption key (`STREAM_SECRET_ENCRYPTION_KEY`) is a single point of failure
-- Requires secure key management and rotation procedures
-
-#### Previous Implementation (Single Global Secret)
-
-**Disadvantages:**
-- Single `STREAM_WORKER_SECRET` used for all streams
-- Compromise of one stream affects all streams
-- No per-user isolation
-
-### Recommended Future Improvements
-
-1. **Delegated Signing**: Use Stellar's multi-sig or a dedicated signing service
-   - Secrets never stored in application database
-   - Signing requests sent to secure signing service
-   - Reduces application attack surface
-
-2. **Hardware Security Module (HSM)**
-   - Store secrets in HSM instead of database
-   - HSM handles encryption/decryption
-   - Application never sees plaintext secrets
-
-3. **Key Rotation**
-   - Implement automatic key rotation for `STREAM_SECRET_ENCRYPTION_KEY`
-   - Re-encrypt all stored secrets with new key
-   - Maintain backward compatibility during rotation
-
-### Environment Configuration
-
-Required environment variables:
-
-```bash
-# Encryption key for per-stream secrets (must be 32 bytes for AES-256)
-STREAM_SECRET_ENCRYPTION_KEY=<32-byte-hex-string>
-
-# Optional: Key rotation
-STREAM_SECRET_ENCRYPTION_KEY_OLD=<previous-key-for-decryption-only>
-```
-
-### Usage
-
-When creating a stream, provide the sender's secret:
+### Creating a stream
 
 ```javascript
 const stream = await createStream({
   senderPublicKey: 'G...',
-  senderSecret: 'S...',  // Sender's Stellar secret key
   recipientPublicKey: 'G...',
+  escrowContractId: 'C...',      // StreamPayment contract
+  contractStreamId: '42',        // on-chain stream id
   rateAmount: 10,
   intervalSeconds: 60,
+  allowance: 1000,
 });
 ```
 
-The secret is encrypted and stored. During payment processing, it's decrypted only when needed.
+### Environment
 
-### Audit & Monitoring
+Optional platform invoker for RPC submits (cannot spend user primary balances):
 
-- All stream creation/update events are logged
-- Payment processing failures are logged with stream ID (not secret)
-- Monitor for unusual decryption patterns or errors
-- Implement alerts for repeated decryption failures
+```bash
+STREAM_CONTRACT_ID=C...
+# SOROBAN_RPC_URL=...
+```

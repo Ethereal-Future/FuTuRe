@@ -15,6 +15,7 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs/promises';
 import path from 'path';
+import http from 'http';
 import { fileURLToPath } from 'url';
 import LoadTestRunner from '../src/loadTesting/loadTestRunner.js';
 import LoadTestScenario from '../src/loadTesting/loadTestScenario.js';
@@ -307,6 +308,81 @@ describe('Concurrent user scenarios', () => {
     // Payment endpoint should be flagged
     expect(bottlenecks.some(b => b.endpoint.includes('payment'))).toBe(true);
   });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+describe('High-concurrency stability (EMFILE / ECONNRESET regression)', () => {
+  let server;
+  let serverUrl;
+  let inFlight = 0;
+  let maxInFlight = 0;
+  const SERVER_DELAY_MS = 25;
+
+  beforeAll(async () => {
+    server = http.createServer((req, res) => {
+      inFlight++;
+      if (inFlight > maxInFlight) maxInFlight = inFlight;
+      setTimeout(() => {
+        inFlight--;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }, SERVER_DELAY_MS);
+    });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address();
+    serverUrl = `http://127.0.0.1:${port}`;
+  });
+
+  afterAll(async () => {
+    if (server) await new Promise(resolve => server.close(resolve));
+  });
+
+  it('executes 10,000 virtual requests without EMFILE/ECONNRESET', async () => {
+    const concurrency = 50;
+    const totalRequests = 10000;
+    const runner = new LoadTestRunner();
+    runner.concurrency = concurrency;
+
+    const results = await runner.runLoadTest(serverUrl, {
+      duration: 0,
+      concurrency,
+      totalRequests,
+      requests: [{ method: 'GET', path: '/health', weight: 1 }],
+    });
+
+    expect(results.length).toBe(totalRequests);
+
+    const socketErrors = results.filter(
+      r => r.error && /EMFILE|ECONNRESET/i.test(String(r.error))
+    );
+    expect(socketErrors).toHaveLength(0);
+
+    // Strictly respect configured max concurrency
+    expect(maxInFlight).toBeLessThanOrEqual(concurrency);
+    expect(maxInFlight).toBeGreaterThan(0);
+  }, 120000);
+
+  it('measured latency reflects server response time, not socket queuing', async () => {
+    const concurrency = 25;
+    const totalRequests = 500;
+    const runner = new LoadTestRunner();
+    runner.concurrency = concurrency;
+
+    const results = await runner.runLoadTest(serverUrl, {
+      duration: 0,
+      concurrency,
+      totalRequests,
+      requests: [{ method: 'GET', path: '/health', weight: 1 }],
+    });
+
+    const summary = runner.getResults();
+    // With bounded concurrency + keep-alive, avg latency should be close to
+    // the server's artificial delay (allow generous headroom for CI jitter).
+    expect(summary.avgResponseTime).toBeGreaterThanOrEqual(SERVER_DELAY_MS * 0.5);
+    expect(summary.avgResponseTime).toBeLessThan(SERVER_DELAY_MS * 20);
+    expect(summary.errorRate).toBeLessThan(5);
+    expect(results.every(r => !r.error || !/EMFILE|ECONNRESET/i.test(String(r.error)))).toBe(true);
+  }, 60000);
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

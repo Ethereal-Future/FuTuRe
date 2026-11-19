@@ -50,13 +50,13 @@ variable "frontend_bucket_name" {
 variable "backend_cpu" {
   description = "CPU units for the backend Fargate task (1 vCPU = 1024)."
   type        = number
-  default     = 512
+  default     = 1024
 }
 
 variable "backend_memory" {
-  description = "Memory in MiB for the backend Fargate task."
+  description = "Memory in MiB for the backend Fargate task. Ledger catch-up and event store rehydration peak at ~1.1-1.3 GB of heap, so anything below 2048 risks OOM kills (exit 137) during startup. The V8 old-space limit is derived from this value (see infra/ecs.tf)."
   type        = number
-  default     = 1024
+  default     = 2048
 }
 
 variable "backend_desired_count" {
@@ -119,9 +119,14 @@ variable "redis_node_type" {
 }
 
 variable "redis_num_cache_nodes" {
-  description = "Number of cache clusters (primary + replicas) in the Redis replication group. Must be >= 2 for Multi-AZ automatic failover."
+  description = "Number of cache clusters (primary + replicas) in the Redis replication group. Multi-AZ automatic failover is enabled automatically when this is >= 2 (see infra/elasticache.tf)."
   type        = number
-  default     = 1
+  default     = 2
+
+  validation {
+    condition     = var.redis_num_cache_nodes >= 1 && var.redis_num_cache_nodes <= 6
+    error_message = "redis_num_cache_nodes must be between 1 and 6."
+  }
 }
   default     = 2
 }
@@ -145,4 +150,55 @@ variable "log_archive_expiration_days" {
   type        = number
   default     = 2555 # ~7 years, matching typical financial recordkeeping requirements
 }
+}
+
+# ── Email (SES / DKIM) ────────────────────────────────────────────────────────
+
+variable "email_domain" {
+  description = "Transactional sending domain verified in SES (e.g. futureremit.app). Leave empty to skip SES/DNS provisioning."
+  type        = string
+  default     = ""
+}
+
+variable "route53_zone_id" {
+  description = "Route53 hosted zone ID for email_domain, where DKIM/SPF/DMARC records are published."
+  type        = string
+  default     = ""
+}
+
+variable "email_mail_from_subdomain" {
+  description = "Subdomain of email_domain used as the SES custom MAIL FROM (envelope sender) domain."
+  type        = string
+  default     = "mail"
+}
+
+variable "dkim_key_selector" {
+  description = "DKIM selector for app-level signing via a non-SES SMTP relay. When set, a dkim-private-key secret is created and DKIM_* env vars are passed to the backend. Leave empty when sending through SES (Easy DKIM)."
+  type        = string
+  default     = ""
+}
+
+variable "dmarc_policy" {
+  description = "DMARC policy for email_domain. Start with 'none' or 'quarantine' while monitoring, then move to 'reject'."
+  type        = string
+  default     = "reject"
+
+  validation {
+    condition     = contains(["none", "quarantine", "reject"], var.dmarc_policy)
+    error_message = "dmarc_policy must be 'none', 'quarantine' or 'reject'."
+  }
+}
+
+variable "dmarc_report_email" {
+  description = "Mailbox that receives DMARC aggregate (rua) reports. Leave empty to omit."
+  type        = string
+  default     = ""
+}
+
+# ── SMS ───────────────────────────────────────────────────────────────────────
+
+variable "sms_sns_failover_enabled" {
+  description = "Use AWS SNS as the secondary SMS carrier when Twilio fails. Grants the ECS task sns:Publish and sets SMS_FAILOVER_PROVIDER=sns."
+  type        = bool
+  default     = false
 }

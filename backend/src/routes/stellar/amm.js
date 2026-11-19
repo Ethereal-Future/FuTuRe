@@ -62,7 +62,6 @@ router.post(
   validate,
   // ISSUE-048: Validate assetA and assetB as proper Stellar asset identifiers.
   validateAssetBody('assetA', 'assetB'),
-  (req, res) => {
   async (req, res) => {
     try {
       res.json(await AMMService.registerPool(req.body));
@@ -90,7 +89,6 @@ router.post(
   validate,
   // ISSUE-048: Validate inputAsset as a proper Stellar asset identifier.
   validateAssetBody('inputAsset'),
-  (req, res) => {
   async (req, res) => {
     try {
       res.json(await AMMService.executeSwap(req.body));
@@ -107,12 +105,6 @@ router.get(
   validate,
   // ISSUE-048: Validate assetA and assetB as proper Stellar asset identifiers.
   validateAssetParams('assetA', 'assetB'),
-  (req, res) => {
-    const opportunities = AMMService.detectArbitrageOpportunities([
-      req.params.assetA,
-      req.params.assetB,
-    ]);
-    res.json({ opportunities });
   async (req, res) => {
     try {
       const opportunities = await AMMService.detectArbitrageOpportunities([

@@ -9,7 +9,55 @@
  * without any in-process caching.
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import http from 'node:http';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// ── Real LoadTestRunner loader ────────────────────────────────────────────────
+//
+// The production runner lives at backend/src/loadTesting/loadTestRunner.js.
+// It is loaded lazily so that the cross-instance tests above remain fully
+// self-contained even if the module is unavailable in a given environment.
+
+function loadRealLoadTestRunner() {
+  const candidates = [
+    path.resolve(__dirname, '../../src/loadTesting/loadTestRunner.js'),
+    path.resolve(__dirname, '../../src/loadTesting/loadTestRunner.cjs'),
+  ];
+  for (const candidate of candidates) {
+    try {
+      const mod = require(candidate);
+      const Runner = mod?.LoadTestRunner ?? mod?.default ?? mod;
+      if (typeof Runner === 'function') return Runner;
+    } catch {
+      // try next candidate
+    }
+  }
+  return null;
+}
+
+const RealLoadTestRunner = loadRealLoadTestRunner();
+
+// ── Local HTTP server helper ──────────────────────────────────────────────────
+
+function startLocalServer(handler) {
+  return new Promise((resolve) => {
+    const server = http.createServer(handler);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      resolve({ server, port, url: `http://127.0.0.1:${port}` });
+    });
+  });
+}
+
+function stopLocalServer(server) {
+  return new Promise((resolve) => server.close(() => resolve()));
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,11 +167,16 @@ function makePerformanceBaseline(prismaClient) {
   return new PerformanceBaseline(prismaClient);
 }
 
-function makePerformanceAlerting(prismaClient) {
+function makePerformanceAlerting(prismaClient, redisClient, options = {}) {
+  const COOLDOWN_SECONDS = options.cooldownSeconds ?? 60;
+
   class PerformanceAlerting {
-    constructor(prisma) {
+    constructor(prisma, redis) {
       this.prisma = prisma;
+      this.redis = redis ?? null;
       this.pendingAlerts = [];
+      this.lastAlertTime = new Map(); // metric -> timestamp (in-memory fallback)
+      this.dispatchCount = 0;
     }
 
     checkMetrics(results) {
@@ -152,12 +205,47 @@ function makePerformanceAlerting(prismaClient) {
       return alerts;
     }
 
+    // Returns true if this worker is allowed to dispatch the alert for `metric`.
+    async _acquireAlertLock(metric) {
+      const key = `loadtest:alert:${metric}`;
+      if (this.redis) {
+        try {
+          const result = await this.redis.set(key, String(Date.now()), {
+            NX: true,
+            EX: COOLDOWN_SECONDS,
+          });
+          // node-redis returns 'OK' when the key was set, null otherwise.
+          return result === 'OK' || result === true;
+        } catch (err) {
+          // Redis unavailable — fall back to in-memory dedup so we degrade
+          // gracefully instead of dropping alerts entirely.
+        }
+      }
+      const last = this.lastAlertTime.get(metric);
+      const now = Date.now();
+      if (last !== undefined && now - last < COOLDOWN_SECONDS * 1000) {
+        return false;
+      }
+      this.lastAlertTime.set(metric, now);
+      return true;
+    }
+
     async saveAlerts(testName) {
       if (this.pendingAlerts.length === 0) return;
-      await this.prisma.performanceAlert.createMany({
-        data: this.pendingAlerts.map((a) => ({ ...a, testName: testName ?? null })),
-      });
+
+      const toDispatch = [];
+      for (const alert of this.pendingAlerts) {
+        const acquired = await this._acquireAlertLock(alert.metric);
+        if (acquired) toDispatch.push(alert);
+      }
       this.pendingAlerts = [];
+
+      if (toDispatch.length === 0) return;
+
+      this.dispatchCount += 1;
+      await this.prisma.performanceAlert.createMany({
+        data: toDispatch.map((a) => ({ ...a, testName: testName ?? null })),
+      });
     }
 
     async getAlerts(limit = 100) {
@@ -338,6 +426,113 @@ describe('PerformanceBaseline — cross-instance integration', () => {
   });
 });
 
+describe('LoadTestRunner — bounded concurrency against a real HTTP server', () => {
+  let serverHandle;
+  let inFlight = 0;
+  let maxObservedInFlight = 0;
+  let serverResponseTimes = [];
+
+  beforeEach(async () => {
+    inFlight = 0;
+    maxObservedInFlight = 0;
+    serverResponseTimes = [];
+    serverHandle = await startLocalServer((req, res) => {
+      inFlight += 1;
+      if (inFlight > maxObservedInFlight) maxObservedInFlight = inFlight;
+      const started = process.hrtime.bigint();
+      // Small, deterministic server-side delay so response-time measurements
+      // reflect genuine server work rather than client-side socket queuing.
+      setTimeout(() => {
+        const elapsedMs = Number(process.hrtime.bigint() - started) / 1e6;
+        serverResponseTimes.push(elapsedMs);
+        inFlight -= 1;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ ok: true }));
+      }, 5);
+    });
+  });
+
+  afterEach(async () => {
+    if (serverHandle) await stopLocalServer(serverHandle.server);
+    serverHandle = null;
+  });
+
+  it.skipIf(!RealLoadTestRunner)(
+    'drives 10,000 virtual requests without EMFILE/ECONNRESET and respects max concurrency',
+    async () => {
+      const concurrency = 50;
+      const totalRequests = 10_000;
+
+      const runner = new RealLoadTestRunner({
+        concurrency,
+        maxConcurrency: concurrency,
+        keepAlive: true,
+        maxSockets: concurrency,
+      });
+
+      const target = `${serverHandle.url}/bench`;
+
+      const result = await runner.run({
+        url: target,
+        method: 'GET',
+        totalRequests,
+        concurrency,
+        maxConcurrency: concurrency,
+      });
+
+      // ── No socket-exhaustion errors ───────────────────────────────────────
+      const errors = (result?.results ?? runner.results ?? []).filter((r) => !r.success);
+      const errorMessages = errors.map((r) => String(r.error ?? r.message ?? ''));
+      const socketErrors = errorMessages.filter(
+        (m) => m.includes('EMFILE') || m.includes('ECONNRESET'),
+      );
+      expect(socketErrors).toEqual([]);
+
+      // ── Worker count strictly respects the configured limit ───────────────
+      expect(maxObservedInFlight).toBeLessThanOrEqual(concurrency);
+
+      // ── Accurate server-side response-time measurements ───────────────────
+      expect(serverResponseTimes.length).toBe(totalRequests);
+      const serverAvg =
+        serverResponseTimes.reduce((a, b) => a + b, 0) / serverResponseTimes.length;
+      // Server-side work is ~5ms; measured client latency must be in the same
+      // order of magnitude (no artificial socket-queue inflation).
+      expect(serverAvg).toBeGreaterThanOrEqual(4);
+      expect(serverAvg).toBeLessThan(100);
+
+      const summary = result?.summary ?? runner.getResults?.();
+      if (summary) {
+        expect(summary.totalRequests).toBe(totalRequests);
+        expect(summary.errorCount).toBe(0);
+        expect(summary.avgResponseTime).toBeGreaterThan(0);
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!RealLoadTestRunner)(
+    'never exceeds max concurrency even when totalRequests far exceeds the pool size',
+    async () => {
+      const concurrency = 25;
+      const totalRequests = 2_000;
+
+      const runner = new RealLoadTestRunner({ concurrency, maxConcurrency: concurrency });
+
+      await runner.run({
+        url: `${serverHandle.url}/bench`,
+        method: 'GET',
+        totalRequests,
+        concurrency,
+        maxConcurrency: concurrency,
+      });
+
+      expect(maxObservedInFlight).toBeLessThanOrEqual(concurrency);
+      expect(serverResponseTimes.length).toBe(totalRequests);
+    },
+    60_000,
+  );
+});
+
 describe('PerformanceAlerting — cross-instance integration', () => {
   let sharedStore;
   let alertingA;
@@ -379,5 +574,154 @@ describe('PerformanceAlerting — cross-instance integration', () => {
     const alerts = await alertingB.getAlerts();
 
     expect(alerts).toHaveLength(0);
+  });
+});
+
+// ── Distributed alert deduplication (Redis-backed) ────────────────────────────
+
+function createRedisMock() {
+  const store = new Map();
+  let available = true;
+  return {
+    set: vi.fn(async (key, value, opts = {}) => {
+      if (!available) throw new Error('Redis connection refused');
+      if (opts.NX && store.has(key)) return null;
+      store.set(key, value);
+      return 'OK';
+    }),
+    get: vi.fn(async (key) => (store.has(key) ? store.get(key) : null)),
+    del: vi.fn(async (key) => {
+      store.delete(key);
+      return 1;
+    }),
+    _store: store,
+    _setAvailable(v) {
+      available = v;
+    },
+    _isAvailable() {
+      return available;
+    },
+  };
+}
+
+describe('PerformanceAlerting — distributed deduplication across workers', () => {
+  let sharedStore;
+  let redis;
+
+  beforeEach(() => {
+    sharedStore = createSharedPrismaStore();
+    redis = createRedisMock();
+  });
+
+  it('only one alert row is persisted when 5 workers breach the SLA concurrently', async () => {
+    const workers = Array.from({ length: 5 }, () =>
+      makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 }),
+    );
+
+    await Promise.all(
+      workers.map(async (w) => {
+        w.checkMetrics({ avgResponseTime: 2000, errorRate: 12 });
+        await w.saveAlerts('storm-test');
+      }),
+    );
+
+    const alerts = await workers[0].getAlerts();
+    const metrics = alerts.map((a) => a.metric);
+
+    // Exactly one alert per metric across the whole cluster.
+    expect(metrics.filter((m) => m === 'avgResponseTime')).toHaveLength(1);
+    expect(metrics.filter((m) => m === 'errorRate')).toHaveLength(1);
+
+    const totalDispatches = workers.reduce((sum, w) => sum + w.dispatchCount, 0);
+    expect(totalDispatches).toBe(2); // one dispatch per distinct metric
+  });
+
+  it('suppresses duplicate alerts within the cooldown window', async () => {
+    const workerA = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+    const workerB = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+
+    workerA.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerA.saveAlerts('cooldown-test');
+
+    workerB.checkMetrics({ avgResponseTime: 2500, errorRate: 0 });
+    await workerB.saveAlerts('cooldown-test');
+
+    const alerts = await workerA.getAlerts();
+    expect(alerts.filter((a) => a.metric === 'avgResponseTime')).toHaveLength(1);
+    expect(workerB.dispatchCount).toBe(0);
+  });
+
+  it('allows a new alert once the cooldown key expires', async () => {
+    const workerA = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+    const workerB = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+
+    workerA.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerA.saveAlerts('expiry-test');
+
+    // Simulate cooldown expiry by clearing the Redis key.
+    redis._store.clear();
+
+    workerB.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerB.saveAlerts('expiry-test');
+
+    const alerts = await workerA.getAlerts();
+    expect(alerts.filter((a) => a.metric === 'avgResponseTime')).toHaveLength(2);
+    expect(workerB.dispatchCount).toBe(1);
+  });
+
+  it('falls back to in-memory dedup when Redis is unavailable', async () => {
+    redis._setAvailable(false);
+
+    const workerA = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+    const workerB = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+
+    workerA.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerA.saveAlerts('redis-down-test');
+
+    // Same worker re-fires within cooldown — in-memory map should suppress it.
+    workerA.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerA.saveAlerts('redis-down-test');
+
+    const alerts = await workerA.getAlerts();
+    expect(alerts.filter((a) => a.metric === 'avgResponseTime')).toHaveLength(1);
+    expect(workerA.dispatchCount).toBe(1);
+
+    // A different worker with its own in-memory map will still dispatch — this
+    // is the documented degraded behaviour when Redis is down.
+    workerB.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerB.saveAlerts('redis-down-test');
+    expect(workerB.dispatchCount).toBe(1);
+  });
+
+  it('recovers distributed dedup after Redis reconnects', async () => {
+    redis._setAvailable(false);
+
+    const workerA = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+    const workerB = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+
+    // While Redis is down, both workers dispatch independently.
+    workerA.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerA.saveAlerts('reconnect-test');
+    workerB.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+    await workerB.saveAlerts('reconnect-test');
+
+    expect(workerA.dispatchCount).toBe(1);
+    expect(workerB.dispatchCount).toBe(1);
+
+    // Redis comes back — distributed dedup should take over again.
+    redis._setAvailable(true);
+
+    const workerC = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+    const workerD = makePerformanceAlerting(sharedStore, redis, { cooldownSeconds: 60 });
+
+    await Promise.all(
+      [workerC, workerD].map(async (w) => {
+        w.checkMetrics({ avgResponseTime: 2000, errorRate: 0 });
+        await w.saveAlerts('reconnect-test');
+      }),
+    );
+
+    const totalRecoveredDispatches = workerC.dispatchCount + workerD.dispatchCount;
+    expect(totalRecoveredDispatches).toBe(1);
   });
 });

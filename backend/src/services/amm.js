@@ -757,21 +757,6 @@ export function calculateArbitrage({
     isProfitable,
   };
 }
-export async function resetAMMState() {
-  const pools = await prisma.ammPool.findMany({ select: { poolId: true } });
-  await prisma.$transaction([
-    prisma.ammTrade.deleteMany({}),
-    prisma.ammPosition.deleteMany({}),
-    prisma.ammPool.deleteMany({}),
-  ]);
-  localPoolCache.clear();
-  await ensureRedis();
-  if (redisReady(publisher) && pools.length > 0) {
-    try {
-      await publisher.del(...pools.map(p => `${POOL_CACHE_PREFIX}${p.poolId}`));
-    } catch { /* ignore */ }
-  }
-}
 
 /**
  * Close the Redis connections used for pool caching / Pub/Sub (graceful shutdown).

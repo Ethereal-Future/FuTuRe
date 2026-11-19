@@ -1,6 +1,31 @@
 import * as StellarSdk from '@stellar/stellar-sdk';
 import logger from '../config/logger.js';
 
+const TOML_TIMEOUT_MS = 10_000;
+
+function parseTomlField(toml, field) {
+  const match = String(toml).match(new RegExp(`^\\s*${field}\\s*=\\s*["']([^"']+)["']`, 'mi'));
+  return match?.[1]?.trim() || null;
+}
+
+function parseCurrencyDeclaration(toml, code, issuer) {
+  return String(toml).split(/\[\[CURRENCIES\]\]/i).slice(1).some((block) =>
+    parseTomlField(block, 'code') === code && parseTomlField(block, 'issuer') === issuer
+  );
+}
+
+function decodeSignature(value) {
+  if (!value) return null;
+  if (/^[0-9a-f]{128}$/i.test(value)) return Buffer.from(value, 'hex');
+  try { return Buffer.from(value, 'base64'); } catch { return null; }
+}
+
+function canonicalToml(toml) {
+  return String(toml).split('\n')
+    .filter((line) => !/^\s*(SIGNATURE|SIGNATURES)\s*=/.test(line))
+    .join('\n').trim();
+}
+
 /**
  * Asset Registry Service for managing Stellar assets
  */
@@ -35,6 +60,10 @@ class AssetRegistryService {
     if (!isValid) {
       throw new Error('Asset not found on Stellar network');
     }
+    const domainVerification = await this.verifyIssuerDomain(code, issuer);
+    if (!domainVerification.verified) {
+      throw new Error(`Asset issuer domain verification failed: ${domainVerification.reason}`);
+    }
 
     const asset = {
       code,
@@ -43,13 +72,62 @@ class AssetRegistryService {
       description: description || '',
       image: image || '',
       website: website || '',
-      verified: false,
+      verified: true,
+      issuerDomain: domainVerification.homeDomain,
+      domainVerified: true,
       registeredAt: new Date(),
       metadata: {}
     };
 
     this.assets.set(`${code}:${issuer}`, asset);
     return asset;
+  }
+
+  /**
+   * Verify reciprocal SEP-1 issuer/domain links and the TOML detached signature.
+   * @param {string} code - Asset code
+   * @param {string} issuer - Issuer public key
+   * @returns {Promise<{verified: boolean, homeDomain?: string, reason?: string}>}
+   */
+  async verifyIssuerDomain(code, issuer) {
+    try {
+      const account = await this.server.loadAccount(issuer);
+      const homeDomain = account.home_domain;
+      if (!homeDomain) return { verified: false, reason: 'issuer has no HOME_DOMAIN' };
+      const response = await this.fetchToml(homeDomain);
+      const toml = await response.text();
+      const signingKey = parseTomlField(toml, 'SIGNING_KEY');
+      if (signingKey !== issuer) return { verified: false, reason: 'SIGNING_KEY does not match issuer' };
+      if (!parseCurrencyDeclaration(toml, code, issuer)) {
+        return { verified: false, reason: 'stellar.toml does not declare the issuer asset' };
+      }
+      const signature = decodeSignature(parseTomlField(toml, 'SIGNATURE'));
+      if (!signature || signature.length !== 64) {
+        return { verified: false, reason: 'stellar.toml has no valid detached signature' };
+      }
+      const verified = StellarSdk.Keypair.fromPublicKey(signingKey).verify(
+        Buffer.from(canonicalToml(toml)), signature,
+      );
+      return verified ? { verified: true, homeDomain } : { verified: false, reason: 'stellar.toml signature is invalid' };
+    } catch (error) {
+      logger.warn('assetRegistry.verifyIssuerDomain.failed', { code, issuer, error: error.message });
+      return { verified: false, reason: 'issuer domain could not be verified' };
+    }
+  }
+
+  async fetchToml(homeDomain) {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TOML_TIMEOUT_MS);
+    try {
+      const response = await fetch(`https://${homeDomain}/.well-known/stellar.toml`, {
+        signal: controller.signal,
+        headers: { accept: 'text/plain' },
+      });
+      if (!response.ok) throw new Error(`stellar.toml returned ${response.status}`);
+      return response;
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /**
@@ -60,7 +138,6 @@ class AssetRegistryService {
    */
   async validateAsset(code, issuer) {
     try {
-      const asset = new StellarSdk.Asset(code, issuer);
       const assets = await this.server.assets()
         .forCode(code)
         .forIssuer(issuer)

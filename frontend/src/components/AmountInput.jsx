@@ -11,6 +11,10 @@ const DEFAULT_ASSETS = [
   { code: 'BTC', name: 'Bitcoin' },
 ];
 
+// These must stay in sync with the constants in utils/validateAmount.ts
+const BASE_FEE = 0.00001;
+const MIN_RESERVE = 1;
+
 /**
  * AmountInput — numeric input with currency selector and live formatting.
  * Props: value, onChange, currency, onCurrencyChange, availableBalance,
@@ -40,7 +44,13 @@ export function AmountInput({ value, onChange, currency = 'XLM', onCurrencyChang
   };
 
   const setMax = () => {
-    if (availableBalance != null) onChange?.(String(availableBalance));
+    if (availableBalance != null) {
+      // Reserve BASE_FEE for the transaction fee and MIN_RESERVE for the
+      // Stellar minimum account reserve, so submitting the MAX amount won't
+      // leave the account underfunded.
+      const spendable = Math.max(0, availableBalance - BASE_FEE - MIN_RESERVE);
+      onChange?.(String(spendable));
+    }
   };
 
   // While not focused, display the amount using the active locale's

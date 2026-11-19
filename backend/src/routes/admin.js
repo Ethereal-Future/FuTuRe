@@ -28,21 +28,43 @@ const validateAuditLogDateRange = [
   },
 ];
 
-router.get('/stats', requireAdmin, async (req, res) => {
-  try {
-    const [totalUsers, totalTransactions, activeStreams, pendingKYC, openAMLAlerts] = await Promise.all([
-      prisma.user.count({ where: { deletedAt: null } }),
-      prisma.transaction.count({ where: { deletedAt: null } }),
-      prisma.paymentStream.count({ where: { status: 'ACTIVE' } }),
-      prisma.kYCRecord.count({ where: { status: 'PENDING' } }),
-      prisma.aMLAlert.count({ where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } } }),
-    ]);
+/**
+ * High-impact compliance actions that must go through Maker-Checker
+ * (Four-Eyes) dual authorization before they are executed.
+ * A single officer submitting one of these only creates a PENDING_REVIEW
+ * request; a DIFFERENT officer must approve it before it takes effect.
+ */
+const MAKER_CHECKER_ACTIONS = new Set([
+  'KYC_APPROVE',
+  'KYC_UNFREEZE',
+  'SANCTIONS_OVERRIDE',
+  'AML_ALERT_DISMISS',
+]);
+
 /**
  * TTL for the /stats cache entry.
  * 30 seconds gives a dashboard acceptable freshness without hammering the DB
  * on every auto-refresh cycle.
  */
 export const ADMIN_STATS_TTL_SECONDS = 30;
+
+/**
+ * Create a pending maker-checker approval request instead of executing the
+ * sensitive action immediately. The maker identity is recorded for the audit
+ * trail; the checker is filled in later by a different officer.
+ */
+async function submitApprovalRequest({ action, targetUserId, makerId, payload = {} }) {
+  return prisma.complianceApprovalRequest.create({
+    data: {
+      action,
+      targetUserId,
+      makerId,
+      checkerId: null,
+      status: 'PENDING_REVIEW',
+      payload,
+    },
+  });
+}
 
 /** Stable cache key — stats are global, not per-user or per-tenant. */
 const STATS_CACHE_KEY = 'admin:stats';
@@ -170,7 +192,11 @@ router.get('/users', requireAdmin, async (req, res) => {
  * @swagger
  * /api/v1/admin/kyc/{userId}/approve:
  *   put:
- *     summary: Approve a KYC record (admin only)
+ *     summary: Submit a KYC approval for maker-checker dual authorization (admin only)
+ *     description: >
+ *       Creates a PENDING_REVIEW ComplianceApprovalRequest. The KYC record is
+ *       NOT approved until a DIFFERENT compliance officer approves the request
+ *       via POST /api/compliance/approvals/{id}/approve.
  *     tags: [Admin]
  *     security:
  *       - bearerAuth: []
@@ -180,8 +206,8 @@ router.get('/users', requireAdmin, async (req, res) => {
  *         required: true
  *         schema: { type: string }
  *     responses:
- *       200:
- *         description: KYC approved
+ *       202:
+ *         description: Approval request queued for secondary review
  *       429:
  *         description: Per-admin rate limit exceeded (30 req/10 min)
  *       500:
@@ -190,17 +216,15 @@ router.get('/users', requireAdmin, async (req, res) => {
 router.put('/kyc/:userId/approve', requireAdmin, kycActionLimiter, async (req, res) => {
   try {
     const { userId } = req.params;
-    const kyc = await prisma.$transaction(async (tx) => {
-      const updated = await tx.kYCRecord.update({
-        where: { userId },
-        data: { status: 'APPROVED', updatedAt: new Date() },
-      });
-      await logAdminAction(req.user.sub, 'KYC_APPROVE', 'USER', userId, {}, req, tx);
-      return updated;
+    const request = await submitApprovalRequest({
+      action: 'KYC_APPROVE',
+      targetUserId: userId,
+      makerId: req.user.sub,
+      payload: { status: 'APPROVED' },
     });
-    res.json({ success: true, kyc });
+    res.status(202).json({ success: true, pending: true, approvalRequest: request });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to approve KYC' });
+    res.status(500).json({ error: 'Failed to submit KYC approval request' });
   }
 });
 
@@ -248,59 +272,6 @@ router.put('/kyc/:userId/reject', requireAdmin, kycActionLimiter, async (req, re
  *   get:
  *     summary: List admin audit log entries
  *     tags: [Admin]
- *     parameters:
- *       - in: query
- *         name: from
- *         schema:
- *           type: string
- *           format: date-time
- *         description: ISO 8601 timestamp — only include entries created at or after this time.
- *       - in: query
- *         name: to
- *         schema:
- *           type: string
- *           format: date-time
- *         description: ISO 8601 timestamp — only include entries created at or before this time. Must not be earlier than `from`.
- *     responses:
- *       200:
- *         description: Paginated audit log entries
- *       400:
- *         description: Malformed `from`/`to` (not ISO 8601) or `from` later than `to`
- *       500:
- *         description: Server error
- */
-router.get('/audit-log', requireAdmin, validateAuditLogDateRange, async (req, res) => {
-  try {
-    const { page = 1, limit = 50, adminUserId, actionType, from, to } = req.query;
-    const take = Math.min(parseInt(limit), 200);
-    const skip = (parseInt(page) - 1) * take;
+ *    
 
-    const where = {};
-    if (adminUserId) where.adminUserId = adminUserId;
-    if (actionType) where.actionType = actionType;
-    if (from || to) {
-      where.createdAt = {};
-      if (from) where.createdAt.gte = new Date(from);
-      if (to) where.createdAt.lte = new Date(to);
-    }
-
-    const [logs, total] = await Promise.all([
-      prisma.adminAuditLog.findMany({
-        where,
-        skip,
-        take,
-        orderBy: { createdAt: 'desc' },
-      }),
-      prisma.adminAuditLog.count({ where }),
-    ]);
-
-    res.json({
-      logs,
-      pagination: { page: parseInt(page), limit: take, total, pages: Math.ceil(total / take) },
-    });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to retrieve audit log' });
-  }
-});
-
-export default router;
+/* … truncated 1762 chars — edit only what you need near the top … */

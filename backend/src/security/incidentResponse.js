@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import logger from '../config/logger.js';
 import prisma from '../db/client.js';
 
@@ -60,7 +61,10 @@ class IncidentResponse {
    * Persists to database, replacing in-memory Map and JSON files (fixes #966)
    */
   async createIncident(type, severity, description, affectedSystems = []) {
-    const incidentId = `INC-${Date.now()}`;
+    // Date.now() collides when concurrent requests arrive in the same
+    // millisecond. Keep the readable prefix but use cryptographic entropy for
+    // the unique database key.
+    const incidentId = `INC-${crypto.randomBytes(16).toString('hex')}`;
     const playbook = this.responsePlaybooks.get(type);
 
     const incident = await prisma.securityIncident.create({

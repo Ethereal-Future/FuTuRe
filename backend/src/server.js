@@ -1,3 +1,5 @@
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
 import { initializeOTel } from './config/otel.js';
 initializeOTel();
 
@@ -53,7 +55,7 @@ import adminRoutes from './routes/admin.js';
 import assetIntegrityRoutes from './routes/assetIntegrity.js';
 import { buildStellarToml } from './services/federation.js';
 import { auditLogger } from './security/index.js';
-import { initializeCache as initIPWhitelistCache } from './security/ipWhitelist.js';
+import { initializeCache as initIPWhitelistCache, closeRedisConnections as closeIPWhitelistRedis } from './security/ipWhitelist.js';
 import { getConfig } from './config/env.js';
 import { createRateLimiter } from './middleware/rateLimiter.js';
 import { performanceMiddleware } from './monitoring/middleware.js';
@@ -69,7 +71,7 @@ import { securityMiddleware } from './middleware/securityHeaders.js';
 import { sanitizeInputs } from './middleware/sanitize.js';
 import { startScheduler, stopScheduler } from './scheduler.js';
 import { closeAMMState } from './services/amm.js';
-import { csrfTokenMiddleware, validateCSRFMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
+import { csrfTokenMiddleware, validateCSRFMiddleware, validateOriginMiddleware, csrfTokenEndpoint } from './middleware/csrf.js';
 import { validateEncryptionKey } from './db/encryption.js';
 
 dotenv.config();
@@ -110,7 +112,7 @@ app.use(
       cb(null, false);
     },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token', 'X-Requested-With', 'X-FuTuRe-Client'],
     credentials: true
   })
 );
@@ -143,6 +145,7 @@ app.use(requestIdMiddleware);
 app.use(requestLogger);
 
 // CSRF protection
+app.use(validateOriginMiddleware);
 app.use(csrfTokenMiddleware);
 app.use(validateCSRFMiddleware);
 
@@ -311,6 +314,7 @@ async function shutdown(signal) {
     // 3. Stop background workers
     stopScheduler();
     await closeAMMState();
+    await closeIPWhitelistRedis();
     // 4. Close DB connection
     await disconnectDB();
     logger.info('server.shutdown.complete');

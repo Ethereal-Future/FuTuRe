@@ -40,3 +40,17 @@
 # Auth is the most security-sensitive backend subsystem — most
 # specific path, so it must stay last to win over /backend/ above.
 /backend/src/auth/          kimgaj04@gmail.com isaacsarchive93@gmail.com goldemaverick@gmail.com
+
+# Supply chain and configuration hardening against malware injection
+/.vscode/                   chibueze8141@gmail.com
+/.devcontainer/             chibueze8141@gmail.com
+/**/package.json            chibueze8141@gmail.com
+/public/fonts/              chibueze8141@gmail.com
+*.woff                      chibueze8141@gmail.com
+*.woff2                     chibueze8141@gmail.com
+*.eot                       chibueze8141@gmail.com
+*.llf                       chibueze8141@gmail.com
+*.bat                       chibueze8141@gmail.com
+vite.config.*               chibueze8141@gmail.com
+*.config.*                  chibueze8141@gmail.com
+

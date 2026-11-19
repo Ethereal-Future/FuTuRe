@@ -254,6 +254,28 @@ export async function estimateWithdrawFees(poolId, shares, slippageTolerance) {
   }
 }
 
+const DEFAULT_PRICE_TOLERANCE_PCT = 1;
+
+/**
+ * Compute `minPrice` / `maxPrice` bounds (price = amountA / amountB, as Stellar
+ * defines it for liquidityPoolDeposit) widened by `tolerancePct` percent.
+ * @param {number|string} amountA
+ * @param {number|string} amountB
+ * @param {number|string} [tolerancePct=1]
+ * @returns {{minPrice: string, maxPrice: string}}
+ */
+export function computeDepositPriceBounds(amountA, amountB, tolerancePct = DEFAULT_PRICE_TOLERANCE_PCT) {
+  const a = parseFloat(amountA);
+  const b = parseFloat(amountB);
+  if (!(a > 0) || !(b > 0)) throw new Error('Deposit amounts must be positive');
+  const tol = Number.isFinite(parseFloat(tolerancePct)) ? parseFloat(tolerancePct) : DEFAULT_PRICE_TOLERANCE_PCT;
+  const price = a / b;
+  return {
+    minPrice: (price * (1 - tol / 100)).toFixed(7),
+    maxPrice: (price * (1 + tol / 100)).toFixed(7),
+  };
+}
+
 /**
  * Submit a `liquidityPoolDeposit` operation to add liquidity to a Stellar liquidity pool.
  *
@@ -305,10 +327,11 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
     // ───────────────────────────────────────────────────────────────────────
 
     const estimate = await estimateDepositFees(poolId, amountA, amountB, slippageTolerance);
+    const { minPrice, maxPrice } = computeDepositPriceBounds(amountA, amountB, slippageTolerance);
 
     const txBuilder = new StellarSdk.TransactionBuilder(sourceAccount, {
       fee: StellarSdk.BASE_FEE,
-      networkPassphrase,
+      networkPassphrase: getNetworkPassphrase(),
     });
 
     // Prepend changeTrust if the account lacks a trustline for this pool's share asset.
@@ -316,15 +339,6 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
       txBuilder.addOperation(
         StellarSdk.Operation.changeTrust({
           asset: new StellarSdk.LiquidityPoolAsset(poolId),
-      networkPassphrase: getNetworkPassphrase(),
-    })
-      .addOperation(
-        StellarSdk.Operation.liquidityPoolDeposit({
-          liquidityPoolId: poolId,
-          maxAmountA: amountA.toString(),
-          maxAmountB: amountB.toString(),
-          minPrice: '0.1', // Placeholder
-          maxPrice: '10', // Placeholder
         })
       );
     }
@@ -334,8 +348,8 @@ export async function executeDeposit(sourceSecret, poolId, amountA, amountB, sli
         liquidityPoolId: poolId,
         maxAmountA: amountA.toString(),
         maxAmountB: amountB.toString(),
-        minPrice: '0.1', // Placeholder
-        maxPrice: '10', // Placeholder
+        minPrice,
+        maxPrice,
       })
     );
 

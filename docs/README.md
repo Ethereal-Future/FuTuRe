@@ -22,6 +22,11 @@ This is the documentation map for the FuTuRe platform — every markdown doc in 
 
 ## Guides
 
+| Document                                      | Description                                                                                                                              |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| [API Authentication Guide](api-auth.md)       | How to obtain credentials, authenticate requests, refresh tokens, and handle auth errors — start here if you are building an integration |
+| [Security Best Practices](guides/security.md) | API key storage, CSRF protection, webhook signature verification, CSP, and known attack vectors                                          |
+| [Event Sourcing](guides/event-sourcing.md)    | Event store layout, versioning and `ConcurrencyError`, idempotent projections, rebuilding projections, archival                          |
 | Document                                                        | Description                                                                                                                              |
 | ------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | [API Authentication Guide](api-auth.md)                         | How to obtain credentials, authenticate requests, refresh tokens, and handle auth errors — start here if you are building an integration |
