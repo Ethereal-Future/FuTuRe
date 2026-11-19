@@ -55,14 +55,15 @@ router.post('/send', paymentRateLimiter, rules.sendPayment, validate, async (req
       where: { publicKey: senderKey },
     });
 
-    // Check if account is on hold for review
-    if (sender?.amlStatus === 'HELD_FOR_REVIEW') {
+    // Check the hold unconditionally against the source public key. Unregistered
+    // keys have no user row, but can still be held by AML screening.
+    if (sender?.amlStatus === 'HELD_FOR_REVIEW' || amlMonitor.isPublicKeyOnHold?.(senderKey)) {
       return res.status(403).json({
         success: false,
         error: {
           code: 'ACCOUNT_HELD_FOR_REVIEW',
           message: 'Your account is currently under review for compliance purposes. Transactions are temporarily blocked.',
-          details: sender.amlHoldReason,
+          details: sender?.amlHoldReason ?? 'Unregistered public key flagged by AML screening.',
         },
       });
     }
@@ -96,11 +97,13 @@ router.post('/send', paymentRateLimiter, rules.sendPayment, validate, async (req
         violations: amlResult.alerts.map(a => a.ruleId),
       });
 
-      // Place hold on account for review
+      // Place a hold keyed by the source public key regardless of whether the
+      // sender has a registered user profile, then also hold the user if present.
+      const violationSummary = amlResult.alerts
+        .map(a => a.description)
+        .join('; ');
+      await amlMonitor.holdPublicKeyForReview?.(senderKey, violationSummary);
       if (sender?.id) {
-        const violationSummary = amlResult.alerts
-          .map(a => a.description)
-          .join('; ');
         await amlMonitor.holdAccountForReview(sender.id, violationSummary);
       }
 
