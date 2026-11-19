@@ -20,6 +20,21 @@ class AssetPortfolioService {
    * @returns {Promise<{publicKey: string, assets: Array<{code: string, issuer: string, balance: number, price: number|null, value: number, limit: string, metadata: object}>, totalValue: number, lastUpdated: Date}>} The account's portfolio
    * @throws {Error} If trustlines cannot be fetched
    */
+  async getNativeBalance(publicKey) {
+    const loader = this.trustlineManager.server?.loadAccount
+      ? (k) => this.trustlineManager.server.loadAccount(k)
+      : this.trustlineManager.loadAccount?.bind(this.trustlineManager);
+    if (!loader) return null;
+    try {
+      const account = await loader(publicKey);
+      const native = account?.balances?.find(b => b.asset_type === 'native');
+      return native ? parseFloat(native.balance) : null;
+    } catch (error) {
+      logger.warn('assetPortfolio.nativeBalance.failed', { publicKey, error: error.message });
+      return null;
+    }
+  }
+
   async getPortfolio(publicKey) {
     try {
       const trustlines = await this.trustlineManager.getTrustlines(publicKey);
@@ -29,6 +44,23 @@ class AssetPortfolioService {
         totalValue: 0,
         lastUpdated: new Date()
       };
+
+      // Native XLM has no trustline; include it from the account balances.
+      const nativeBalance = await this.getNativeBalance(publicKey);
+      if (nativeBalance !== null) {
+        const price = await this.assetRegistry.trackAssetPrice('XLM', null);
+        const value = price ? nativeBalance * price : 0;
+        portfolio.assets.push({
+          code: 'XLM',
+          issuer: null,
+          balance: nativeBalance,
+          price,
+          value,
+          limit: null,
+          metadata: this.assetRegistry.getAsset('XLM', null) || { type: 'native' }
+        });
+        portfolio.totalValue += value;
+      }
 
       for (const trustline of trustlines) {
         const asset = this.assetRegistry.getAsset(trustline.assetCode, trustline.assetIssuer);

@@ -1,50 +1,56 @@
 import crypto from 'crypto';
+import WORDLIST from './bip39English.js';
 
-// BIP-39 inspired wordlist subset (256 words for 8-word phrases)
-const WORDLIST = [
-  'abandon','ability','able','about','above','absent','absorb','abstract',
-  'absurd','abuse','access','accident','account','accuse','achieve','acid',
-  'acoustic','acquire','across','act','action','actor','actress','actual',
-  'adapt','add','addict','address','adjust','admit','adult','advance',
-  'advice','aerobic','afford','afraid','again','agent','agree','ahead',
-  'aim','air','airport','aisle','alarm','album','alcohol','alert',
-  'alien','all','alley','allow','almost','alone','alpha','already',
-  'also','alter','always','amateur','amazing','among','amount','amused',
-  'analyst','anchor','ancient','anger','angle','angry','animal','ankle',
-  'announce','annual','another','answer','antenna','antique','anxiety','apart',
-  'april','arch','arctic','area','arena','argue','arm','armed',
-  'armor','army','around','arrange','arrest','arrive','arrow','art',
-  'artefact','artist','artwork','ask','aspect','assault','asset','assist',
-  'assume','asthma','athlete','atom','attack','attend','attitude','attract',
-  'auction','audit','august','aunt','author','auto','autumn','average',
-  'avocado','avoid','awake','aware','away','awesome','awful','awkward',
-  'axis','baby','balance','bamboo','banana','banner','barely','bargain',
-  'barrel','base','basic','basket','battle','beach','bean','beauty',
-  'become','beef','before','begin','behave','behind','believe','below',
-  'belt','bench','benefit','best','betray','better','between','beyond',
-  'bicycle','bid','bike','bind','biology','bird','birth','bitter',
-  'black','blade','blame','blanket','blast','bleak','bless','blind',
-  'blood','blossom','blouse','blue','blur','blush','board','boat',
-  'body','boil','bomb','bone','book','boost','border','boring',
-  'borrow','boss','bottom','bounce','box','boy','bracket','brain',
-  'brand','brave','bread','breeze','brick','bridge','brief','bright',
-  'bring','brisk','broccoli','broken','bronze','broom','brother','brown',
-];
+// BIP-39: 11 bits per word from a 2048-word list, with SHA-256 checksum bits.
+const VALID_WORD_COUNTS = [12, 15, 18, 21, 24];
+const WORD_INDEX = new Map(WORDLIST.map((w, i) => [w, i]));
 
-export function generateRecoveryPhrase(wordCount = 12) {
+function bytesToBits(bytes) {
+  return Array.from(bytes, b => b.toString(2).padStart(8, '0')).join('');
+}
+
+function checksumBits(entropy) {
+  const cs = (entropy.length * 8) / 32;
+  return bytesToBits(crypto.createHash('sha256').update(entropy).digest()).slice(0, cs);
+}
+
+export function entropyToMnemonic(entropy) {
+  if (entropy.length < 16 || entropy.length > 32 || entropy.length % 4 !== 0) {
+    throw new Error('Invalid entropy length');
+  }
+  const bits = bytesToBits(entropy) + checksumBits(entropy);
   const words = [];
-  for (let i = 0; i < wordCount; i++) {
-    const idx = crypto.randomInt(0, WORDLIST.length);
-    words.push(WORDLIST[idx]);
+  for (let i = 0; i < bits.length; i += 11) {
+    words.push(WORDLIST[parseInt(bits.slice(i, i + 11), 2)]);
   }
   return words.join(' ');
+}
+
+export function generateRecoveryPhrase(wordCount = 12) {
+  if (!VALID_WORD_COUNTS.includes(wordCount)) {
+    throw new Error(`wordCount must be one of ${VALID_WORD_COUNTS.join(', ')}`);
+  }
+  return entropyToMnemonic(crypto.randomBytes((wordCount * 11 * 32) / 33 / 8));
 }
 
 export function hashPhrase(phrase) {
   return crypto.createHash('sha256').update(phrase.toLowerCase().trim()).digest('hex');
 }
 
+export function validateMnemonic(phrase) {
+  const words = phrase.trim().toLowerCase().split(/\s+/);
+  if (!VALID_WORD_COUNTS.includes(words.length)) return false;
+  let bits = '';
+  for (const w of words) {
+    const idx = WORD_INDEX.get(w);
+    if (idx === undefined) return false;
+    bits += idx.toString(2).padStart(11, '0');
+  }
+  const entBits = (words.length * 11 * 32) / 33;
+  const entropy = Buffer.from(bits.slice(0, entBits).match(/.{8}/g).map(b => parseInt(b, 2)));
+  return checksumBits(entropy) === bits.slice(entBits);
+}
+
 export function validatePhraseFormat(phrase) {
-  const words = phrase.trim().split(/\s+/);
-  return words.length >= 12 && words.every(w => /^[a-z]+$/.test(w));
+  return validateMnemonic(phrase);
 }

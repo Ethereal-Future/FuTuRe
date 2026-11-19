@@ -12,10 +12,22 @@ class PaymentAlertingService {
     this.failureWindow = 5 * 60 * 1000; // 5-minute window
     this.failureThreshold = 0.05; // 5% failure rate
     this.recentFailures = [];
+    this.recentSuccesses = [];
+    this.minSampleSize = 5; // minimum attempts before a rate is reported
     this.horizonHealthChecks = [];
     this.horizonFailureThreshold = 3; // 3 consecutive failures
     this.alertEmailCooldown = 60 * 1000; // 1 minute between duplicate alerts
     this.lastAlertTime = {};
+  }
+
+  /**
+   * Record a successful payment so failure rate is computed against total attempts.
+   * @returns {void}
+   */
+  recordPaymentSuccess() {
+    const now = Date.now();
+    this.recentSuccesses.push(now);
+    this.recentSuccesses = this.recentSuccesses.filter(t => t > now - this.failureWindow);
   }
 
   /**
@@ -48,13 +60,16 @@ class PaymentAlertingService {
   }
 
   /**
-   * Compute the failure rate over the current rolling window (failure count / 100).
+   * Compute the failure rate over the current rolling window (failures / total attempts).
    * @returns {number} Failure rate as a fraction (e.g. 0.05 for 5%)
    */
   getFailureRate() {
     const cutoffTime = Date.now() - this.failureWindow;
     const recentFailures = this.recentFailures.filter(f => f.timestamp > cutoffTime);
-    return recentFailures.length > 0 ? recentFailures.length / 100 : 0;
+    const successes = this.recentSuccesses.filter(t => t > cutoffTime).length;
+    const total = recentFailures.length + successes;
+    if (total === 0 || total < this.minSampleSize) return 0;
+    return recentFailures.length / total;
   }
 
   /**
