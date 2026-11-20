@@ -21,6 +21,17 @@ export function SlideOver({ open, onClose, title, children }) {
     }
   }, [open]);
 
+  // Lock body scroll when slide-over is open
+  useEffect(() => {
+    if (open) {
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      return () => {
+        document.body.style.overflow = originalOverflow;
+      };
+    }
+  }, [open]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -72,10 +83,11 @@ export function SlideOver({ open, onClose, title, children }) {
             aria-modal="true"
             aria-label={title}
             tabIndex={-1}
-            initial={{ x: '100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '100%' }}
+            initial={{ insetInlineEnd: '-100%' }}
+            animate={{ insetInlineEnd: '0%' }}
+            exit={{ insetInlineEnd: '-100%' }}
             transition={{ type: 'tween', duration: 0.25 }}
+            style={{ position: 'fixed' }}
           >
             <div className="slideover-header">
               {title && <h3>{title}</h3>}

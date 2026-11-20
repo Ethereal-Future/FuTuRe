@@ -42,7 +42,17 @@ export function XLMInfoIcon({ className = '' }) {
     open();
   };
 
-  const handleBlur = () => close();
+  const handleBlur = (e) => {
+    // Only close if focus is moving outside both button and tooltip
+    if (
+      tooltipRef.current &&
+      e.relatedTarget &&
+      (buttonRef.current?.contains(e.relatedTarget) || tooltipRef.current.contains(e.relatedTarget))
+    ) {
+      return;
+    }
+    close();
+  };
 
   // Close on outside click (covers the tap-to-toggle mobile fallback)
   useEffect(() => {
@@ -84,11 +94,19 @@ export function XLMInfoIcon({ className = '' }) {
 
   const handleClick = () => setIsOpen((prev) => !prev);
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      setIsOpen((prev) => !prev);
+    }
+  };
+
   return (
     <span
       className={`xlm-info-wrapper ${className}`}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
+      onMouseOver={() => clearHoverTimer()}
     >
       <button
         ref={buttonRef}
@@ -97,12 +115,7 @@ export function XLMInfoIcon({ className = '' }) {
         onClick={handleClick}
         onFocus={handleFocus}
         onBlur={handleBlur}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleClick();
-          }
-        }}
+        onKeyDown={handleKeyDown}
         aria-label={t('xlmInfo.title')}
         aria-expanded={isOpen}
         aria-describedby={isOpen ? 'xlm-tooltip' : undefined}
@@ -116,6 +129,9 @@ export function XLMInfoIcon({ className = '' }) {
             id="xlm-tooltip"
             className="xlm-tooltip"
             role="tooltip"
+            tabIndex={-1}
+            onMouseEnter={() => clearHoverTimer()}
+            onMouseLeave={handleMouseLeave}
             initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.95, y: -5 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={prefersReducedMotion ? undefined : { opacity: 0, scale: 0.95, y: -5 }}

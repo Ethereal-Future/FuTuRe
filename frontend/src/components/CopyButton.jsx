@@ -37,8 +37,16 @@ export function CopyButton({ text, label = 'Copy' }) {
       >
         {copied ? '✓' : '⎘'}
       </button>
-      {copied && <span className="copy-toast">{t('copyButton.copied')}</span>}
-      {copyError && <span className="copy-toast copy-toast--error">{copyError}</span>}
+      {copied && (
+        <span className="copy-toast" role="status" aria-live="polite">
+          {t('copyButton.copied')}
+        </span>
+      )}
+      {copyError && (
+        <span className="copy-toast copy-toast--error" role="alert" aria-live="assertive">
+          {copyError}
+        </span>
+      )}
     </span>
   );
 }
