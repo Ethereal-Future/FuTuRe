@@ -1,8 +1,40 @@
 import { useEffect, useState } from 'react';
-import { verifyRecoveryCode } from '../api/auth.js';
+import {
+  verifyRecoveryCode,
+  getWebAuthnChallenge,
+  verifyWebAuthnAssertion,
+} from '../api/auth.js';
 
 const WEBAUTHN_SUPPORTED =
   typeof window !== 'undefined' && typeof window.PublicKeyCredential !== 'undefined';
+
+/**
+ * Decode a base64url-encoded string (as issued by the backend) into a
+ * Uint8Array suitable for the WebAuthn API.
+ */
+function base64UrlToUint8Array(value) {
+  const base64 = value.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64.padEnd(base64.length + ((4 - (base64.length % 4)) % 4), '=');
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i += 1) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Encode an ArrayBuffer as base64url so it can be sent to the backend for
+ * server-side verification.
+ */
+function arrayBufferToBase64Url(buffer) {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 1) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
 
 /**
  * Gate shown before a large payment is confirmed. Asks for a WebAuthn
@@ -25,18 +57,62 @@ export function BiometricConfirmation({ publicKey, amount, assetCode, onSuccess,
     setStatus('verifying');
     setError('');
     try {
-      const assertion = await navigator.credentials.get({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          timeout: 60000,
-          userVerification: 'required',
-        },
-      });
+      // The challenge is issued and later verified by the backend; never
+      // generate it client-side, otherwise a mocked assertion would pass.
+      const options = await getWebAuthnChallenge(publicKey);
+      const {
+        challenge,
+        challengeId,
+        allowCredentials,
+        rpId,
+        timeout,
+        userVerification,
+      } = options || {};
+      if (!challenge || !challengeId) {
+        throw new Error('Server did not return a valid WebAuthn challenge');
+      }
+
+      const publicKeyOptions = {
+        challenge: base64UrlToUint8Array(challenge),
+        timeout: typeof timeout === 'number' ? timeout : 60000,
+        userVerification: userVerification || 'required',
+      };
+      if (rpId) publicKeyOptions.rpId = rpId;
+      if (Array.isArray(allowCredentials) && allowCredentials.length > 0) {
+        publicKeyOptions.allowCredentials = allowCredentials.map((cred) => ({
+          ...cred,
+          id: typeof cred.id === 'string' ? base64UrlToUint8Array(cred.id) : cred.id,
+        }));
+      }
+
+      const assertion = await navigator.credentials.get({ publicKey: publicKeyOptions });
       if (!assertion) throw new Error('No biometric assertion returned');
+
+      const response = assertion.response;
+      const result = await verifyWebAuthnAssertion(publicKey, {
+        challengeId,
+        id: assertion.id,
+        rawId: arrayBufferToBase64Url(assertion.rawId),
+        type: assertion.type,
+        clientDataJSON: arrayBufferToBase64Url(response.clientDataJSON),
+        authenticatorData: arrayBufferToBase64Url(response.authenticatorData),
+        signature: arrayBufferToBase64Url(response.signature),
+        userHandle: response.userHandle
+          ? arrayBufferToBase64Url(response.userHandle)
+          : null,
+      });
+
+      if (!result || result.verified !== true) {
+        throw new Error(result?.error || 'Biometric assertion could not be verified');
+      }
       onSuccess();
     } catch (err) {
       setStatus('error');
-      setError(err.message || 'Biometric confirmation failed or was cancelled.');
+      setError(
+        err.response?.data?.error ||
+          err.message ||
+          'Biometric confirmation failed or was cancelled.',
+      );
     }
   };
 

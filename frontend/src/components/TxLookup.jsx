@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
-import apiClient from '../api/client.js';
+import { getTransactionByHash } from '../api/client.js';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useFocusTrap } from '../hooks/useFocusTrap';
-import { isValidStellarAddress } from '../utils/validateStellarAddress';
 
 const TYPE_LABELS = { payment: 'Payment', create_account: 'Account Created', unknown: 'Other' };
 
@@ -15,12 +14,11 @@ function fmt(dateStr) {
  *
  * Props:
  *   initialHash      – pre-filled hash (e.g. from URL deep-link #tx=<hash>)
- *   accountPublicKey – if an account is already loaded, skip the public-key field
+ *   accountPublicKey – optional; kept for backward compatibility, unused for lookup
  *   onClose          – called when the user dismisses the modal
  */
 export function TxLookup({ initialHash = '', accountPublicKey = '', onClose }) {
   const [hash, setHash] = useState(initialHash);
-  const [publicKey, setPublicKey] = useState(accountPublicKey);
   const [tx, setTx] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -35,36 +33,31 @@ export function TxLookup({ initialHash = '', accountPublicKey = '', onClose }) {
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  // Auto-fetch when opened with a pre-filled hash + known account
+  // Auto-fetch when opened with a pre-filled hash
   useEffect(() => {
-    if (initialHash && accountPublicKey) lookup(initialHash, accountPublicKey);
+    if (initialHash) lookup(initialHash);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function lookup(h = hash, pk = publicKey) {
+  async function lookup(h = hash) {
     const trimH = h.trim();
-    const trimPk = pk.trim();
-    if (!trimH || !trimPk) return;
+    if (!trimH) return;
+    if (!/^[0-9a-f]{64}$/i.test(trimH)) {
+      setError('Transaction hash must be a 64-character hex string.');
+      setTx(null);
+      return;
+    }
     setLoading(true);
     setError('');
     setTx(null);
     try {
-      // A full transaction hash is looked up directly against Horizon by the
-      // backend (issue #1122) and returned as a single `transaction` object —
-      // this finds the transaction regardless of how long ago it happened,
-      // unlike scanning a page of recent history.
-      const { data } = await apiClient.get(`/api/stellar/account/${trimPk}/transactions`, {
-        params: { hash: trimH },
-      });
-      if (data.transaction) {
-        setTx(data.transaction);
+      // Transaction hashes are globally unique and indexed directly by
+      // Horizon, so no account public key is needed to look one up.
+      const data = await getTransactionByHash(trimH);
+      if (data) {
+        setTx(data);
       } else {
-        const found = data.records?.find((r) => r.hash?.toLowerCase() === trimH.toLowerCase());
-        if (found) {
-          setTx(found);
-        } else {
-          setError('Transaction not found for this account.');
-        }
+        setError('Transaction not found.');
       }
     } catch (e) {
       setError(e?.response?.data?.error ?? e?.message ?? 'Lookup failed.');
@@ -109,25 +102,6 @@ export function TxLookup({ initialHash = '', accountPublicKey = '', onClose }) {
             onSubmit={handleSubmit}
             style={{ display: 'flex', flexDirection: 'column', gap: 10 }}
           >
-            {!accountPublicKey && (
-              <>
-                <label htmlFor="tl-pubkey" className="sr-only">
-                  Account public key
-                </label>
-                <input
-                  id="tl-pubkey"
-                  type="text"
-                  placeholder="Account Public Key (G…)"
-                  value={publicKey}
-                  onChange={(e) => setPublicKey(e.target.value)}
-                  spellCheck={false}
-                  aria-label="Account public key"
-                  style={{
-                    border: `2px solid ${publicKey && !isValidStellarAddress(publicKey) ? '#ef4444' : '#ccc'}`,
-                  }}
-                />
-              </>
-            )}
             <label htmlFor="tl-hash" className="sr-only">
               Transaction hash
             </label>
@@ -148,7 +122,7 @@ export function TxLookup({ initialHash = '', accountPublicKey = '', onClose }) {
             )}
             <button
               type="submit"
-              disabled={loading || !hash.trim() || !publicKey.trim()}
+              disabled={loading || !hash.trim()}
               aria-busy={loading}
             >
               {loading ? 'Looking up…' : 'Look Up'}

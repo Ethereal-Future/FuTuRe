@@ -17,6 +17,8 @@ export function WebhookManager({ accountId }) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
+  const [pendingDeleteId, setPendingDeleteId] = useState(null);
+  const [revealSecret, setRevealSecret] = useState(false);
 
   const canSubmit = useMemo(() => {
     return url.trim().length > 0 && selectedEvents.length > 0 && !submitting;
@@ -66,6 +68,7 @@ export function WebhookManager({ accountId }) {
       });
       setUrl('');
       setSecret('');
+      setRevealSecret(false);
       setSelectedEvents(WEBHOOK_EVENTS.map((item) => item.value));
       setNotice(t('webhookManager.registeredSuccess'));
       await loadWebhooks();
@@ -86,6 +89,8 @@ export function WebhookManager({ accountId }) {
       setWebhooks((prev) => prev.filter((w) => w.id !== id));
     } catch (err) {
       setError(err?.response?.data?.error ?? t('webhookManager.deleteFailed'));
+    } finally {
+      setPendingDeleteId(null);
     }
   };
 
@@ -113,14 +118,27 @@ export function WebhookManager({ accountId }) {
         <label htmlFor="webhook-secret" style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
           {t('webhookManager.secretLabel')}
         </label>
-        <input
-          id="webhook-secret"
-          type="text"
-          value={secret}
-          onChange={(evt) => setSecret(evt.target.value)}
-          placeholder={t('webhookManager.secretPlaceholder')}
-          style={{ marginBottom: 8 }}
-        />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8 }}>
+          <input
+            id="webhook-secret"
+            type={revealSecret ? 'text' : 'password'}
+            value={secret}
+            onChange={(evt) => setSecret(evt.target.value)}
+            placeholder={t('webhookManager.secretPlaceholder')}
+            autoComplete="new-password"
+            style={{ marginBottom: 0, flex: 1 }}
+          />
+          <button
+            type="button"
+            className="btn-clear"
+            onClick={() => setRevealSecret((prev) => !prev)}
+            aria-label={revealSecret ? t('webhookManager.hideSecret') : t('webhookManager.showSecret')}
+            aria-pressed={revealSecret}
+            style={{ width: 'auto' }}
+          >
+            {revealSecret ? t('webhookManager.hideSecret') : t('webhookManager.showSecret')}
+          </button>
+        </div>
 
         <fieldset style={{ border: 'none', padding: 0, marginBottom: 10 }}>
           <legend style={{ fontWeight: 600, marginBottom: 6 }}>{t('webhookManager.eventsLegend')}</legend>
@@ -165,14 +183,39 @@ export function WebhookManager({ accountId }) {
                 {t('webhookManager.addedPrefix', { date: webhook.createdAt ? new Date(webhook.createdAt).toLocaleString() : t('webhookManager.unknown') })}
               </div>
               <div style={{ marginTop: 8 }}>
-                <button
-                  type="button"
-                  className="btn-clear"
-                  onClick={() => removeWebhook(webhook.id)}
-                  style={{ width: 'auto' }}
-                >
-                  {t('webhookManager.delete')}
-                </button>
+                {pendingDeleteId === webhook.id ? (
+                  <div
+                    role="alertdialog"
+                    aria-label={t('webhookManager.confirmDeleteLabel')}
+                    style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}
+                  >
+                    <span style={{ fontSize: '0.9rem' }}>{t('webhookManager.confirmDelete')}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeWebhook(webhook.id)}
+                      style={{ width: 'auto' }}
+                    >
+                      {t('webhookManager.confirmDeleteAction')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn-clear"
+                      onClick={() => setPendingDeleteId(null)}
+                      style={{ width: 'auto' }}
+                    >
+                      {t('webhookManager.cancel')}
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-clear"
+                    onClick={() => setPendingDeleteId(webhook.id)}
+                    style={{ width: 'auto' }}
+                  >
+                    {t('webhookManager.delete')}
+                  </button>
+                )}
               </div>
             </li>
           ))}
