@@ -431,7 +431,7 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [account?.publicKey]);
 
-  const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
+  const recipientValid = isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
   const recipientLooksFederated = recipient.includes('*');
   const selectedBalance = balance?.balances?.find((b) => b.asset === assetCode)?.balance ?? null;
@@ -1099,8 +1099,8 @@ function App() {
                         animate="visible"
                         exit="exit"
                       >
-                        Invalid Stellar address format (must start with G and be 56 characters) or
-                        federation address
+                        Invalid Stellar address format (must be a G... public key, an M... muxed
+                        account, or a federation address)
                       </motion.p>
                     )}
                   </AnimatePresence>

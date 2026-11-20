@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
-import { isValidStellarAddress } from '../utils/validateStellarAddress';
+import { isValidStellarAddress, isMuxedAddress } from '../utils/validateStellarAddress';
 import { validateAmount, formatAmount } from '../utils/validateAmount';
 import { getFriendlyError } from '../utils/errorMessages';
 import { useAppState, useAppDispatch, A } from '../store/index.js';
@@ -72,7 +72,7 @@ export function SendPaymentPage() {
   const amountTouched = amount.length > 0;
   const amountError = validateAmount(amount, xlmBalance !== null ? parseFloat(xlmBalance) : null);
   const amountValid = amountTouched && !amountError;
-  const recipientValid = recipient.length === 56 && isValidStellarAddress(recipient);
+  const recipientValid = isValidStellarAddress(recipient);
   const recipientTouched = recipient.length > 0;
   const largeTransactionBlocked = amountValid && kycStatus !== 'APPROVED' && parseFloat(amount) > KYC_LARGE_TRANSACTION_LIMIT;
 
@@ -169,6 +169,13 @@ export function SendPaymentPage() {
         {recipientTouched && !recipientValid && (
           <p id="recipient-error" role="alert" style={{ color: '#dc2626', fontSize: 12, marginTop: 4 }}>
             {t('sendPayment.invalidAddress')}
+          </p>
+        )}
+        {recipientValid && isMuxedAddress(recipient) && (
+          <p id="recipient-muxed-warning" role="status" style={{ color: '#b45309', fontSize: 12, marginTop: 4 }}>
+            {memo
+              ? t('sendPayment.muxedMemoConflict')
+              : t('sendPayment.muxedAccountNotice')}
           </p>
         )}
       </div>

@@ -6,6 +6,7 @@ import { getContacts, createContact, deleteContact } from '../api/stellar.js';
 import {
   getStellarAddressError,
   isFederationAddress,
+  isMuxedAddress,
   findInvalidAddressChars,
 } from '../utils/validateStellarAddress';
 import { useMessages } from '../hooks/useMessages';
@@ -214,6 +215,11 @@ export function AddressBook({ onSelect, prefillAddress = '' }) {
                 {newAddressTouched && trimmedAddress && newAddressValid && (
                   <p id="addr-book-address-status" style={{ color: '#16a34a', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
                     {isFederationAddress(trimmedAddress) ? t('addressBook.federationValid') : t('addressBook.checksumValid')}
+                  </p>
+                )}
+                {newAddressTouched && trimmedAddress && newAddressValid && isMuxedAddress(trimmedAddress) && (
+                  <p id="addr-book-muxed-warning" role="status" style={{ color: '#b45309', fontSize: 12, marginBottom: 6, marginTop: -2 }}>
+                    {t('addressBook.muxedMemoWarning')}
                   </p>
                 )}
                 {resolveError && (

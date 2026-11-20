@@ -12,6 +12,8 @@ export function AppStateProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, undefined, loadState);
   const syncRef = useRef(null);
   const isSyncingRef = useRef(false);
+  const accountRef = useRef(state.account);
+  accountRef.current = state.account;
 
   // Persist on every state change
   useEffect(() => {
@@ -23,7 +25,15 @@ export function AppStateProvider({ children }) {
     syncRef.current = createTabSync((msg) => {
       if (isSyncingRef.current) return;
       isSyncingRef.current = true;
-      if (msg.type === A.SET_ACCOUNT) dispatch({ type: A.SET_ACCOUNT, payload: msg.payload });
+      if (msg.type === A.SET_ACCOUNT) {
+        // Synced payloads carry only public identifiers. If this tab already
+        // holds the same account locally, keep its own secretKey.
+        const current = accountRef.current;
+        const payload = current?.secretKey && current.publicKey === msg.payload?.publicKey
+          ? { ...msg.payload, secretKey: current.secretKey }
+          : msg.payload;
+        dispatch({ type: A.SET_ACCOUNT, payload });
+      }
       if (msg.type === A.CLEAR_ACCOUNT) {
         dispatch({ type: A.CLEAR_ACCOUNT });
         clearAllCachedBalances().catch(() => {});
@@ -39,10 +49,8 @@ export function AppStateProvider({ children }) {
     dispatch(action);
     if (action.type === A.CLEAR_ACCOUNT) clearAllCachedBalances().catch(() => {});
     if ([A.SET_ACCOUNT, A.CLEAR_ACCOUNT, A.SET_BALANCE].includes(action.type)) {
-      const safeAction = action.type === A.SET_ACCOUNT
-        ? { ...action, payload: { ...action.payload, secretKey: undefined } }
-        : action;
-      syncRef.current?.broadcast(safeAction);
+      // createTabSync strips secretKey and other private fields before posting.
+      syncRef.current?.broadcast(action);
     }
   }, []);
 

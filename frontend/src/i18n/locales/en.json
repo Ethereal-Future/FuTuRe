@@ -62,10 +62,12 @@
     "kycRequired": "Large transactions require KYC approval",
     "sentSuccess": "Payment sent! Hash: {{hash}}…",
     "sep7Prefilled": "Payment details pre-filled. Please review and confirm.",
-    "sep7InvalidLink": "Invalid payment link: {{error}}"
+    "sep7InvalidLink": "Invalid payment link: {{error}}",
+    "muxedAccountNotice": "This is a muxed account (M…). It already embeds a memo ID that identifies the recipient — no separate memo is needed.",
+    "muxedMemoConflict": "This is a muxed account (M…) that already embeds a memo ID. Remove the separate memo unless the recipient explicitly asked for one."
   },
   "validation": {
-    "invalidAddress": "Invalid Stellar address format (must start with G and be 56 characters)"
+    "invalidAddress": "Invalid Stellar address format (must be a 56-character G… public key or a 69-character M… muxed account)"
   },
   "pwa": {
     "updateAvailable": "A new version is available.",
@@ -476,7 +478,26 @@
     "lowThresholdLabel": "Low Threshold (0-255)",
     "medThresholdLabel": "Medium Threshold (0-255)",
     "highThresholdLabel": "High Threshold (0-255)",
-    "homeDomainLabel": "Home Domain (optional)",
+    "homeDomainLabel": "Home Domain (optional, max 32 bytes)",
+    "homeDomainTooLong": "Home domain must be 32 bytes or fewer (currently {{bytes}} bytes)",
+    "homeDomainBytes": "{{bytes}}/32 bytes",
+    "flagsLegend": "Account flags",
+    "flagAuthRequired": "Authorization required",
+    "flagAuthRevocable": "Authorization revocable",
+    "flagAuthImmutable": "Authorization immutable",
+    "flagAuthClawback": "Clawback enabled",
+    "flagSet": "Set",
+    "flagClear": "Clear",
+    "flagConflict": "A flag cannot be both set and cleared in the same operation",
+    "signerLegend": "Signer (optional)",
+    "signerActionNone": "Don't change signers",
+    "signerActionAdd": "Add or update signer",
+    "signerActionRemove": "Remove signer",
+    "signerKeyLabel": "Signer public key",
+    "signerWeightLabel": "Signer weight (1-255)",
+    "invalidSignerKey": "Signer must be a valid Stellar public key (G…)",
+    "invalidSignerWeight": "Signer weight must be 1-255 (use \"Remove signer\" to remove)",
+    "signerIsMaster": "Use Master Weight to change the account's own key, not the signer field",
     "submit": "Add SetOptions Operation"
   },
   "ammPoolBrowser": {
@@ -575,14 +596,16 @@
     "removeContact": "Remove {{name}}",
     "checksumValid": "✓ Valid public key checksum",
     "federationValid": "✓ Valid federation address format — will be resolved when saved",
+    "muxedMemoWarning": "This is a muxed account (M…) with an embedded memo ID. Payments to it do not need a separate memo — do not add one unless the recipient asks.",
     "resolving": "Resolving…",
     "errors": {
       "empty": "Address is required",
       "secretKey": "This is a SECRET key (starts with S). Never share it — enter the public key (starts with G) instead",
       "federationFormat": "Invalid federation address — expected the form name*domain.com",
-      "prefix": "Stellar public keys must start with \"G\"",
+      "prefix": "Stellar public keys must start with \"G\" (or \"M\" for muxed accounts)",
       "invalidChars": "Contains characters that are not allowed (only A–Z and 2–7)",
       "length": "Public keys must be exactly 56 characters (got {{length}})",
+      "muxedLength": "Muxed accounts must be exactly 69 characters (got {{length}})",
       "checksum": "Checksum mismatch — this key contains a typo",
       "federationUnresolved": "Could not resolve federation address {{address}}"
     }
