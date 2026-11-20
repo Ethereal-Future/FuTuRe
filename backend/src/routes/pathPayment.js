@@ -38,7 +38,8 @@ const amountField = (field) =>
     .isFloat({ gt: 0 })
     .withMessage(`${field}: must be a positive number`)
     .custom((v) => {
-      if (parseFloat(v).toFixed(7).split('.')[1].replace(/0+$/, '').length > 7)
+      // ISSUE-232: validate the raw input string; never round with toFixed().
+      if (!/^\d+(\.\d{1,7})?$/.test(String(v)))
         throw new Error(`${field}: max 7 decimal places`);
       return true;
     });

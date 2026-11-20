@@ -85,7 +85,7 @@ function validateChallengeTransaction(challengeXdr, signingKey, accountPublicKey
   }
 
   const hasClientAccountOp = tx.operations.some(
-    (op) => op.source === accountPublicKey || op.source === undefined,
+    (op) => op.source === accountPublicKey,
   );
   if (!hasClientAccountOp) {
     throw new Error('SEP-10 challenge transaction is not scoped to the client account');

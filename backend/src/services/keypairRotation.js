@@ -35,11 +35,13 @@ async function assertMergeable(publicKey) {
     getOpenOffers(publicKey),
   ]);
 
-  const nonZeroTrustlines = trustlines.filter((t) => parseFloat(t.balance) > 0);
+  // ISSUE-235: account_merge requires zero subentries — any trustline,
+  // including zero-balance ones, causes op_has_sub_entries.
+  const nonZeroTrustlines = trustlines;
 
   if (nonZeroTrustlines.length > 0 || offers.length > 0) {
     throw new KeypairRotationBlockedError(
-      'Account cannot be merged: clear non-zero trustlines and open offers before rotating keys',
+      'Account cannot be merged: remove all trustlines (including zero-balance) and open offers before rotating keys',
       {
         trustlines: nonZeroTrustlines.map((t) => ({ assetCode: t.assetCode, issuer: t.issuer, balance: t.balance })),
         openOfferCount: offers.length,
