@@ -21,21 +21,24 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> None:
     """Handle Secrets Manager rotation lifecycle events."""
     logger.info(f"Received event: {json.dumps(event)}")
     
-    step = event['Step']
+    raw_step = event['Step']
+    # AWS Secrets Manager sends camelCase steps (createSecret, setSecret, ...).
+    # Normalize so legacy kebab-case forms (create-secret, ...) also work.
+    step = raw_step.replace('-', '').replace('_', '').lower()
     secret_id = event['SecretId']
     token = event['ClientRequestToken']
     
     try:
-        if step == 'create-secret':
+        if step == 'createsecret':
             create_secret(secret_id, token)
-        elif step == 'set-secret':
+        elif step == 'setsecret':
             set_secret(secret_id, token)
-        elif step == 'test-secret':
+        elif step == 'testsecret':
             test_secret(secret_id, token)
-        elif step == 'finish-secret':
+        elif step == 'finishsecret':
             finish_secret(secret_id, token)
         else:
-            raise ValueError(f"Unknown rotation step: {step}")
+            raise ValueError(f"Unknown rotation step: {raw_step}")
     except Exception as e:
         logger.error(f"Rotation failed: {str(e)}", exc_info=True)
         raise
