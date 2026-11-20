@@ -42,7 +42,7 @@ async function shouldSendAlert(userId, currentBalance) {
       if (hoursSinceLastAlert < ALERT_RECHECK_INTERVAL_HOURS) {
         // Only re-alert if balance dropped significantly (e.g., more than 20%)
         const lastLevel = prefs.lastLowBalanceAlertLevel?.toNumber?.() || 0;
-        const percentageDrop = ((lastLevel - currentBalance) / lastLevel) * 100;
+        const percentageDrop = lastLevel > 0 ? ((lastLevel - currentBalance) / lastLevel) * 100 : 0;
 
         if (percentageDrop < 20) {
           return false;
