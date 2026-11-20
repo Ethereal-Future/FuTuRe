@@ -52,8 +52,8 @@ export function QRCodeModal({ publicKey, onClose }) {
       className="qr-overlay"
       variants={v.fadeSlide} initial="hidden" animate="visible" exit="exit"
       onClick={onClose}
-      aria-hidden="true"
     >
+      <div className="qr-backdrop" aria-hidden="true" />
       <motion.div
         ref={modalRef}
         className="qr-modal"
@@ -69,7 +69,7 @@ export function QRCodeModal({ publicKey, onClose }) {
           <button className="qr-close" onClick={onClose} aria-label={t('qrCodeModal.close')}>✕</button>
         </div>
 
-        <div className="qr-canvas-wrap" aria-hidden="true">
+        <div className="qr-canvas-wrap">
           {error
             ? <p style={{ color: '#ef4444' }} role="alert">{t('qrCodeModal.failedToGenerate', { error })}</p>
             : <canvas ref={canvasRef} aria-label={t('qrCodeModal.canvasAriaLabel', { publicKey })} />

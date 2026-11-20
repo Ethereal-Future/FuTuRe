@@ -183,6 +183,9 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 // API v1 routes
 app.use('/api/v1/stellar', stellarRoutes);
 app.use('/api/v1/multisig', multiSigRoutes);
+// Backward-compatible alias for legacy clients still calling /api/multisig.
+// Must be mounted before the generic /api/* deprecation redirect below.
+app.use('/api/multisig', multiSigRoutes);
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/events', eventsRoutes);
 app.use('/api/v1/security', securityRoutes);

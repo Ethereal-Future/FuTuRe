@@ -4,6 +4,38 @@ import { AmountInput } from './AmountInput.jsx';
 import { StatusMessage } from './StatusMessage.jsx';
 import { formatAssetAmount } from '../utils/formatAmount';
 import { getFriendlyError } from '../utils/errorMessages';
+import { signTransaction } from '../wallet/signing.js';
+
+// Error thrown when the user dismisses the wallet signing prompt.
+export class SigningRejectedError extends Error {
+  constructor(message = 'Transaction signing was rejected in your wallet') {
+    super(message);
+    this.name = 'SigningRejectedError';
+  }
+}
+
+/**
+ * Build an unsigned DEX offer transaction via the backend, then have the
+ * connected wallet (Freighter/Albedo/session signer) sign it. Returns the
+ * signed XDR to be submitted to the backend for broadcasting.
+ */
+async function buildAndSignOfferTx(endpoint, payload) {
+  const { data: built } = await apiClient.post(endpoint, {
+    ...payload,
+    buildOnly: true,
+  });
+  if (!built?.xdr) {
+    throw new Error('Server did not return a transaction to sign');
+  }
+  const signedXdr = await signTransaction(built.xdr, {
+    networkPassphrase: built.networkPassphrase,
+    publicKey: built.sourceAccount || payload.sourceAccount,
+  });
+  if (!signedXdr) {
+    throw new SigningRejectedError();
+  }
+  return signedXdr;
+}
 
 // Per-offer cancellation lifecycle. Offers are never removed from the table
 // until Horizon confirms the cancel; failures roll back to an interactive row.
@@ -94,12 +126,20 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
     setSuccess('');
 
     try {
-      const { data } = await apiClient.post('/api/stellar/offers/create', {
-        sourceSecret: '', // In production, from secure context
+      const offerPayload = {
+        sourceAccount: accountId,
         sellingAsset,
         buyingAsset,
         sellingAmount: parseFloat(sellingAmount),
         price: parseFloat(price),
+      };
+      const signedXdr = await buildAndSignOfferTx(
+        '/api/stellar/offers/create',
+        offerPayload
+      );
+      const { data } = await apiClient.post('/api/stellar/offers/create', {
+        ...offerPayload,
+        signedXdr,
       });
 
       setSuccess(
@@ -111,7 +151,11 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
       await fetchOffers();
       if (onSuccess) onSuccess();
     } catch (err) {
-      setError(err.normalized?.message || 'Failed to create offer');
+      if (err instanceof SigningRejectedError) {
+        setError(err.message);
+      } else {
+        setError(getFriendlyError(err) || 'Failed to create offer');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -129,13 +173,21 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
     setSuccess('');
 
     try {
-      const { data } = await apiClient.post('/api/stellar/offers/modify', {
-        sourceSecret: '', // In production, from secure context
+      const offerPayload = {
+        sourceAccount: accountId,
         offerId,
         sellingAsset,
         buyingAsset,
         sellingAmount: parseFloat(sellingAmount),
         price: parseFloat(price),
+      };
+      const signedXdr = await buildAndSignOfferTx(
+        '/api/stellar/offers/modify',
+        offerPayload
+      );
+      await apiClient.post('/api/stellar/offers/modify', {
+        ...offerPayload,
+        signedXdr,
       });
 
       setSuccess('Offer modified successfully!');
@@ -146,7 +198,11 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
       await fetchOffers();
       if (onSuccess) onSuccess();
     } catch (err) {
-      setError(err.normalized?.message || 'Failed to modify offer');
+      if (err instanceof SigningRejectedError) {
+        setError(err.message);
+      } else {
+        setError(getFriendlyError(err) || 'Failed to modify offer');
+      }
     } finally {
       setSubmitting(false);
     }
@@ -162,9 +218,17 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
     setOfferCancelState(offer.id, { status: CANCEL_STATUS.CANCELLING });
 
     try {
-      const { data } = await apiClient.post('/api/stellar/offers/cancel', {
-        sourceSecret: '', // In production, from secure context
+      const cancelPayload = {
+        sourceAccount: accountId,
         offerId: String(offer.id),
+      };
+      const signedXdr = await buildAndSignOfferTx(
+        '/api/stellar/offers/cancel',
+        cancelPayload
+      );
+      const { data } = await apiClient.post('/api/stellar/offers/cancel', {
+        ...cancelPayload,
+        signedXdr,
       });
       if (!data?.success || !data?.hash) {
         throw new Error('Cancellation was not confirmed by the network');
@@ -176,6 +240,13 @@ export function DEXOfferManagement({ accountId, onSuccess }) {
       fetchOffers({ silent: true });
       if (onSuccess) onSuccess();
     } catch (err) {
+      if (err instanceof SigningRejectedError) {
+        // Nothing was submitted; the offer is untouched, so just clear the
+        // pending badge and surface the rejection.
+        setOfferCancelState(offer.id, null);
+        setError(err.message);
+        return;
+      }
       const message = getFriendlyError(err) || 'Failed to cancel offer';
       // Reconcile with Horizon: the tx may have landed despite a timeout, or the
       // offer may have been filled meanwhile. Only the orderbook is authoritative.

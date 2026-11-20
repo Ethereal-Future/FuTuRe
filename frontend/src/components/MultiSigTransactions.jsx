@@ -59,7 +59,7 @@ export function MultiSigTransactions({ publicKey }) {
   const fetchCurrentConfig = useCallback(async () => {
     if (!publicKey) return;
     try {
-      const { data } = await apiClient.get(`/api/multisig/account/${publicKey}`);
+      const { data } = await apiClient.get(`/api/v1/multisig/account/${publicKey}`);
       setSigners(data.signers || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load config');
@@ -70,7 +70,7 @@ export function MultiSigTransactions({ publicKey }) {
     if (!publicKey) return;
     setPendingLoading(true);
     try {
-      const { data } = await apiClient.get(`/api/multisig/transaction/pending/${publicKey}`);
+      const { data } = await apiClient.get(`/api/v1/multisig/transaction/pending/${publicKey}`);
       setPendingTxs(data.transactions || []);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load pending transactions');
@@ -100,7 +100,7 @@ export function MultiSigTransactions({ publicKey }) {
         weight: parseInt(setupForm.signerWeight, 10),
       };
 
-      await apiClient.post('/api/multisig/account/create', {
+      await apiClient.post('/api/v1/multisig/account/create', {
         sourceSecret: setupForm.sourceSecret,
         signers: [newSigner],
         thresholds: {
@@ -127,7 +127,7 @@ export function MultiSigTransactions({ publicKey }) {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.post('/api/multisig/transaction/build', {
+      const { data } = await apiClient.post('/api/v1/multisig/transaction/build', {
         sourcePublicKey: publicKey,
         destination: buildForm.destination,
         amount: buildForm.amount,
@@ -149,7 +149,7 @@ export function MultiSigTransactions({ publicKey }) {
     setSignLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.post('/api/multisig/transaction/sign', {
+      const { data } = await apiClient.post('/api/v1/multisig/transaction/sign', {
         txId: signForm.txId,
         signerSecret: signForm.signerSecret,
       });
@@ -169,7 +169,7 @@ export function MultiSigTransactions({ publicKey }) {
     setLoading(true);
     setError(null);
     try {
-      const { data } = await apiClient.post('/api/multisig/transaction/submit', { txId });
+      const { data } = await apiClient.post('/api/v1/multisig/transaction/submit', { txId });
       setSuccess(`Transaction submitted! Hash: ${data.hash}`);
       setTimeout(() => setSuccess(null), 4000);
       fetchPendingTxs();
