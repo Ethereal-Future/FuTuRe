@@ -15,7 +15,10 @@ export function ConvertWidget() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const sameAsset = from === to;
+
   const convert = async () => {
+    if (sameAsset) return;
     if (!amount || isNaN(amount) || Number(amount) <= 0) return;
     setLoading(true);
     setError('');
@@ -52,20 +55,26 @@ export function ConvertWidget() {
         <div>
           <label htmlFor="convert-from" className="sr-only">From asset</label>
           <select id="convert-from" value={from} onChange={(e) => setFrom(e.target.value)} aria-label="From asset">
-            {ASSETS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {ASSETS.map((a) => <option key={a} value={a} disabled={a === to}>{a}</option>)}
           </select>
         </div>
         <span aria-hidden="true">→</span>
         <div>
           <label htmlFor="convert-to" className="sr-only">To asset</label>
           <select id="convert-to" value={to} onChange={(e) => setTo(e.target.value)} aria-label="To asset">
-            {ASSETS.map((a) => <option key={a} value={a}>{a}</option>)}
+            {ASSETS.map((a) => <option key={a} value={a} disabled={a === from}>{a}</option>)}
           </select>
         </div>
-        <button type="button" onClick={convert} disabled={loading || !amount} aria-busy={loading}>
+        <button type="button" onClick={convert} disabled={loading || !amount || sameAsset} aria-busy={loading}>
           {loading ? '…' : 'Convert'}
         </button>
       </div>
+
+      {sameAsset && (
+        <p role="alert" style={{ color: '#ef4444', marginTop: 8 }}>
+          Source and destination assets must be different.
+        </p>
+      )}
 
       {error && <p role="alert" style={{ color: '#ef4444', marginTop: 8 }}>{error}</p>}
 

@@ -12,6 +12,7 @@ export function SponsorshipOperations({ publicKey }) {
   const [initialBalance, setInitialBalance] = useState('2');
   const [trustlineAsset, setTrustlineAsset] = useState('USDC');
   const [trustlineIssuer, setTrustlineIssuer] = useState('');
+  const [sponsoredSecret, setSponsoredSecret] = useState('');
   const msg = useMessages();
 
   const handleCreateSponsoredAccount = async (e) => {
@@ -64,16 +65,48 @@ export function SponsorshipOperations({ publicKey }) {
       return;
     }
 
+    if (!sponsoredSecret || sponsoredSecret.length < 56) {
+      setError("Please enter the sponsored account's secret key (both signatures are required)");
+      return;
+    }
+
     setLoading(true);
     try {
-      const response = await apiClient.post('/api/stellar/trustline/sponsored-create', {
+      // The Stellar protocol requires BOTH the sponsoring account and the
+      // sponsored account to sign transactions that introduce sponsored
+      // entries. The backend builds the transaction and returns an unsigned
+      // XDR; we then sign it with both keypairs client-side and submit the
+      // fully-signed envelope.
+      const buildResponse = await apiClient.post('/api/stellar/trustline/sponsored-create/build', {
         sourceSecret: localStorage.getItem('secretKey'),
         sponsoredAccount,
+        sponsoredSecret,
         assetCode: trustlineAsset,
         assetIssuer: trustlineIssuer || undefined,
       });
+
+      const { xdr: unsignedXdr } = buildResponse.data;
+      if (!unsignedXdr) {
+        throw new Error('Backend did not return a transaction to sign');
+      }
+
+      const { TransactionBuilder, Networks, Keypair } = await import('@stellar/stellar-sdk');
+      const networkPassphrase =
+        buildResponse.data.networkPassphrase ||
+        (buildResponse.data.network === 'public' ? Networks.PUBLIC : Networks.TESTNET);
+
+      const transaction = TransactionBuilder.fromXDR(unsignedXdr, networkPassphrase);
+      transaction.sign(Keypair.fromSecret(localStorage.getItem('secretKey')));
+      transaction.sign(Keypair.fromSecret(sponsoredSecret));
+
+      const signedXdr = transaction.toXDR();
+
+      const response = await apiClient.post('/api/stellar/trustline/sponsored-create/submit', {
+        signedXdr,
+      });
       setSuccess(`Sponsored trustline created! Transaction: ${response.data.hash}`);
       setSponsoredAccount('');
+      setSponsoredSecret('');
       setTrustlineAsset('USDC');
       setTrustlineIssuer('');
       msg.success('Sponsored trustline created successfully!');
@@ -199,6 +232,10 @@ export function SponsorshipOperations({ publicKey }) {
             Create a trustline for an asset on an existing account where you pay for the trustline reserve.
           </p>
 
+          <div style={{ padding: 12, background: '#fef9c3', border: '1px solid #fde047', borderRadius: 4, color: '#854d0e', fontSize: '0.85rem' }}>
+            ⚠️ Both signatures are required: the sponsoring account (your connected wallet) and the sponsored account must each sign this transaction, or it will fail on-chain with <code>tx_bad_auth</code>.
+          </div>
+
           <div>
             <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
               Account to Sponsor Trustline
@@ -210,6 +247,23 @@ export function SponsorshipOperations({ publicKey }) {
               placeholder="GXXXXXXXXXX..."
               style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.9rem' }}
             />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}>
+              Sponsored Account Secret Key
+            </label>
+            <input
+              type="password"
+              value={sponsoredSecret}
+              onChange={(e) => setSponsoredSecret(e.target.value)}
+              placeholder="SXXXXXXXXXX..."
+              autoComplete="off"
+              style={{ width: '100%', padding: '8px 12px', border: '1px solid #d1d5db', borderRadius: 4, fontFamily: 'monospace', fontSize: '0.9rem' }}
+            />
+            <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8rem' }}>
+              Required so the sponsored account can co-sign the transaction. Never sent to the server.
+            </p>
           </div>
 
           <div>
@@ -260,18 +314,18 @@ export function SponsorshipOperations({ publicKey }) {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !sponsoredSecret}
             style={{
               padding: '10px 16px',
-              background: loading ? '#d1d5db' : '#22c55e',
+              background: loading || !sponsoredSecret ? '#d1d5db' : '#22c55e',
               color: '#fff',
               border: 'none',
               borderRadius: 4,
-              cursor: loading ? 'not-allowed' : 'pointer',
+              cursor: loading || !sponsoredSecret ? 'not-allowed' : 'pointer',
               fontWeight: 500,
             }}
           >
-            {loading ? 'Processing…' : 'Create Sponsored Trustline'}
+            {loading ? 'Processing…' : 'Sign & Create Sponsored Trustline'}
           </button>
         </form>
       )}

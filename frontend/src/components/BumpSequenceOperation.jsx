@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Keypair, TransactionBuilder, Operation, Networks, BASE_FEE, Account } from '@stellar/stellar-sdk';
 import apiClient from '../api/client.js';
 import { useMessages } from '../hooks/useMessages';
 
@@ -10,6 +11,8 @@ export function BumpSequenceOperation({ publicKey }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningAcknowledged, setWarningAcknowledged] = useState(false);
   const msg = useMessages();
 
   useEffect(() => {
@@ -26,13 +29,10 @@ export function BumpSequenceOperation({ publicKey }) {
     }
   };
 
-  const handleBumpSequence = async () => {
-    setError(null);
-    setSuccess(false);
-
+  const validateTarget = () => {
     if (!targetSequence || isNaN(targetSequence)) {
       setError(t('bumpSequence.invalidTarget'));
-      return;
+      return false;
     }
 
     const targetNum = BigInt(targetSequence);
@@ -40,14 +40,66 @@ export function BumpSequenceOperation({ publicKey }) {
 
     if (targetNum <= currentNum) {
       setError(t('bumpSequence.mustBeGreater', { current: currentSequence }));
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleBumpSequence = () => {
+    setError(null);
+    setSuccess(false);
+
+    if (!validateTarget()) {
+      return;
+    }
+
+    setWarningAcknowledged(false);
+    setShowWarning(true);
+  };
+
+  const handleConfirmBump = async () => {
+    if (!warningAcknowledged) {
+      return;
+    }
+
+    setShowWarning(false);
+    setError(null);
+    setSuccess(false);
+
+    if (!validateTarget()) {
       return;
     }
 
     setLoading(true);
     try {
+      const secret = localStorage.getItem('secretKey');
+      if (!secret) {
+        throw new Error(t('bumpSequence.missingSecret'));
+      }
+
+      const sourceKeypair = Keypair.fromSecret(secret);
+      const networkPassphrase =
+        import.meta.env?.VITE_STELLAR_NETWORK === 'public' ? Networks.PUBLIC : Networks.TESTNET;
+
+      const sourceAccount = new Account(publicKey, String(currentSequence));
+      const transaction = new TransactionBuilder(sourceAccount, {
+        fee: BASE_FEE,
+        networkPassphrase,
+      })
+        .addOperation(
+          Operation.bumpSequence({
+            bumpTo: String(targetSequence),
+          })
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(sourceKeypair);
+      const signedXdr = transaction.toXDR();
+
       const response = await apiClient.post('/api/stellar/account/bump-sequence', {
-        sourceSecret: localStorage.getItem('secretKey'),
-        bumpToSequence: targetSequence,
+        signedXdr,
       });
 
       setSuccess(true);
@@ -129,6 +181,100 @@ export function BumpSequenceOperation({ publicKey }) {
       >
         {loading ? t('bumpSequence.processing') : t('bumpSequence.submit')}
       </button>
+
+      {showWarning && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bump-sequence-warning-title"
+          aria-describedby="bump-sequence-warning-desc"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 8,
+              padding: 20,
+              maxWidth: 480,
+              width: '90%',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            }}
+          >
+            <h3
+              id="bump-sequence-warning-title"
+              style={{ margin: '0 0 12px 0', color: '#991b1b' }}
+            >
+              {t('bumpSequence.warningTitle')}
+            </h3>
+            <p
+              id="bump-sequence-warning-desc"
+              style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#374151' }}
+            >
+              {t('bumpSequence.warningMultiSig')}
+            </p>
+            <label
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: 8,
+                marginBottom: 16,
+                fontSize: '0.9rem',
+                cursor: 'pointer',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={warningAcknowledged}
+                onChange={(e) => setWarningAcknowledged(e.target.checked)}
+                aria-label={t('bumpSequence.warningAcknowledge')}
+                style={{ marginTop: 2 }}
+              />
+              <span>{t('bumpSequence.warningAcknowledge')}</span>
+            </label>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setShowWarning(false)}
+                style={{
+                  padding: '8px 16px',
+                  background: '#f3f4f6',
+                  color: '#374151',
+                  border: '1px solid #d1d5db',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontWeight: 500,
+                }}
+              >
+                {t('bumpSequence.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBump}
+                disabled={!warningAcknowledged}
+                style={{
+                  padding: '8px 16px',
+                  background: warningAcknowledged ? '#dc2626' : '#d1d5db',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: 4,
+                  cursor: warningAcknowledged ? 'pointer' : 'not-allowed',
+                  fontWeight: 500,
+                }}
+              >
+                {t('bumpSequence.confirm')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
