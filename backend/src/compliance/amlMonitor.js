@@ -17,6 +17,12 @@ const WINDOW_MS = THRESHOLDS.WINDOW_MS;
 // BSA/AML regulations require complete, durable retention of all monitoring alerts.
 const ALERT_DLQ_KEY = 'compliance:dlq:alerts';
 
+// AML holds for source public keys that have no Postgres user record.  Blocking
+// is enforced on every payment attempt, so an unregistered sender cannot bypass
+// a review hold just because there is no `prisma.user` row to update.
+const PUBLIC_KEY_HOLDS = new Map();
+const PUBLIC_KEY_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
+
 // Post-submission rules for monitoring
 const ALL_RULES = [
   ...PRE_SUBMISSION_RULES,
@@ -125,6 +131,33 @@ class AMLMonitor {
         'compliance.aml_alert.dlq_write_failed'
       );
     }
+  }
+
+  // Check an AML hold by source public key, even when no user profile exists.
+  isPublicKeyOnHold(publicKey) {
+    if (!publicKey) return false;
+    const hold = PUBLIC_KEY_HOLDS.get(publicKey);
+    if (!hold) return false;
+    if (hold.expiresAt <= Date.now()) {
+      PUBLIC_KEY_HOLDS.delete(publicKey);
+      return false;
+    }
+    return true;
+  }
+
+  // Hold a source public key flagged by AML screening (registered or not).
+  async holdPublicKeyForReview(publicKey, reason) {
+    if (!publicKey) return false;
+    PUBLIC_KEY_HOLDS.set(publicKey, {
+      reason,
+      expiresAt: Date.now() + PUBLIC_KEY_HOLD_TTL_MS,
+    });
+    amlLogger.warn('Public key held for AML review', { publicKey, reason });
+    await complianceAudit.log('ACCOUNT_HOLD', publicKey, {
+      reason,
+      status: 'HELD_FOR_REVIEW',
+    });
+    return true;
   }
 
   // Set account hold for review

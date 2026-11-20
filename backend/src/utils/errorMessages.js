@@ -1,4 +1,4 @@
-const STELLAR_RESULT_CODES: Record<string, string> = {
+const STELLAR_RESULT_CODES = {
   tx_success: 'Transaction completed successfully.',
   tx_failed: 'Transaction failed.',
   tx_too_early: 'Transaction timestamp is too early.',
@@ -31,12 +31,12 @@ const STELLAR_RESULT_CODES: Record<string, string> = {
   op_too_many_sponsoring: 'Too many sponsored entries.',
 };
 
-export function getStellarErrorKey(code: string): string | null {
+export function getStellarErrorKey(code) {
   if (code in STELLAR_RESULT_CODES) return `stellarErrors.${code}`;
   return null;
 }
 
-export function getFriendlyError(code: string): string {
+export function getFriendlyError(code) {
   return STELLAR_RESULT_CODES[code] ?? `Unknown error: ${code}`;
 }
 

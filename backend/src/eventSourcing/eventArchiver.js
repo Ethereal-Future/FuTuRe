@@ -30,7 +30,6 @@ import {
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import prisma from '../db/client.js';
-import logger from '../config/logger.js';
 
 const BATCH_SIZE = parseInt(process.env.EVENT_ARCHIVE_BATCH_SIZE, 10) || 5000;
 
@@ -102,7 +101,6 @@ class EventArchiver {
         take: BATCH_SIZE,
       });
       if (batch.length === 0) break;
-    try {
       const files = await fs.readdir(EVENTS_DIR);
       const archivedCount = { events: 0, aggregates: 0 };
 
@@ -137,17 +135,6 @@ class EventArchiver {
             } else {
               await fs.unlink(eventFile);
             }
-    // Fetch all events that are old enough to archive
-    const oldEvents = await prisma.eventStore.findMany({
-      where: { createdAt: { lt: cutoffDate } },
-      orderBy: { createdAt: 'asc' },
-    });
-
-          // Keep only recent events
-          if (recentEvents.length > 0) {
-            await fs.writeFile(eventFile, recentEvents.map(e => JSON.stringify(e) + '\n').join(''));
-          } else {
-            await fs.unlink(eventFile);
           }
         });
       }
