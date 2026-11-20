@@ -55,10 +55,22 @@ const secretKeyValidator = body('sourceSecret')
 
 const assetValidator = (field) =>
   body(field)
-    .isString()
-    .trim()
-    .notEmpty()
-    .withMessage(`${field} must be a non-empty string`);
+    .custom((value) => {
+      // Native XLM / "CODE:ISSUER" strings, or standard Stellar asset objects.
+      if (typeof value === 'string') return value.trim().length > 0;
+      return (
+        value !== null &&
+        typeof value === 'object' &&
+        !Array.isArray(value) &&
+        typeof value.code === 'string' &&
+        value.code.trim().length > 0 &&
+        typeof value.issuer === 'string' &&
+        value.issuer.trim().length > 0
+      );
+    })
+    .withMessage(
+      `${field} must be a non-empty string or an object with code and issuer`,
+    );
 
 const positiveAmountValidator = (field) =>
   body(field)
