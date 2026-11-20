@@ -13,19 +13,24 @@ export function FormWizard({ steps = [], onComplete }) {
   const [current, setCurrent] = useState(0);
   const [direction, setDirection] = useState(1);
 
-  const isLast = current === steps.length - 1;
-  const step = steps[current];
+  const lastIndex = Math.max(0, steps.length - 1);
+  const clamp = (i) => Math.max(0, Math.min(lastIndex, i));
+  const safeCurrent = clamp(current);
+  const isLast = safeCurrent === lastIndex;
+  const step = steps[safeCurrent];
 
   const go = (delta) => {
-    if (delta > 0 && step.validate && !step.validate()) return;
+    if (delta > 0 && step?.validate && !step.validate()) return;
     setDirection(delta);
-    setCurrent(c => c + delta);
+    setCurrent(c => clamp(c + delta));
   };
 
   const finish = () => {
-    if (step.validate && !step.validate()) return;
+    if (step?.validate && !step.validate()) return;
     onComplete?.();
   };
+
+  if (!step) return null;
 
   const variants = {
     enter: (d) => ({ x: d > 0 ? 40 : -40, opacity: 0 }),
@@ -38,26 +43,26 @@ export function FormWizard({ steps = [], onComplete }) {
       {/* Progress indicator — announced to screen readers as a group with step position */}
       <div
         role="group"
-        aria-label={t('formWizard.progressLabel', { current: current + 1, total: steps.length })}
+        aria-label={t('formWizard.progressLabel', { current: safeCurrent + 1, total: steps.length })}
         style={{ display: 'flex', gap: 4, marginBottom: 20 }}
       >
         {steps.map((s, i) => (
           <div
             key={i}
             style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}
-            aria-current={i === current ? 'step' : undefined}
+            aria-current={i === safeCurrent ? 'step' : undefined}
           >
             <div
               role="presentation"
               style={{
                 width: '100%', height: 4, borderRadius: 2,
-                background: i <= current ? 'var(--primary)' : 'var(--border)',
+                background: i <= safeCurrent ? 'var(--primary)' : 'var(--border)',
                 transition: 'background 0.3s',
               }}
             />
             <span
-              style={{ fontSize: 11, color: i === current ? 'var(--primary)' : 'var(--muted)', fontWeight: i === current ? 700 : 400 }}
-              aria-hidden={i !== current ? 'true' : undefined}
+              style={{ fontSize: 11, color: i === safeCurrent ? 'var(--primary)' : 'var(--muted)', fontWeight: i === safeCurrent ? 700 : 400 }}
+              aria-hidden={i !== safeCurrent ? 'true' : undefined}
             >
               {s.title}
             </span>
@@ -66,14 +71,14 @@ export function FormWizard({ steps = [], onComplete }) {
       </div>
       {/* Visually-hidden live region so step changes are announced */}
       <div aria-live="polite" aria-atomic="true" className="sr-only">
-        {t('formWizard.stepAnnouncement', { title: step.title, current: current + 1, total: steps.length })}
+        {t('formWizard.stepAnnouncement', { title: step.title, current: safeCurrent + 1, total: steps.length })}
       </div>
 
       {/* Step content */}
       <div style={{ overflow: 'hidden', position: 'relative', minHeight: 80 }}>
         <AnimatePresence mode="wait" custom={direction}>
           <motion.div
-            key={current}
+            key={safeCurrent}
             custom={direction}
             variants={variants}
             initial="enter"
@@ -88,7 +93,7 @@ export function FormWizard({ steps = [], onComplete }) {
 
       {/* Navigation */}
       <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-        {current > 0 && (
+        {safeCurrent > 0 && (
           <button type="button" onClick={() => go(-1)} style={backBtnStyle}>
             ← {t('common.back')}
           </button>

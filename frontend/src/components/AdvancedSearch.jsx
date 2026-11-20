@@ -14,9 +14,17 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
   });
 
   const [searchHistory, setSearchHistory] = useState(() => {
-    const saved = localStorage.getItem('searchHistory');
-    return saved ? JSON.parse(saved) : [];
+    try {
+      const saved = localStorage.getItem('searchHistory');
+      const parsed = saved ? JSON.parse(saved) : [];
+      return Array.isArray(parsed) ? parsed.filter((h) => typeof h === 'string') : [];
+    } catch {
+      return [];
+    }
   });
+
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const [saveName, setSaveName] = useState('');
 
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -40,15 +48,31 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
     if (searchCriteria.query && !searchHistory.includes(searchCriteria.query)) {
       const newHistory = [searchCriteria.query, ...searchHistory].slice(0, 10);
       setSearchHistory(newHistory);
-      localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+      try {
+        localStorage.setItem('searchHistory', JSON.stringify(newHistory));
+      } catch {
+        // Ignore storage failures (quota exceeded, private mode, etc.)
+      }
     }
   };
 
   const handleSaveSearch = () => {
-    const searchName = prompt('Enter a name for this search:');
-    if (searchName) {
-      onSaveSearch({ name: searchName, criteria: searchCriteria });
-    }
+    setSaveName('');
+    setShowSaveForm(true);
+  };
+
+  const handleCancelSave = () => {
+    setShowSaveForm(false);
+    setSaveName('');
+  };
+
+  const handleConfirmSave = (e) => {
+    e.preventDefault();
+    const name = saveName.trim();
+    if (!name) return;
+    onSaveSearch?.({ name, criteria: searchCriteria });
+    setShowSaveForm(false);
+    setSaveName('');
   };
 
   const handleLoadSearch = (search) => {
@@ -57,7 +81,11 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
 
   const handleClearHistory = () => {
     setSearchHistory([]);
-    localStorage.removeItem('searchHistory');
+    try {
+      localStorage.removeItem('searchHistory');
+    } catch {
+      // Ignore storage failures
+    }
   };
 
   return (
@@ -189,6 +217,32 @@ export default function AdvancedSearch({ onSearch, onSaveSearch, savedSearches =
             amountMin: '', amountMax: '', address: ''
           })} className="btn-secondary">Clear</button>
         </div>
+
+        {showSaveForm && (
+          <form
+            className="save-search-form"
+            role="dialog"
+            aria-modal="false"
+            aria-labelledby="adv-search-save-title"
+            onSubmit={handleConfirmSave}
+            onKeyDown={(e) => { if (e.key === 'Escape') handleCancelSave(); }}
+          >
+            <label id="adv-search-save-title" htmlFor="adv-search-save-name">
+              Enter a name for this search:
+            </label>
+            <input
+              id="adv-search-save-name"
+              type="text"
+              value={saveName}
+              onChange={(e) => setSaveName(e.target.value)}
+              autoFocus
+            />
+            <div className="search-actions">
+              <button type="submit" className="btn-primary" disabled={!saveName.trim()}>Save</button>
+              <button type="button" onClick={handleCancelSave} className="btn-secondary">Cancel</button>
+            </div>
+          </form>
+        )}
       </div>
 
       {savedSearches.length > 0 && (
