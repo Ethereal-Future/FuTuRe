@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import apiClient from '../api/client.js';
 import { StatusMessage } from './StatusMessage.jsx';
 import { formatAssetAmount } from '../utils/formatAmount';
+import { useWalletSigner } from '../hooks/useWalletSigner';
 
 /**
  * Display asset balance with trustline limits and ability to modify limits
@@ -14,6 +15,7 @@ export function AssetBalanceWithTrustline({ accountId, onSuccess }) {
   const [modifyingAsset, setModifyingAsset] = useState(null);
   const [newLimit, setNewLimit] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const { isConnected, publicKey, connectWallet, signTransaction } = useWalletSigner();
 
   const fetchAssets = async () => {
     setLoading(true);
@@ -64,11 +66,25 @@ export function AssetBalanceWithTrustline({ accountId, onSuccess }) {
     setSuccess('');
 
     try {
-      const { data } = await apiClient.post('/api/stellar/trustline/modify-limit', {
-        sourceSecret: '', // In production, this would come from the secure context
+      // Connect wallet if not already connected
+      if (!isConnected) {
+        await connectWallet();
+      }
+
+      // Request transaction XDR from backend
+      const { data: txData } = await apiClient.post('/api/stellar/trustline/build-modify-limit', {
+        publicKey: publicKey || accountId,
         assetCode,
         issuer: asset.issuer,
         newLimit: parseFloat(newLimit),
+      });
+
+      // Sign transaction with wallet
+      const signedXDR = await signTransaction(txData.xdr);
+
+      // Submit signed transaction
+      const { data } = await apiClient.post('/api/stellar/trustline/submit-signed', {
+        signedXDR,
       });
 
       setSuccess(`Trustline limit for ${assetCode} updated to ${newLimit}`);
@@ -77,7 +93,7 @@ export function AssetBalanceWithTrustline({ accountId, onSuccess }) {
       await fetchAssets();
       if (onSuccess) onSuccess();
     } catch (err) {
-      setError(err.normalized?.message || 'Failed to modify trustline limit');
+      setError(err.message || err.normalized?.message || 'Failed to modify trustline limit');
     } finally {
       setSubmitting(false);
     }
