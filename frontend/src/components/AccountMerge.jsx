@@ -3,6 +3,7 @@ import apiClient from '../api/client.js';
 import { simulateAccountMerge, stroopsToXLM } from '../utils/accountMergeSimulation.js';
 import { formatAssetAmount } from '../utils/formatAmount';
 import { isValidStellarAddress } from '../utils/validateStellarAddress';
+import { signTransactionWithFreighter } from '../utils/freighter';
 
 export const MERGE_CONFIRM_WORD = 'MERGE';
 // Number of trailing destination characters the user must re-type.
@@ -93,8 +94,20 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
     setError(null);
 
     try {
+      // Build the unsigned merge transaction server-side (no secrets involved),
+      // then sign it client-side with Freighter and submit only the signed XDR.
+      const { data: buildData } = await apiClient.post('/api/stellar/account/merge/build', {
+        sourcePublicKey,
+        destination,
+      });
+
+      const signedXdr = await signTransactionWithFreighter(buildData.xdr, {
+        networkPassphrase: buildData.networkPassphrase,
+        address: sourcePublicKey,
+      });
+
       const { data } = await apiClient.post('/api/stellar/account/merge', {
-        sourceSecret,
+        signedXdr,
         destination,
         password,
       });
@@ -381,7 +394,7 @@ export function AccountMerge({ sourceSecret, sourcePublicKey, onClose, onSuccess
           </div>
         )}
 
-        {/* Step 4: Re-enter Password */}
+        {/* Step 5: Re-enter Password */}
         {step === STEP_PASSWORD && (
           <div style={{ marginBottom: 20 }}>
             <div

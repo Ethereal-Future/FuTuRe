@@ -27,6 +27,9 @@ export function AccountRecovery() {
   const [showBackupModal, setShowBackupModal] = useState(false);
   const [confirmedWords, setConfirmedWords] = useState(new Set());
 
+  const backupModalRef = useRef(null);
+  useFocusTrap(backupModalRef, showBackupModal);
+
   // Check if phrase is already configured
   useEffect(() => {
     apiClient.get('/api/recovery/phrase/status')
@@ -84,9 +87,6 @@ export function AccountRecovery() {
       setConfirmedWords(new Set());
     });
   };
-
-  const backupModalRef = useRef(null);
-  if (showBackupModal) useFocusTrap(backupModalRef, true);
 
   // Step 2: Add contact
   const addContact = () => call(async () => {

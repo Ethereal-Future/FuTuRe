@@ -16,6 +16,20 @@ const INTERVAL_PRESETS = [
   { label: 'Monthly', days: 30 },
 ];
 
+const SUPPORTED_ASSETS = [
+  { code: 'XLM', label: 'XLM (native)', issuer: null },
+  {
+    code: 'USDC',
+    label: 'USDC (stablecoin)',
+    issuer: 'GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN',
+  },
+];
+
+function getAssetMeta(code) {
+  return SUPPORTED_ASSETS.find((a) => a.code === code) ?? SUPPORTED_ASSETS[0];
+}
+=======
+
 function StatusBadge({ status }) {
   const { label, color } = STATUS_BADGE[status] ?? { label: status, color: '#6b7280' };
   return (
@@ -45,9 +59,9 @@ function computeStreamSummary(rateAmount, intervalDays, endDate) {
   end.setHours(23, 59, 59, 999);
   const totalDays = Math.max(0, Math.ceil((end - start) / (1000 * 60 * 60 * 24)));
   const paymentCount = Math.floor(totalDays / days) + 1;
-  const totalXLM = formatAssetAmount(rate * paymentCount);
+  const totalAmount = formatAssetAmount(rate * paymentCount);
 
-  return { totalXLM, totalDays, paymentCount };
+  return { totalAmount, totalXLM: totalAmount, totalDays, paymentCount };
 }
 
 export function StreamPayment({ publicKey }) {
@@ -61,6 +75,7 @@ export function StreamPayment({ publicKey }) {
     rateAmount: '',
     intervalDays: '7',
     endDate: '',
+    assetCode: 'XLM',
   });
   const [formError, setFormError] = useState(null);
   const [creating, setCreating] = useState(false);
@@ -95,24 +110,58 @@ export function StreamPayment({ publicKey }) {
       setFormError('Recipient and amount are required.');
       return;
     }
-    const senderSecret = localStorage.getItem('secretKey');
-    if (!senderSecret) {
-      setFormError('Account secret key not found. Please log in again.');
+    if (!publicKey) {
+      setFormError('Connect your wallet to set up a standing order.');
       return;
     }
     setCreating(true);
     try {
       const intervalSeconds = parseInt(form.intervalDays, 10) * 24 * 60 * 60;
-      await apiClient.post('/api/streaming', {
+      const asset = getAssetMeta(form.assetCode);
+      const endTime = form.endDate ? new Date(form.endDate).toISOString() : undefined;
+
+      // Request a session-scoped signature from the wallet (e.g. Freighter).
+      // The secret key never leaves the wallet and is never read from or sent
+      // over the network in plaintext.
+      const { data: challenge } = await apiClient.post('/api/streaming/authorize/challenge', {
         senderPublicKey: publicKey,
-        senderSecret,
         recipientPublicKey: form.recipientPublicKey,
         rateAmount: parseFloat(form.rateAmount),
         intervalSeconds,
-        assetCode: 'XLM',
-        endTime: form.endDate ? new Date(form.endDate).toISOString() : undefined,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer ?? undefined,
+        endTime,
       });
-      setForm({ recipientPublicKey: '', rateAmount: '', intervalDays: '7', endDate: '' });
+
+      if (!window.freighterApi?.signMessage) {
+        throw new Error('A Stellar wallet (e.g. Freighter) is required to authorize payments.');
+      }
+      const signed = await window.freighterApi.signMessage(challenge.challenge, {
+        accountToSign: publicKey,
+      });
+      const signature = typeof signed === 'string' ? signed : signed?.signedMessage;
+      if (!signature) {
+        throw new Error('Payment authorization was not signed.');
+      }
+
+      await apiClient.post('/api/streaming', {
+        senderPublicKey: publicKey,
+        recipientPublicKey: form.recipientPublicKey,
+        rateAmount: parseFloat(form.rateAmount),
+        intervalSeconds,
+        assetCode: asset.code,
+        assetIssuer: asset.issuer ?? undefined,
+        endTime,
+        challenge: challenge.challenge,
+        signature,
+      });
+      setForm({
+        recipientPublicKey: '',
+        rateAmount: '',
+        intervalDays: '7',
+        endDate: '',
+        assetCode: 'XLM',
+      });
       setShowForm(false);
       fetchStreams();
     } catch (err) {
@@ -141,6 +190,8 @@ export function StreamPayment({ publicKey }) {
   const intervalLabel =
     INTERVAL_PRESETS.find((p) => String(p.days) === form.intervalDays)?.label ??
     `every ${form.intervalDays} days`;
+
+  const selectedAsset = getAssetMeta(form.assetCode);
 
   return (
     <section className="section" aria-labelledby="stream-heading">
@@ -199,13 +250,29 @@ export function StreamPayment({ publicKey }) {
             />
           </div>
 
+          <div className="input-wrap">
+            <label
+              htmlFor="stream-asset"
+              style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
+            >
+              Asset
+            </label>
+            <select id="stream-asset" value={form.assetCode} onChange={set('assetCode')}>
+              {SUPPORTED_ASSETS.map((a) => (
+                <option key={a.code} value={a.code}>
+                  {a.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
             <div className="input-wrap" style={{ flex: '1 1 120px' }}>
               <label
                 htmlFor="stream-rate"
                 style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
               >
-                Amount (XLM)
+                Amount ({selectedAsset.code})
               </label>
               <input
                 id="stream-rate"
@@ -237,7 +304,11 @@ export function StreamPayment({ publicKey }) {
           </div>
 
           <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--text-muted, #64748b)' }}>
-            Send <strong>{form.rateAmount || '—'} XLM</strong> {intervalLabel.toLowerCase()}
+            Send{' '}
+            <strong>
+              {form.rateAmount || '—'} {selectedAsset.code}
+            </strong>{' '}
+            {intervalLabel.toLowerCase()}
           </p>
 
           <div className="input-wrap">
@@ -268,7 +339,10 @@ export function StreamPayment({ publicKey }) {
                 fontSize: '0.9rem',
               }}
             >
-              <strong>Summary:</strong> Total to be sent: <strong>{summary.totalXLM} XLM</strong>{' '}
+              <strong>Summary:</strong> Total to be sent:{' '}
+              <strong>
+                {summary.totalAmount} {selectedAsset.code}
+              </strong>{' '}
               over <strong>{summary.totalDays} days</strong> ({summary.paymentCount} payments)
             </div>
           )}

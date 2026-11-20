@@ -70,8 +70,13 @@ export function KYCForm() {
         return value.trim().length < 2 ? 'Name must be at least 2 characters' : null;
       case 'dateOfBirth': {
         const dob = new Date(value);
-        if (isNaN(dob)) return 'Invalid date';
-        const age = new Date().getFullYear() - dob.getFullYear();
+        if (isNaN(dob.getTime())) return 'Invalid date';
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const monthDiff = today.getMonth() - dob.getMonth();
+        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+          age -= 1;
+        }
         if (age < 18) return 'Must be at least 18 years old';
         return null;
       }
