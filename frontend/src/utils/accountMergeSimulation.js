@@ -52,9 +52,12 @@ export async function simulateAccountMerge(sourcePublicKey, destinationPublicKey
 
     result.sourceAccount = data.account;
 
-    // Extract trustlines (non-XLM balances)
+    // Extract trustlines (every non-XLM balance entry). Stellar counts each
+    // trustline as a subentry regardless of balance, so even a zero-balance
+    // trustline blocks account_merge with op_has_sub_entries.
+    // Liquidity pool shares are trustlines too and are included here.
     const trustlines = (data.account.balances || []).filter(
-      (b) => b.asset_type !== 'native' && parseFloat(b.balance) > 0
+      (b) => b.asset_type !== 'native'
     );
     result.trustlines = trustlines;
 
@@ -98,8 +101,17 @@ export async function simulateAccountMerge(sourcePublicKey, destinationPublicKey
     }
 
     if (trustlines.length > 0) {
+      const zeroBalance = trustlines.filter((b) => !(parseFloat(b.balance) > 0)).length;
+      const withBalance = trustlines.length - zeroBalance;
+      const parts = [];
+      if (withBalance > 0) parts.push(`${withBalance} with a balance`);
+      if (zeroBalance > 0) parts.push(`${zeroBalance} with a zero balance`);
       result.blockedReasons.push(
-        `Cannot merge account with positive trustlines. Remove ${trustlines.length} trustline(s) first.`
+        `Cannot merge account with active trustlines (${parts.join(', ')}). ` +
+        'Every trustline is a subentry — including zero-balance ones — and the network rejects ' +
+        'the merge with op_has_sub_entries until all are removed. ' +
+        'Send or sell any remaining asset balance, then remove each trustline with a Change Trust ' +
+        'operation using a limit of 0.'
       );
     }
 
