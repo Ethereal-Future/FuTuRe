@@ -18,9 +18,8 @@ export function copyToClipboard(text) {
 }
 
 export function generateStellarLabUrl(xdr, isTestnet = false) {
-  const network = isTestnet ? 'testnet' : 'public';
-  const params = new URLSearchParams({ xdr, network });
-  return `https://laboratory.stellar.org/?tab=xdr-viewer&${params.toString()}`;
+  const network = isTestnet ? 'test' : 'public';
+  return `https://laboratory.stellar.org/#xdr-viewer?input=${encodeURIComponent(xdr)}&type=TransactionEnvelope&network=${network}`;
 }
 
 export function formatXdrForDisplay(xdr, width = 80) {

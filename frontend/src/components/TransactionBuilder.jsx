@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import * as StellarSDK from '@stellar/stellar-sdk';
 import apiClient from '../api/client.js';
 import { formatAssetAmount } from '../utils/formatAmount';
 import { PaymentOperationForm } from './operations/PaymentOperationForm';
@@ -66,16 +67,99 @@ export function TransactionBuilder({ publicKey, onClose, onSuccess }) {
     setError(null);
 
     try {
-      const payload = {
-        sourceSecret: localStorage.getItem('secretKey'),
-        operations: operations.map((op) => ({
-          type: op.type,
-          ...op.data,
-        })),
-      };
+      const sourceSecret = localStorage.getItem('secretKey');
+      if (!sourceSecret) {
+        throw new Error('No secret key found');
+      }
 
-      const response = await apiClient.post('/api/stellar/transaction/multi-op/build', payload);
-      const { transactionHash } = response.data;
+      // Build transaction client-side using stellar-sdk
+      const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+      const server = new StellarSDK.Horizon.Server('https://horizon.stellar.org');
+      
+      // Load source account
+      const sourceAccount = await server.loadAccount(sourceKeypair.publicKey());
+      
+      // Build transaction with all operations
+      const transactionBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
+        fee: feeStats?.base_fee || '100',
+        networkPassphrase: StellarSDK.Networks.PUBLIC,
+      });
+
+      // Add each operation to the transaction
+      for (const op of operations) {
+        let operation;
+        
+        switch (op.type) {
+          case 'payment':
+            operation = StellarSDK.Operation.payment({
+              destination: op.data.destination,
+              asset: op.data.assetCode === 'XLM' 
+                ? StellarSDK.Asset.native()
+                : new StellarSDK.Asset(op.data.assetCode, op.data.issuer),
+              amount: op.data.amount,
+            });
+            break;
+            
+          case 'changeTrust':
+            operation = StellarSDK.Operation.changeTrust({
+              asset: new StellarSDK.Asset(op.data.assetCode, op.data.issuer),
+              limit: op.data.limit,
+            });
+            break;
+            
+          case 'manageData':
+            operation = StellarSDK.Operation.manageData({
+              name: op.data.name,
+              value: op.data.value,
+            });
+            break;
+            
+          case 'setOptions':
+            operation = StellarSDK.Operation.setOptions(op.data);
+            break;
+            
+          case 'manageSellOffer':
+            operation = StellarSDK.Operation.manageSellOffer({
+              selling: op.data.selling === 'XLM' 
+                ? StellarSDK.Asset.native()
+                : new StellarSDK.Asset(op.data.selling, op.data.sellingIssuer),
+              buying: op.data.buying === 'XLM'
+                ? StellarSDK.Asset.native()
+                : new StellarSDK.Asset(op.data.buying, op.data.buyingIssuer),
+              amount: op.data.amount,
+              price: op.data.price,
+              offerId: op.data.offerId || '0',
+            });
+            break;
+            
+          case 'manageBuyOffer':
+            operation = StellarSDK.Operation.manageBuyOffer({
+              selling: op.data.selling === 'XLM'
+                ? StellarSDK.Asset.native()
+                : new StellarSDK.Asset(op.data.selling, op.data.sellingIssuer),
+              buying: op.data.buying === 'XLM'
+                ? StellarSDK.Asset.native()
+                : new StellarSDK.Asset(op.data.buying, op.data.buyingIssuer),
+              buyAmount: op.data.buyAmount,
+              price: op.data.price,
+              offerId: op.data.offerId || '0',
+            });
+            break;
+            
+          default:
+            throw new Error(`Unsupported operation type: ${op.type}`);
+        }
+        
+        transactionBuilder.addOperation(operation);
+      }
+
+      // Build and sign transaction
+      const transaction = transactionBuilder.setTimeout(30).build();
+      transaction.sign(sourceKeypair);
+      
+      // Submit to network
+      const result = await server.submitTransaction(transaction);
+      const transactionHash = result.hash;
 
       localStorage.setItem('seenAtomicityWarning', 'true');
       setShowConfirmation(false);
