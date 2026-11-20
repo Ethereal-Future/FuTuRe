@@ -40,6 +40,10 @@ import { getConfig } from '../config/env.js';
 import { sendEmail } from '../notifications/channels/email.js';
 import kycCollector from '../compliance/kycCollector.js';
 import auditLogger from '../security/auditLogger.js';
+import {
+  generateAuthenticationOptions,
+  verifyAuthentication,
+} from '../mobile/webAuthn.js';
 
 const router = express.Router();
 
@@ -1306,6 +1310,139 @@ router.get('/mfa/status', requireAuth, async (req, res) => {
   } catch (error) {
     logger.error({ err: error }, 'Failed to get MFA status');
     res.status(500).json({ error: 'Failed to get MFA status' });
+  }
+});
+
+// ── WebAuthn (biometric confirmation) ─────────────────────────────────────────
+
+// Rate limit for WebAuthn challenge issuance / verification (20 req/15min)
+const webauthnRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  message: 'Too many biometric verification attempts, please try again later.',
+});
+
+/**
+ * @swagger
+ * /api/auth/webauthn/challenge:
+ *   get:
+ *     summary: Issue a server-generated WebAuthn authentication challenge
+ *     description: >
+ *       Generates a single-use challenge bound to the authenticated user. The
+ *       challenge must be signed by the user's authenticator and verified via
+ *       POST /api/auth/webauthn/verify. Client-generated challenges are rejected.
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: publicKey
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200:
+ *         description: WebAuthn authentication options
+ *       400:
+ *         $ref: '#/components/responses/BadRequest'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: publicKey does not belong to the authenticated user
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.get('/webauthn/challenge', requireAuth, webauthnRateLimiter, async (req, res) => {
+  const { publicKey } = req.query;
+  if (!publicKey) {
+    return sendError(res, 400, ErrorCodes.VALIDATION_MISSING_FIELD, 'Missing required query parameter: publicKey');
+  }
+  try {
+    const user = await prisma.user.findUnique({ where: { publicKey } });
+    if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
+    if (user.id !== req.user.sub) {
+      return sendError(res, 403, ErrorCodes.FORBIDDEN, 'publicKey does not belong to the authenticated user');
+    }
+
+    const options = await generateAuthenticationOptions(user.id, publicKey);
+    res.json(options);
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'Failed to generate WebAuthn challenge');
+    sendError(res, 500, ErrorCodes.INTERNAL_ERROR, 'Failed to generate WebAuthn challenge');
+  }
+});
+
+/**
+ * @swagger
+ * /api/auth/webauthn/verify:
+ *   post:
+ *     summary: Verify a WebAuthn authenticator assertion server-side
+ *     tags: [Auth]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [challengeId, publicKey, assertion]
+ *             properties:
+ *               challengeId: { type: string }
+ *               publicKey: { type: string }
+ *               assertion: { type: object }
+ *     responses:
+ *       200:
+ *         description: Assertion verified
+ *       400:
+ *         description: Invalid, expired, or already-used challenge / assertion
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: publicKey does not belong to the authenticated user
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
+ *       429:
+ *         $ref: '#/components/responses/TooManyRequests'
+ *       500:
+ *         $ref: '#/components/responses/InternalServerError'
+ */
+router.post('/webauthn/verify', requireAuth, webauthnRateLimiter, async (req, res) => {
+  const { challengeId, publicKey, assertion } = req.body ?? {};
+  if (!challengeId || !publicKey || !assertion) {
+    return sendError(
+      res,
+      400,
+      ErrorCodes.VALIDATION_MISSING_FIELD,
+      'challengeId, publicKey and assertion are required',
+    );
+  }
+  try {
+    const user = await prisma.user.findUnique({ where: { publicKey } });
+    if (!user) return sendError(res, 404, ErrorCodes.NOT_FOUND, 'User not found');
+    if (user.id !== req.user.sub) {
+      return sendError(res, 403, ErrorCodes.FORBIDDEN, 'publicKey does not belong to the authenticated user');
+    }
+
+    // verifyAuthentication consumes the challenge atomically (single-use), so
+    // replayed assertions fail because the challenge no longer exists.
+    const result = await verifyAuthentication(user.id, publicKey, challengeId, assertion);
+    if (!result?.verified) {
+      return sendError(
+        res,
+        400,
+        ErrorCodes.VALIDATION_INVALID_INPUT,
+        result?.error || 'WebAuthn assertion verification failed',
+      );
+    }
+
+    res.json({ verified: true });
+  } catch (error) {
+    logger.error({ err: error, userId: req.user.sub }, 'WebAuthn assertion verification failed');
+    sendError(res, 400, ErrorCodes.VALIDATION_INVALID_INPUT, 'WebAuthn assertion verification failed');
   }
 });
 

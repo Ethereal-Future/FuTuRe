@@ -49,6 +49,11 @@ export async function getTransactions(publicKey, params = {}, options = {}) {
   return response.data;
 }
 
+export async function getTransactionByHash(hash, options = {}) {
+  const response = await apiClient.get(`/api/stellar/transactions/${hash}`, options);
+  return response.data;
+}
+
 export async function getExchangeRate(from, to, options = {}) {
   const response = await apiClient.get(`/api/stellar/exchange-rate/${from}/${to}`, options);
   return response.data.rate;

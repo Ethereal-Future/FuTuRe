@@ -56,3 +56,30 @@ export async function getMFAStatus(options = {}) {
   const response = await apiClient.get('/api/auth/mfa/status', options);
   return response.data;
 }
+
+/**
+ * Requests a server-issued WebAuthn challenge for the given public key.
+ * The challenge must be generated and tracked server-side to prevent replay.
+ */
+export async function getWebAuthnChallenge(publicKey, options = {}) {
+  const response = await apiClient.get('/api/auth/webauthn/challenge', {
+    ...options,
+    params: { ...(options.params || {}), publicKey },
+  });
+  return response.data;
+}
+
+/**
+ * Submits an authenticator assertion to the server for verification.
+ * The server validates the signature against the stored challenge and rejects
+ * replayed or mocked assertions.
+ */
+export async function verifyWebAuthnAssertion(payload, options = {}) {
+  const { credentialId, authenticatorData, clientDataJSON, signature, challengeId } = payload || {};
+  const response = await apiClient.post(
+    '/api/auth/webauthn/verify',
+    { credentialId, authenticatorData, clientDataJSON, signature, challengeId },
+    options
+  );
+  return response.data;
+}

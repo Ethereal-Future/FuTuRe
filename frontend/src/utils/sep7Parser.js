@@ -6,19 +6,24 @@
  * - web+stellar:pay?destination=GBUQWP3BOUZX34ULNQG23RQ6F4BWFIDBMSCFF336W3SKHT4UX7EASUP&amount=100
  * - web+stellar:pay?destination=GBUQWP3BOUZX34ULNQG23RQ6F4BWFIDBMSCFF336W3SKHT4UX7EASUP&amount=50.50&memo=Invoice%20123&memo_type=text
  * - web+stellar:pay?destination=G...&amount=100&asset_code=USDC&asset_issuer=GBUQWP3BOUZX34ULNQG23RQ6F4BWFIDBMSCFF336W3SKHT4UX7EASUP
+ * - web+stellar:tx?xdr=BASE64_ENVELOPE&callback=https://example.com/callback
  *
  * @param {string} uri - The web+stellar: URI
- * @returns {Object} Parsed payment request with validation
+ * @returns {Object} Parsed SEP-0007 request with validation
  *   {
  *     valid: boolean,
  *     error: string|null,
- *     destination: string,
+ *     operation: 'pay'|'tx'|null,
+ *     destination: string|null,
  *     amount: string|null,
  *     memo: string|null,
  *     memoType: string|null,
  *     assetCode: string,
  *     assetIssuer: string|null,
+ *     xdr: string|null,
  *     originDomain: string|null,
+ *     originDomainVerified: boolean,
+ *     signature: string|null,
  *     message: string|null,
  *     callbackUrl: string|null
  *   }
@@ -27,12 +32,14 @@ export function parseSep7Uri(uri) {
   const result = {
     valid: false,
     error: null,
+    operation: null,
     destination: null,
     amount: null,
     memo: null,
     memoType: null,
     assetCode: 'XLM',
     assetIssuer: null,
+    xdr: null,
     originDomain: null,
     originDomainVerified: false,
     signature: null,
@@ -54,8 +61,8 @@ export function parseSep7Uri(uri) {
   const operationAndParams = uri.slice(prefix.length);
   const [operation, paramsStr] = operationAndParams.split('?', 2);
 
-  if (operation !== 'pay') {
-    result.error = `Unsupported operation: ${operation}. Currently only 'pay' is supported.`;
+  if (operation !== 'pay' && operation !== 'tx') {
+    result.error = `Unsupported operation: ${operation}. Only 'pay' and 'tx' are supported.`;
     return result;
   }
 
@@ -67,74 +74,88 @@ export function parseSep7Uri(uri) {
   try {
     const params = new URLSearchParams(paramsStr);
 
-    // Required: destination
-    const destination = params.get('destination');
-    if (!destination) {
-      result.error = 'Missing required parameter: destination';
-      return result;
-    }
-    if (!/^G[A-Z2-7]{55}$/.test(destination)) {
-      result.error = 'Invalid destination: Not a valid Stellar public key';
-      return result;
-    }
-    result.destination = destination;
-
-    // Optional: amount (must be a valid number if provided)
-    const amount = params.get('amount');
-    if (amount !== null) {
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum) || amountNum < 0) {
-        result.error = 'Invalid amount: Must be a non-negative number';
+    if (operation === 'tx') {
+      // Required: xdr (base64-encoded transaction envelope)
+      const xdr = params.get('xdr');
+      if (!xdr) {
+        result.error = 'Missing required parameter: xdr';
         return result;
       }
-      result.amount = amount;
-    }
-
-    // Optional: asset
-    const assetCode = params.get('asset_code');
-    const assetIssuer = params.get('asset_issuer');
-
-    if (assetCode && assetIssuer) {
-      // Both must be provided for non-native assets
-      if (!/^G[A-Z2-7]{55}$/.test(assetIssuer)) {
-        result.error = 'Invalid asset_issuer: Not a valid Stellar public key';
+      if (!/^[A-Za-z0-9+/]+={0,2}$/.test(xdr)) {
+        result.error = 'Invalid xdr: Must be a base64-encoded transaction envelope';
         return result;
       }
-      result.assetCode = assetCode;
-      result.assetIssuer = assetIssuer;
-    } else if (assetCode || assetIssuer) {
-      // Can't have just one
-      result.error = 'Invalid asset: Both asset_code and asset_issuer must be provided together';
-      return result;
-    }
-
-    // Optional: memo
-    const memo = params.get('memo');
-    const memoType = params.get('memo_type') || 'text';
-
-    if (memo !== null) {
-      const validMemoTypes = ['text', 'id', 'hash', 'return'];
-      if (!validMemoTypes.includes(memoType)) {
-        result.error = `Invalid memo_type: Must be one of ${validMemoTypes.join(', ')}`;
+      result.xdr = xdr;
+    } else {
+      // Required: destination
+      const destination = params.get('destination');
+      if (!destination) {
+        result.error = 'Missing required parameter: destination';
         return result;
       }
+      if (!/^G[A-Z2-7]{55}$/.test(destination)) {
+        result.error = 'Invalid destination: Not a valid Stellar public key';
+        return result;
+      }
+      result.destination = destination;
 
-      // Validate memo format based on type
-      if (memoType === 'id') {
-        const memoNum = parseInt(memo, 10);
-        if (isNaN(memoNum) || memoNum < 0 || memoNum > Number.MAX_SAFE_INTEGER) {
-          result.error = 'Invalid memo: ID memo must be a non-negative integer';
+      // Optional: amount (must be a valid number if provided)
+      const amount = params.get('amount');
+      if (amount !== null) {
+        const amountNum = parseFloat(amount);
+        if (isNaN(amountNum) || amountNum < 0) {
+          result.error = 'Invalid amount: Must be a non-negative number';
           return result;
         }
-      } else if (memoType === 'hash' || memoType === 'return') {
-        if (!/^[A-Za-z0-9+/=]{88}$/.test(memo)) {
-          result.error = `Invalid memo: ${memoType} memo must be a 64-byte value encoded in base64`;
-          return result;
-        }
+        result.amount = amount;
       }
 
-      result.memo = memo;
-      result.memoType = memoType;
+      // Optional: asset
+      const assetCode = params.get('asset_code');
+      const assetIssuer = params.get('asset_issuer');
+
+      if (assetCode && assetIssuer) {
+        // Both must be provided for non-native assets
+        if (!/^G[A-Z2-7]{55}$/.test(assetIssuer)) {
+          result.error = 'Invalid asset_issuer: Not a valid Stellar public key';
+          return result;
+        }
+        result.assetCode = assetCode;
+        result.assetIssuer = assetIssuer;
+      } else if (assetCode || assetIssuer) {
+        // Can't have just one
+        result.error = 'Invalid asset: Both asset_code and asset_issuer must be provided together';
+        return result;
+      }
+
+      // Optional: memo
+      const memo = params.get('memo');
+      const memoType = params.get('memo_type') || 'text';
+
+      if (memo !== null) {
+        const validMemoTypes = ['text', 'id', 'hash', 'return'];
+        if (!validMemoTypes.includes(memoType)) {
+          result.error = `Invalid memo_type: Must be one of ${validMemoTypes.join(', ')}`;
+          return result;
+        }
+
+        // Validate memo format based on type
+        if (memoType === 'id') {
+          const memoNum = parseInt(memo, 10);
+          if (isNaN(memoNum) || memoNum < 0 || memoNum > Number.MAX_SAFE_INTEGER) {
+            result.error = 'Invalid memo: ID memo must be a non-negative integer';
+            return result;
+          }
+        } else if (memoType === 'hash' || memoType === 'return') {
+          if (!/^[A-Za-z0-9+/=]{88}$/.test(memo)) {
+            result.error = `Invalid memo: ${memoType} memo must be a 64-byte value encoded in base64`;
+            return result;
+          }
+        }
+
+        result.memo = memo;
+        result.memoType = memoType;
+      }
     }
 
     // Optional: origin domain. Per SEP-0007, origin_domain must only be trusted
@@ -170,6 +191,7 @@ export function parseSep7Uri(uri) {
       }
     }
 
+    result.operation = operation;
     result.valid = true;
     return result;
   } catch (error) {
@@ -184,7 +206,13 @@ export function parseSep7Uri(uri) {
  * @returns {boolean} Whether the request is valid
  */
 export function validateSep7Request(parsed) {
-  return parsed.valid && parsed.destination !== null;
+  if (!parsed || !parsed.valid) {
+    return false;
+  }
+  if (parsed.operation === 'tx') {
+    return typeof parsed.xdr === 'string' && parsed.xdr.length > 0;
+  }
+  return parsed.destination !== null;
 }
 
 /**
