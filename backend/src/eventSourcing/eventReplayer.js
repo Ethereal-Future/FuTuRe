@@ -30,6 +30,7 @@ class EventReplayer {
 
     return state;
   }
+  }
 
   /**
    * Fold the aggregate up to `version` and persist the result as a snapshot.

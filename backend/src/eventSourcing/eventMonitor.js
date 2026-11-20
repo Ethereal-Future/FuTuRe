@@ -69,7 +69,6 @@ class EventMonitor {
    * publish; it is dead-lettered and surfaced via metrics and
    * GET /api/v1/events/projections/status instead.
    */
-  async publishEvent(aggregateId, event) {
   async publishEvent(aggregateId, event, expectedVersion) {
     if (!this.initialized) await this.initialize();
 

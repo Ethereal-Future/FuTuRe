@@ -17,7 +17,6 @@ const PROJECTIONS_DIR = path.join(__dirname, '../../data/projections');
  *
  * Migrated as part of Issue #1125.
  */
-import prisma from '../db/client.js';
 
 // Consecutive failures after which an event is treated as a poison pill.
 export const MAX_PROJECTION_ATTEMPTS = 3;
@@ -45,11 +44,6 @@ class ProjectionManager {
     return [...this.projections.keys()];
   }
 
-  /**
-   * Fold `events` into the stored projection. Load→fold→save is serialized per
-   * projection within this process so concurrent publishes cannot lose updates.
-   */
-  async project(name, events) {
   getHandler(name) {
     const handler = this.projections.get(name);
     if (!handler) {
@@ -58,29 +52,14 @@ class ProjectionManager {
     return handler;
   }
 
-    const previous = this.writeQueues.get(name) ?? Promise.resolve();
-    const run = previous.catch(() => {}).then(async () => {
-      let projection = (await this.loadProjection(name)) || {};
-
-      for (const event of events) {
-        projection = handler(projection, event);
-      }
-
-      await this.saveProjection(name, projection);
-      return projection;
-    });
-
-    this.writeQueues.set(name, run);
-    return run;
   /**
    * Folds events into a projection. Each projection records, per aggregate,
    * the last version (and event id) it applied, and events at or below that
    * version are skipped, so re-projecting or replaying events is a no-op
    * instead of applying them twice.
    */
-  applyEvents(handler, projection, events) {
+  async applyEvents(name, handler, projection, events) {
     const applied = projection._applied ?? {};
-    let projection = (await this.loadProjection(name)) || {};
 
     for (const event of events) {
       const result = this.applyWithRetry(handler, projection, event);
@@ -221,22 +200,13 @@ class ProjectionManager {
     return { resolved: true, pill: resolved };
   }
 
-  async saveProjection(name, data) {
-    if (!this.writeQueues.has(name)) {
-      this.writeQueues.set(name, Promise.resolve());
-    }
-
-    const queuePromise = this.writeQueues.get(name);
-    const newPromise = queuePromise.then(async () => {
-      const file = path.join(PROJECTIONS_DIR, `${name}.json`);
-      const tmpFile = `${file}.tmp`;
   async project(name, events) {
     const handler = this.getHandler(name);
 
     // Serialize load-apply-save per projection so concurrent publishes for
     // different aggregates don't overwrite each other's updates.
     return this.locks.run(name, async () => {
-      const projection = this.applyEvents(handler, await this.loadProjection(name) || {}, events);
+      const projection = await this.applyEvents(name, handler, await this.loadProjection(name) || {}, events);
       await this.saveProjection(name, projection);
       return projection;
     });
@@ -251,7 +221,7 @@ class ProjectionManager {
 
     return this.locks.run(name, async () => {
       const events = await eventStore.readAllEvents();
-      const projection = this.applyEvents(handler, {}, events);
+      const projection = await this.applyEvents(name, handler, {}, events);
       await this.saveProjection(name, projection);
       return projection;
     });
