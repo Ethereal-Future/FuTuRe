@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf', 'text/plain', 'text/csv'];
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -8,6 +8,15 @@ function validateFile(file) {
   if (!ACCEPTED_TYPES.includes(file.type)) return `"${file.name}": unsupported file type`;
   if (file.size > MAX_FILE_SIZE) return `"${file.name}": exceeds 10MB limit`;
   return null;
+}
+
+// Replace the file's extension so it matches the output MIME type.
+function renameForType(name, mimeType) {
+  const ext = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif' }[mimeType];
+  if (!ext) return name;
+  const dot = name.lastIndexOf('.');
+  const base = dot > 0 ? name.slice(0, dot) : name;
+  return `${base}.${ext}`;
 }
 
 async function compressImage(file) {
@@ -22,7 +31,11 @@ async function compressImage(file) {
       canvas.height = img.height * scale;
       canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
       URL.revokeObjectURL(url);
-      canvas.toBlob((blob) => resolve(new File([blob], file.name, { type: 'image/jpeg' })), 'image/jpeg', 0.85);
+      canvas.toBlob((blob) => {
+        if (!blob) { resolve(file); return; }
+        const outType = blob.type || 'image/jpeg';
+        resolve(new File([blob], renameForType(file.name, outType), { type: outType }));
+      }, 'image/jpeg', 0.85);
     };
     img.onerror = () => { URL.revokeObjectURL(url); resolve(file); };
     img.src = url;
@@ -32,6 +45,13 @@ async function compressImage(file) {
 export function useFileUpload(uploadFn) {
   const [files, setFiles] = useState([]); // { id, file, preview, status, progress, error }
   const [errors, setErrors] = useState([]);
+  const filesRef = useRef(files);
+  filesRef.current = files;
+
+  // Revoke any remaining preview blob URLs when the component unmounts.
+  useEffect(() => () => {
+    filesRef.current.forEach((f) => f.preview && URL.revokeObjectURL(f.preview));
+  }, []);
 
   const addFiles = useCallback((incoming) => {
     const list = Array.from(incoming);

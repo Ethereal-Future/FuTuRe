@@ -1,12 +1,20 @@
 import { useTranslation } from 'react-i18next';
 
+// Format a date as YYYY-MM-DD using the user's local calendar (not UTC).
+function toLocalDateString(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * DatePicker — date range picker for transaction filtering.
  * Props: from, to, onChange({ from, to })
  */
 export function DatePicker({ from, to, onChange }) {
   const { t } = useTranslation();
-  const today = new Date().toISOString().split('T')[0];
+  const today = toLocalDateString(new Date());
 
   const set = (key, val) => onChange?.({ from, to, [key]: val });
 
