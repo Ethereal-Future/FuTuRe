@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import apiClient from '../api/client.js';
 import { CopyButton } from './CopyButton';
 import { AddressBook } from './AddressBook';
@@ -12,7 +13,21 @@ import { SponsorshipOperations } from './SponsorshipOperations';
 
 const ASSETS = ['XLM', 'USDC', 'EURC'];
 
+/**
+ * Decode a base64url/base64 JWT payload segment into a UTF-8 string.
+ * Uses TextDecoder so multi-byte characters (accents, CJK, emoji) do not
+ * throw a URIError the way raw `atob` + `JSON.parse` can.
+ */
+function decodeBase64Utf8(input) {
+  const normalized = input.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = normalized.padEnd(normalized.length + ((4 - (normalized.length % 4)) % 4), '=');
+  const binary = atob(padded);
+  const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
+  return new TextDecoder('utf-8').decode(bytes);
+}
+
 export function AccountSettings({ publicKey, onClose }) {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
@@ -35,7 +50,7 @@ export function AccountSettings({ publicKey, onClose }) {
         const token = localStorage.getItem('accessToken') || localStorage.getItem('authToken');
         if (token) {
           try {
-            const payload = JSON.parse(atob(token.split('.')[1]));
+            const payload = JSON.parse(decodeBase64Utf8(token.split('.')[1]));
             setUserRole(payload.role);
           } catch {
             // Invalid token format
@@ -52,7 +67,7 @@ export function AccountSettings({ publicKey, onClose }) {
         setAccountData(data);
       })
       .catch((e) => {
-        console.error('Failed to fetch account data:', e);
+        console.error(t('accountSettings.errors.fetchAccountData'), e);
       });
   }, [publicKey]);
 
@@ -137,14 +152,19 @@ export function AccountSettings({ publicKey, onClose }) {
           }}
         >
           <h2 id="settings-title" style={{ margin: 0 }}>
-            Account Settings
+            {t('accountSettings.title')}
           </h2>
-          <button type="button" className="qr-close" onClick={onClose} aria-label="Close settings">
+          <button
+            type="button"
+            className="qr-close"
+            onClick={onClose}
+            aria-label={t('accountSettings.closeSettings')}
+          >
             ✕
           </button>
         </div>
 
-        {!settings && !error && <p>Loading…</p>}
+        {!settings && !error && <p>{t('accountSettings.loading')}</p>}
         {error && (
           <p role="alert" style={{ color: '#ef4444' }}>
             {error}
@@ -158,13 +178,13 @@ export function AccountSettings({ publicKey, onClose }) {
                 htmlFor="default-asset"
                 style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
               >
-                Default Asset
+                {t('accountSettings.defaultAsset')}
               </label>
               <select
                 id="default-asset"
                 value={settings.defaultAsset}
                 onChange={(e) => setSettings((s) => ({ ...s, defaultAsset: e.target.value }))}
-                aria-label="Default asset"
+                aria-label={t('accountSettings.defaultAssetAria')}
               >
                 {ASSETS.map((a) => (
                   <option key={a} value={a}>
@@ -183,7 +203,7 @@ export function AccountSettings({ publicKey, onClose }) {
                 style={{ width: 'auto', minHeight: 'unset' }}
               />
               <label htmlFor="notifications-toggle" style={{ fontWeight: 600, cursor: 'pointer' }}>
-                Notifications enabled
+                {t('accountSettings.notificationsEnabled')}
               </label>
             </div>
 
@@ -192,14 +212,14 @@ export function AccountSettings({ publicKey, onClose }) {
                 htmlFor="federation-address"
                 style={{ display: 'block', marginBottom: 4, fontWeight: 600 }}
               >
-                Federation Address
+                {t('accountSettings.federationAddress')}
               </label>
               <input
                 id="federation-address"
                 value={federationLocalPart}
                 onChange={(e) => setFederationLocalPart(e.target.value)}
-                placeholder="alice"
-                aria-label="Claim federation address"
+                placeholder={t('accountSettings.federationPlaceholder')}
+                aria-label={t('accountSettings.federationAria')}
               />
               <p
                 style={{
@@ -209,20 +229,20 @@ export function AccountSettings({ publicKey, onClose }) {
                 }}
               >
                 {settings.federationAddress
-                  ? `Current: ${settings.federationAddress}`
-                  : 'Claim a human-readable address like alice*futureremit.app.'}
+                  ? t('accountSettings.federationCurrent', { address: settings.federationAddress })
+                  : t('accountSettings.federationHint')}
               </p>
             </div>
 
             <details style={{ marginBottom: 16, padding: 12, background: '#f0f9ff', borderRadius: 6, border: '1px solid #bfdbfe' }}>
               <summary style={{ fontWeight: 600, cursor: 'pointer', marginBottom: 8 }}>
-                ⚙️ Advanced Settings
+                {t('accountSettings.advancedSettings')}
               </summary>
               <div style={{ paddingTop: 8 }}>
                 {accountData && (
                   <div style={{ marginBottom: 12 }}>
                     <label style={{ display: 'block', marginBottom: 4, fontSize: '0.9rem', color: '#475569' }}>
-                      Sequence Number
+                      {t('accountSettings.sequenceNumber')}
                     </label>
                     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                       <code style={{ flex: 1, padding: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 4, fontSize: 14, fontWeight: 500 }}>
@@ -231,7 +251,7 @@ export function AccountSettings({ publicKey, onClose }) {
                       <CopyButton text={String(accountData.sequence)} />
                     </div>
                     <p style={{ margin: '4px 0 0', color: '#64748b', fontSize: '0.8rem' }}>
-                      Used by Stellar to track transactions from this account. Advanced users may need this for debugging.
+                      {t('accountSettings.sequenceNumberHint')}
                     </p>
                   </div>
                 )}
@@ -239,7 +259,7 @@ export function AccountSettings({ publicKey, onClose }) {
             </details>
 
             <div style={{ marginBottom: 16 }}>
-              <p style={{ fontWeight: 600, marginBottom: 4 }}>KYC Status</p>
+              <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('accountSettings.kycStatus')}</p>
               {settings.kycStatus ? (
                 <p style={{ margin: 0 }}>
                   <span
@@ -267,19 +287,21 @@ export function AccountSettings({ publicKey, onClose }) {
                         color: 'var(--text-muted, #64748b)',
                       }}
                     >
-                      Submitted {new Date(settings.kycSubmittedAt).toLocaleDateString()}
+                      {t('accountSettings.kycSubmitted', {
+                        date: new Date(settings.kycSubmittedAt).toLocaleDateString(),
+                      })}
                     </span>
                   )}
                 </p>
               ) : (
                 <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
-                  No KYC record on file.
+                  {t('accountSettings.kycNone')}
                 </p>
               )}
             </div>
 
             <div style={{ marginBottom: 16 }}>
-              <p style={{ fontWeight: 600, marginBottom: 4 }}>Address Book</p>
+              <p style={{ fontWeight: 600, marginBottom: 4 }}>{t('accountSettings.addressBook')}</p>
               <AddressBook />
             </div>
 
@@ -296,7 +318,7 @@ export function AccountSettings({ publicKey, onClose }) {
                   marginBottom: 8,
                 }}
               >
-                <p style={{ fontWeight: 600, margin: 0 }}>Active Sessions</p>
+                <p style={{ fontWeight: 600, margin: 0 }}>{t('accountSettings.activeSessions')}</p>
                 {sessions.length > 1 && (
                   <button
                     type="button"
@@ -304,17 +326,19 @@ export function AccountSettings({ publicKey, onClose }) {
                     disabled={sessionAction === 'all'}
                     style={{ fontSize: '0.8rem', padding: '4px 10px', background: '#ef4444' }}
                   >
-                    {sessionAction === 'all' ? 'Revoking…' : 'Log out everywhere'}
+                    {sessionAction === 'all'
+                      ? t('accountSettings.revoking')
+                      : t('accountSettings.logoutEverywhere')}
                   </button>
                 )}
               </div>
               {sessionsLoading ? (
                 <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
-                  Loading sessions…
+                  {t('accountSettings.loadingSessions')}
                 </p>
               ) : sessions.length === 0 ? (
                 <p style={{ margin: 0, color: 'var(--text-muted, #64748b)', fontSize: '0.9rem' }}>
-                  No active sessions.
+                  {t('accountSettings.noActiveSessions')}
                 </p>
               ) : (
                 <ul
@@ -346,10 +370,10 @@ export function AccountSettings({ publicKey, onClose }) {
                         }}
                       >
                         <span>
-                          <strong>{s.device ?? 'Unknown device'}</strong>
+                          <strong>{s.device ?? t('accountSettings.unknownDevice')}</strong>
                           {s.current && (
                             <span style={{ marginLeft: 6, color: '#22c55e', fontSize: '0.75rem' }}>
-                              (this device)
+                              {t('accountSettings.thisDevice')}
                             </span>
                           )}
                         </span>
@@ -360,13 +384,15 @@ export function AccountSettings({ publicKey, onClose }) {
                             disabled={sessionAction === s.id}
                             style={{ fontSize: '0.75rem', padding: '2px 8px' }}
                           >
-                            {sessionAction === s.id ? '…' : 'Revoke'}
+                            {sessionAction === s.id ? '…' : t('accountSettings.revoke')}
                           </button>
                         )}
                       </div>
                       <div style={{ color: 'var(--text-muted, #64748b)', marginTop: 2 }}>
                         {s.ipAddress && <span>{s.ipAddress} · </span>}
-                        Last active {new Date(s.lastActiveAt).toLocaleString()}
+                        {t('accountSettings.lastActive', {
+                          date: new Date(s.lastActiveAt).toLocaleString(),
+                        })}
                       </div>
                     </li>
                   ))}
@@ -392,7 +418,7 @@ export function AccountSettings({ publicKey, onClose }) {
                 onClick={() => setShowBackup(true)}
                 style={{ fontSize: '0.9rem', padding: '8px 16px' }}
               >
-                💾 Backup & Restore
+                {t('accountSettings.backupRestore')}
               </button>
               {userRole === 'ADMIN' && (
                 <button
@@ -400,7 +426,7 @@ export function AccountSettings({ publicKey, onClose }) {
                   onClick={() => setShowCompliance(true)}
                   style={{ fontSize: '0.9rem', padding: '8px 16px', background: '#dc2626' }}
                 >
-                  🛡️ Compliance Dashboard
+                  {t('accountSettings.complianceDashboard')}
                 </button>
               )}
               <button
@@ -408,20 +434,20 @@ export function AccountSettings({ publicKey, onClose }) {
                 onClick={() => setShowMerge(true)}
                 style={{ fontSize: '0.9rem', padding: '8px 16px', background: '#dc2626' }}
               >
-                ⚠️ Merge Account
+                {t('accountSettings.mergeAccount')}
               </button>
             </div>
 
             <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
               <button type="button" onClick={save} disabled={saving}>
-                {saving ? 'Saving…' : 'Save'}
+                {saving ? t('accountSettings.saving') : t('accountSettings.save')}
               </button>
               <button type="button" className="btn-clear" onClick={onClose}>
-                Close
+                {t('accountSettings.close')}
               </button>
               {saved && (
                 <span role="status" style={{ color: '#22c55e', fontSize: '0.9rem' }}>
-                  Saved ✓
+                  {t('accountSettings.saved')}
                 </span>
               )}
             </div>
@@ -437,7 +463,7 @@ export function AccountSettings({ publicKey, onClose }) {
             onClose={() => setShowMerge(false)}
             onSuccess={() => {
               setShowMerge(false);
-              alert('Account merged successfully. You will be logged out.');
+              alert(t('accountSettings.mergeSuccess'));
               localStorage.clear();
               window.location.reload();
             }}

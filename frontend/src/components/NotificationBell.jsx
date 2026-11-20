@@ -159,6 +159,15 @@ export function NotificationBell() {
           setIsOpen(!isOpen);
           if (!isOpen) fetchNotifications();
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ' || e.key === 'Spacebar') {
+            e.preventDefault();
+            setIsOpen((prev) => {
+              if (!prev) fetchNotifications();
+              return !prev;
+            });
+          }
+        }}
         style={{
           position: 'relative',
           background: 'none',
@@ -173,6 +182,8 @@ export function NotificationBell() {
         onMouseLeave={(e) => { e.currentTarget.style.color = '#666'; }}
         aria-label={t('notificationBell.ariaLabel')}
         aria-expanded={isOpen}
+        aria-haspopup="true"
+        aria-controls="notification-panel"
       >
         🔔
         {unreadCount > 0 && (
@@ -205,6 +216,9 @@ export function NotificationBell() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
+            id="notification-panel"
+            role="region"
+            aria-label={t('notificationBell.title')}
             initial={{ opacity: 0, y: -8, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
