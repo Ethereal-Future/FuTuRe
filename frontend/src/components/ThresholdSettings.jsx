@@ -14,6 +14,7 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
   const [lowThreshold, setLowThreshold] = useState('');
   const [medThreshold, setMedThreshold] = useState('');
   const [highThreshold, setHighThreshold] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
 
   useEffect(() => {
     loadThresholds();
@@ -48,6 +49,18 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
     return signers.reduce((sum, signer) => sum + (signer.weight || 0), 0);
   };
 
+  const isOrderingValid = () => {
+    const low = parseInt(lowThreshold, 10);
+    const med = parseInt(medThreshold, 10);
+    const high = parseInt(highThreshold, 10);
+
+    if (Number.isNaN(low) || Number.isNaN(med) || Number.isNaN(high)) {
+      return false;
+    }
+
+    return low <= med && med <= high;
+  };
+
   const validateThresholds = () => {
     const low = parseInt(lowThreshold, 10);
     const med = parseInt(medThreshold, 10);
@@ -60,7 +73,12 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
       return false;
     }
 
-    // Validate ordering
+    // Validate ordering: low <= med <= high
+    if (low > med) {
+      setError(t('thresholdSettings.lowExceedsMed'));
+      return false;
+    }
+
     if (med > high) {
       setError(t('thresholdSettings.medExceedsHigh'));
       return false;
@@ -75,14 +93,16 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
     return true;
   };
 
-  const handleSave = async () => {
+  const handleSaveClick = () => {
     if (!validateThresholds()) {
       return;
     }
 
-    if (!confirm(t('thresholdSettings.confirmChange'))) {
-      return;
-    }
+    setShowConfirm(true);
+  };
+
+  const handleConfirmSave = async () => {
+    setShowConfirm(false);
 
     setSaving(true);
     setError('');
@@ -257,8 +277,8 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
           <div style={{ display: 'flex', gap: 8 }}>
             <button
               type="button"
-              onClick={handleSave}
-              disabled={saving}
+              onClick={handleSaveClick}
+              disabled={saving || !isOrderingValid()}
               style={{ flex: 1, background: '#22c55e' }}
             >
               {saving ? t('thresholdSettings.saving') : t('thresholdSettings.save')}
@@ -275,6 +295,58 @@ export function ThresholdSettings({ publicKey, onClose, onUpdate }) {
             >
               {t('common.cancel')}
             </button>
+          </div>
+        </div>
+      )}
+
+      {showConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="threshold-confirm-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }}
+        >
+          <div
+            style={{
+              background: '#fff',
+              borderRadius: 8,
+              padding: 20,
+              maxWidth: 400,
+              width: '90%',
+              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.2)',
+            }}
+          >
+            <h4 id="threshold-confirm-title" style={{ margin: '0 0 12px', fontSize: '1rem' }}>
+              {t('thresholdSettings.confirmChangeTitle', { defaultValue: 'Confirm threshold change' })}
+            </h4>
+            <p style={{ margin: '0 0 16px', fontSize: '0.85rem', color: '#64748b' }}>
+              {t('thresholdSettings.confirmChange')}
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                onClick={handleConfirmSave}
+                style={{ flex: 1, background: '#22c55e' }}
+              >
+                {t('thresholdSettings.save')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowConfirm(false)}
+                className="btn-clear"
+                style={{ flex: 1 }}
+              >
+                {t('common.cancel')}
+              </button>
+            </div>
           </div>
         </div>
       )}
