@@ -1,7 +1,7 @@
 {
   "repository": "Ethereal-Future/FuTuRe",
   "generated_at": "2026-09-22T07:20:08Z",
-  "total_issues": 195,
+  "total_issues": 199,
   "issues": [
     {
       "id": "ISSUE-001",
@@ -3436,6 +3436,76 @@
         "number": 1442,
         "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1442",
         "created_at": "2026-09-22T07:20:05Z"
+      }
+    },
+    {
+      "id": "ISSUE-248",
+      "title": "backend/src/services/transactionRetry.js: Sequence errors retried without bumping sequence number, causing repeated failures",
+      "domain": "Backend & Stellar Integration",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "stellar",
+        "reliability"
+      ],
+      "file": "docs/issues_backlog/ISSUE-248.md",
+      "github_issue": {
+        "number": 1562,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1562"
+      }
+    },
+    {
+      "id": "ISSUE-249",
+      "title": "backend/src/services/transactionRetry.js: Unbounded memory leak in retryAttempts map on failed transactions",
+      "domain": "Backend & Performance",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "performance",
+        "memory"
+      ],
+      "file": "docs/issues_backlog/ISSUE-249.md",
+      "github_issue": {
+        "number": 1563,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1563"
+      }
+    },
+    {
+      "id": "ISSUE-250",
+      "title": "backend/src/services/federation.js: SEP-0002 resolution queries q with local username instead of full federation address",
+      "domain": "Backend & Stellar Integration",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "backend",
+        "stellar",
+        "sep-0002",
+        "interoperability"
+      ],
+      "file": "docs/issues_backlog/ISSUE-250.md",
+      "github_issue": {
+        "number": 1564,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1564"
+      }
+    },
+    {
+      "id": "ISSUE-251",
+      "title": "backend/src/services/federation.js: claimFederationAddress throws raw 500 on duplicate claim and lacks auth",
+      "domain": "Backend & Security",
+      "complexity": "Medium",
+      "labels": [
+        "bug",
+        "security",
+        "backend",
+        "auth",
+        "stellar"
+      ],
+      "file": "docs/issues_backlog/ISSUE-251.md",
+      "github_issue": {
+        "number": 1565,
+        "html_url": "https://github.com/Ethereal-Future/FuTuRe/issues/1565"
       }
     }
   ]

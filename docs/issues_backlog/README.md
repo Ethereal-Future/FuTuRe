@@ -1,13 +1,13 @@
-# FuTuRe Improvement Backlog (195 Comprehensive Issues)
+# FuTuRe Improvement Backlog (199 Comprehensive Issues)
 
-This directory contains 195 thoroughly researched, production-grade improvement issues for the `Ethereal-Future/FuTuRe` Stellar Remittance platform.
+This directory contains 199 thoroughly researched, production-grade improvement issues for the `Ethereal-Future/FuTuRe` Stellar Remittance platform.
 All issues are strictly categorized as **Medium** or **Hard** complexity, addressing core architectural, security, concurrency, reliability, and cryptographic requirements.
 
 ## Summary Metrics
-- **Total Issues:** 195
+- **Total Issues:** 199
 - **Complexity Breakdown:**
   - **Hard Complexity:** 97
-  - **Medium Complexity:** 98
+  - **Medium Complexity:** 102
 
 ## Category Index
 
@@ -208,3 +208,7 @@ All issues are strictly categorized as **Medium** or **Hard** complexity, addres
 | `ISSUE-193` | CI/CD & Tooling | **Medium** | scripts/check-i18n-strings.mjs: Missing `acorn` dependency in root package.json causes CI job failure | [#1440](https://github.com/Ethereal-Future/FuTuRe/issues/1440) | [ISSUE-193](./ISSUE-193.md) |
 | `ISSUE-194` | DevOps & Container Security | **Medium** | backend/Dockerfile: Container runs as root user violating container security standards | [#1441](https://github.com/Ethereal-Future/FuTuRe/issues/1441) | [ISSUE-194](./ISSUE-194.md) |
 | `ISSUE-195` | Infra & Networking | **Medium** | infra/alb.tf: Application Load Balancer 60-second idle timeout drops long-polling Stellar Horizon payment streams | [#1442](https://github.com/Ethereal-Future/FuTuRe/issues/1442) | [ISSUE-195](./ISSUE-195.md) |
+| `ISSUE-248` | Backend & Stellar Integration | **Medium** | backend/src/services/transactionRetry.js: Sequence errors retried without bumping sequence number, causing repeated failures | [#1562](https://github.com/Ethereal-Future/FuTuRe/issues/1562) | [ISSUE-248](./ISSUE-248.md) |
+| `ISSUE-249` | Backend & Performance | **Medium** | backend/src/services/transactionRetry.js: Unbounded memory leak in retryAttempts map on failed transactions | [#1563](https://github.com/Ethereal-Future/FuTuRe/issues/1563) | [ISSUE-249](./ISSUE-249.md) |
+| `ISSUE-250` | Backend & Stellar Integration | **Medium** | backend/src/services/federation.js: SEP-0002 resolution queries q with local username instead of full federation address | [#1564](https://github.com/Ethereal-Future/FuTuRe/issues/1564) | [ISSUE-250](./ISSUE-250.md) |
+| `ISSUE-251` | Backend & Security | **Medium** | backend/src/services/federation.js: claimFederationAddress throws raw 500 on duplicate claim and lacks auth | [#1565](https://github.com/Ethereal-Future/FuTuRe/issues/1565) | [ISSUE-251](./ISSUE-251.md) |
