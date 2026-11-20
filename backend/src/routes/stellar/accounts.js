@@ -248,6 +248,56 @@ router.put(
   },
 );
 
+router.post(
+  '/:publicKey/manage-data',
+  rules.publicKeyParam,
+  validate,
+  body('sourceSecret').isString().notEmpty().withMessage('sourceSecret is required'),
+  body('key')
+    .isString()
+    .isLength({ min: 1, max: 64 })
+    .withMessage('key must be between 1 and 64 characters'),
+  body('value')
+    .optional({ nullable: true })
+    .isString()
+    .isLength({ max: 64 })
+    .withMessage('value must be 64 characters or fewer'),
+  validate,
+  async (req, res) => {
+    try {
+      const { publicKey } = req.params;
+      const { sourceSecret, key, value } = req.body;
+
+      const sourceKeypair = StellarSDK.Keypair.fromSecret(sourceSecret);
+      if (sourceKeypair.publicKey() !== publicKey) {
+        return res.status(400).json({ error: 'sourceSecret does not match publicKey' });
+      }
+
+      const sourceAccount = await StellarService.getAccount(publicKey);
+      const transaction = new StellarSDK.TransactionBuilder(sourceAccount, {
+        fee: StellarSDK.BASE_FEE,
+        networkPassphrase: StellarService.getNetworkPassphrase(),
+      })
+        .addOperation(
+          StellarSDK.Operation.manageData({
+            name: key,
+            value: value === undefined || value === null ? null : value,
+          }),
+        )
+        .setTimeout(30)
+        .build();
+
+      transaction.sign(sourceKeypair);
+
+      const result = await StellarService.submitTransaction(transaction);
+      res.json(result);
+    } catch (error) {
+      logError(req, error, { publicKey: req.params.publicKey });
+      return handleError(res, error, 'Failed to manage account data');
+    }
+  },
+);
+
 router.post('/merge', rules.mergeAccount, validate, async (req, res) => {
   try {
     const { sourceSecret, destination } = req.body;

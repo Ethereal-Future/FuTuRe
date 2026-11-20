@@ -1,17 +1,32 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import { formatAssetAmount } from '../utils/formatAmount';
 
 /**
  * LargeTransactionWarning — warns when transferring large amounts.
- * Props: amount, threshold (default 1000), assetCode (default XLM)
+ * Props: amount, usdThreshold (default 1000), priceUsd (USD price per unit of assetCode),
+ * assetCode (default XLM), onConfirm
  */
-export function LargeTransactionWarning({ amount, threshold = 1000, assetCode = 'XLM', onConfirm }) {
+export function LargeTransactionWarning({
+  amount,
+  usdThreshold = 1000,
+  priceUsd,
+  assetCode = 'XLM',
+  onConfirm,
+}) {
   const { t } = useTranslation();
   const [confirmed, setConfirmed] = useState(false);
   const numAmount = parseFloat(amount);
-  const isLarge = !isNaN(numAmount) && numAmount > threshold;
+  const numPrice = parseFloat(priceUsd);
+  const usdValue = !isNaN(numAmount) && !isNaN(numPrice) ? numAmount * numPrice : NaN;
+  const isLarge = !isNaN(usdValue) && usdValue > usdThreshold;
+
+  // Reset confirmation whenever the amount or asset changes so a previously
+  // confirmed amount cannot be edited into a larger one without re-warning.
+  useEffect(() => {
+    setConfirmed(false);
+  }, [amount, assetCode]);
 
   if (!isLarge) return null;
 

@@ -29,6 +29,7 @@ import { getConfig } from '../config/env.js';
 import { requireKYC } from '../middleware/kyc.js';
 import sanctionsChecker from '../compliance/sanctionsChecker.js';
 import amlMonitor from '../compliance/amlMonitor.js';
+import { validateAnchorDomain } from '../services/ssrfProtection.js';
 
 const isValidStellarAddress = (address) => {
   try {
@@ -1325,5 +1326,246 @@ router.get('/payment-request/:id', async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve payment request' });
   }
 });
+
+// ---------------------------------------------------------------------------
+// SEP-24 interactive deposit / withdrawal bridge (ISSUE-301)
+// ---------------------------------------------------------------------------
+
+const SEP24_TIMEOUT_MS = 15000;
+
+/**
+ * Validate and normalize an anchor domain supplied by the client. Rejects
+ * non-https schemes, private/loopback hosts, and anything that fails the
+ * shared SSRF guard.
+ */
+async function resolveAnchorDomain(rawDomain) {
+  if (typeof rawDomain !== 'string' || !rawDomain.trim()) {
+    const err = new Error('domain is required');
+    err.status = 400;
+    throw err;
+  }
+  const domain = rawDomain.trim().replace(/^https?:\/\//i, '').replace(/\/+$/, '');
+  if (!/^[a-z0-9.-]+(:\d+)?$/i.test(domain)) {
+    const err = new Error('Invalid anchor domain');
+    err.status = 400;
+    throw err;
+  }
+  const check = await validateAnchorDomain(domain);
+  if (!check || check.valid === false) {
+    const err = new Error(check?.reason || 'Anchor domain failed SSRF validation');
+    err.status = 400;
+    throw err;
+  }
+  return domain;
+}
+
+async function fetchJson(url, options = {}) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SEP24_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+      headers: { Accept: 'application/json', ...(options.headers || {}) },
+    });
+    const text = await response.text();
+    let data = null;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = null;
+    }
+    return { response, data };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * POST /api/stellar/sep24/authenticate
+ * Performs SEP-10 authentication against the anchor's WEB_AUTH_ENDPOINT and
+ * returns the JWT used for subsequent SEP-24 calls.
+ */
+router.post(
+  '/sep24/authenticate',
+  [
+    body('domain').isString().notEmpty(),
+    body('publicKey').isString().notEmpty(),
+    body('secretKey').isString().notEmpty(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { publicKey, secretKey } = req.body;
+      if (!isValidStellarAddress(publicKey)) {
+        return res.status(400).json({ error: 'Invalid Stellar public key' });
+      }
+
+      let keypair;
+      try {
+        keypair = StellarSDK.Keypair.fromSecret(secretKey);
+      } catch {
+        return res.status(400).json({ error: 'Invalid secret key' });
+      }
+      if (keypair.publicKey() !== publicKey) {
+        return res.status(400).json({ error: 'Secret key does not match public key' });
+      }
+
+      const domain = await resolveAnchorDomain(req.body.domain);
+
+      // Discover the anchor's stellar.toml to find WEB_AUTH_ENDPOINT.
+      const tomlUrl = `https://${domain}/.well-known/stellar.toml`;
+      const { response: tomlRes, data: tomlText } = await fetchJson(tomlUrl, {
+        headers: { Accept: 'text/plain' },
+      });
+      if (!tomlRes.ok || typeof tomlText !== 'string') {
+        return res.status(502).json({ error: 'Failed to fetch anchor stellar.toml' });
+      }
+      const authMatch = tomlText.match(/^\s*WEB_AUTH_ENDPOINT\s*=\s*"([^"]+)"/m);
+      if (!authMatch) {
+        return res.status(502).json({ error: 'Anchor does not advertise WEB_AUTH_ENDPOINT' });
+      }
+      const authEndpoint = authMatch[1];
+
+      // Step 1: request a challenge transaction.
+      const challengeUrl = `${authEndpoint}?account=${encodeURIComponent(publicKey)}&home_domain=${encodeURIComponent(domain)}`;
+      const { response: challengeRes, data: challenge } = await fetchJson(challengeUrl);
+      if (!challengeRes.ok || !challenge?.transaction) {
+        return res.status(502).json({ error: 'Anchor did not return a SEP-10 challenge' });
+      }
+
+      // Step 2: sign the challenge and submit it back.
+      const tx = new StellarSDK.Transaction(challenge.transaction, challenge.network_passphrase);
+      tx.sign(keypair);
+
+      const { response: tokenRes, data: tokenData } = await fetchJson(authEndpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transaction: tx.toXDR() }),
+      });
+      if (!tokenRes.ok || !tokenData?.token) {
+        return res.status(502).json({ error: 'Anchor rejected SEP-10 authentication' });
+      }
+
+      res.json({ token: tokenData.token, domain });
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      logError(req, error, { context: 'sep24.authenticate' });
+      res.status(500).json({ error: 'Failed to authenticate with anchor' });
+    }
+  },
+);
+
+/**
+ * POST /api/stellar/sep24/initiate
+ * Starts an interactive deposit or withdrawal session with the anchor.
+ */
+router.post(
+  '/sep24/initiate',
+  [
+    body('domain').isString().notEmpty(),
+    body('type').isIn(['deposit', 'withdraw']),
+    body('assetCode').isString().notEmpty(),
+    body('token').isString().notEmpty(),
+    body('account').optional().isString(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { type, assetCode, token, account } = req.body;
+      const domain = await resolveAnchorDomain(req.body.domain);
+
+      const tomlUrl = `https://${domain}/.well-known/stellar.toml`;
+      const { response: tomlRes, data: tomlText } = await fetchJson(tomlUrl, {
+        headers: { Accept: 'text/plain' },
+      });
+      if (!tomlRes.ok || typeof tomlText !== 'string') {
+        return res.status(502).json({ error: 'Failed to fetch anchor stellar.toml' });
+      }
+      const transferMatch = tomlText.match(/^\s*TRANSFER_SERVER_SEP0024\s*=\s*"([^"]+)"/m);
+      if (!transferMatch) {
+        return res.status(502).json({ error: 'Anchor does not advertise a SEP-24 transfer server' });
+      }
+      const transferServer = transferMatch[1].replace(/\/+$/, '');
+
+      const params = new URLSearchParams({ asset_code: assetCode });
+      if (account) params.set('account', account);
+
+      const { response: initRes, data: initData } = await fetchJson(
+        `${transferServer}/transactions/${type}/interactive?${params.toString()}`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({}),
+        },
+      );
+      if (!initRes.ok || !initData?.url) {
+        return res.status(502).json({ error: 'Anchor failed to start interactive session' });
+      }
+
+      res.json({
+        id: initData.id,
+        url: initData.url,
+        type,
+        assetCode,
+        domain,
+      });
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      logError(req, error, { context: 'sep24.initiate' });
+      res.status(500).json({ error: 'Failed to initiate SEP-24 session' });
+    }
+  },
+);
+
+/**
+ * POST /api/stellar/sep24/poll-status
+ * Proxies a transaction status lookup to the anchor's transfer server.
+ */
+router.post(
+  '/sep24/poll-status',
+  [
+    body('domain').isString().notEmpty(),
+    body('id').isString().notEmpty(),
+    body('token').isString().notEmpty(),
+  ],
+  validate,
+  async (req, res) => {
+    try {
+      const { id, token } = req.body;
+      const domain = await resolveAnchorDomain(req.body.domain);
+
+      const tomlUrl = `https://${domain}/.well-known/stellar.toml`;
+      const { response: tomlRes, data: tomlText } = await fetchJson(tomlUrl, {
+        headers: { Accept: 'text/plain' },
+      });
+      if (!tomlRes.ok || typeof tomlText !== 'string') {
+        return res.status(502).json({ error: 'Failed to fetch anchor stellar.toml' });
+      }
+      const transferMatch = tomlText.match(/^\s*TRANSFER_SERVER_SEP0024\s*=\s*"([^"]+)"/m);
+      if (!transferMatch) {
+        return res.status(502).json({ error: 'Anchor does not advertise a SEP-24 transfer server' });
+      }
+      const transferServer = transferMatch[1].replace(/\/+$/, '');
+
+      const { response: statusRes, data: statusData } = await fetchJson(
+        `${transferServer}/transaction?id=${encodeURIComponent(id)}`,
+        { headers: { Authorization: `Bearer ${token}` } },
+      );
+      if (!statusRes.ok || !statusData?.transaction) {
+        return res.status(502).json({ error: 'Anchor failed to return transaction status' });
+      }
+
+      res.json({ transaction: statusData.transaction });
+    } catch (error) {
+      if (error.status) return res.status(error.status).json({ error: error.message });
+      logError(req, error, { context: 'sep24.pollStatus' });
+      res.status(500).json({ error: 'Failed to poll SEP-24 transaction status' });
+    }
+  },
+);
 
 export default router;

@@ -82,7 +82,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
     });
   };
 
-  const masked = '•'.repeat(secretKey.length);
+  const masked = '•'.repeat(secretKey?.length || 56);
 
   return (
     <motion.div
@@ -116,12 +116,13 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
             <div className="secret-key-display__field">
               <label className="secret-key-display__label">{t('secretKeyDisplay.secretKeyLabel')}</label>
               <div className="secret-key-display__input-group secret-key-display__input-group--secret">
-                <code className={`secret-key-display__code ${revealed ? 'secret-key-display__code--secret' : 'secret-key-display__code--masked'}`}>
-                  {revealed ? secretKey : masked}
+                <code className={`secret-key-display__code ${revealed && secretKey ? 'secret-key-display__code--secret' : 'secret-key-display__code--masked'}`}>
+                  {revealed && secretKey ? secretKey : masked}
                 </code>
                 <motion.button
                   onClick={() => setRevealed(!revealed)}
                   {...tap}
+                  disabled={!secretKey}
                   className="secret-key-display__button secret-key-display__button--reveal"
                 >
                   {revealed ? t('secretKeyDisplay.hide') : t('secretKeyDisplay.show')}
@@ -129,7 +130,7 @@ export function SecretKeyDisplay({ secretKey, publicKey }) {
                 <motion.button
                   onClick={() => handleCopy(secretKey, 'secret')}
                   {...tap}
-                  disabled={!revealed}
+                  disabled={!revealed || !secretKey}
                   className="secret-key-display__button secret-key-display__button--copy"
                 >
                   {copied === 'secret' ? t('secretKeyDisplay.copied') : t('secretKeyDisplay.copy')}

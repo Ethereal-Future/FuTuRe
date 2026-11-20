@@ -80,8 +80,14 @@ export function ManageDataSettings({ publicKey, onClose, onUpdate }) {
     setSaving(true);
 
     try {
+      const sourceSecret = localStorage.getItem('secretKey');
+      if (!sourceSecret) {
+        setError('Secret key not found. Please unlock your wallet to manage data.');
+        return;
+      }
+
       const payload = {
-        sourceSecret: localStorage.getItem('secretKey'),
+        sourceSecret,
         key: dataKey,
         value: deleteMode ? null : dataValue,
       };

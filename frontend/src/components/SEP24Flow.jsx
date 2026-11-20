@@ -8,10 +8,54 @@ import {
 } from '../services/sep24.js';
 import apiClient from '../api/client.js';
 
-export function SEP24Flow({ assetCode, assetIssuer, publicKey, type = 'deposit', onClose, onSuccess }) {
+const HORIZON_URL =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_HORIZON_URL) ||
+  'https://horizon.stellar.org';
+
+/**
+ * Resolve an anchor domain for an asset by reading the issuer account's
+ * home_domain from Horizon and then fetching that domain's stellar.toml.
+ * Returns the discovered domain, or '' if none could be found.
+ */
+async function discoverAnchorDomainFromIssuer(assetIssuer) {
+  if (!assetIssuer) return '';
+
+  const accountRes = await fetch(`${HORIZON_URL}/accounts/${assetIssuer}`);
+  if (!accountRes.ok) return '';
+  const account = await accountRes.json();
+  const homeDomain = account?.home_domain;
+  if (!homeDomain) return '';
+
+  // Verify the domain actually publishes a stellar.toml with SEP-24 support.
+  try {
+    const tomlRes = await fetch(`https://${homeDomain}/.well-known/stellar.toml`);
+    if (tomlRes.ok) {
+      const toml = await tomlRes.text();
+      if (!/TRANSFER_SERVER_SEP0024\s*=/i.test(toml)) {
+        // Domain exists but does not advertise SEP-24; still return it so the
+        // user can override, but the backend will validate.
+        return homeDomain;
+      }
+    }
+  } catch {
+    // Ignore TOML fetch failures; fall back to the home domain.
+  }
+
+  return homeDomain;
+}
+
+export function SEP24Flow({
+  assetCode,
+  assetIssuer,
+  publicKey,
+  type = 'deposit',
+  anchorDomain: anchorDomainProp,
+  onClose,
+  onSuccess,
+}) {
   const [step, setStep] = useState('loading'); // loading, auth, interactive, polling, complete, error
   const [error, setError] = useState('');
-  const [anchorDomain, setAnchorDomain] = useState('');
+  const [anchorDomain, setAnchorDomain] = useState(anchorDomainProp || '');
   const [anchorInfo, setAnchorInfo] = useState(null);
   const [interactiveUrl, setInteractiveUrl] = useState('');
   const [transactionId, setTransactionId] = useState('');
@@ -28,17 +72,25 @@ export function SEP24Flow({ assetCode, assetIssuer, publicKey, type = 'deposit',
       setStep('loading');
       setError('');
 
-      // Try to auto-discover anchor from issuer account
-      // In real implementation, user would select anchor from list
+      // Prefer an explicitly supplied domain prop.
+      if (anchorDomainProp) {
+        setAnchorDomain(anchorDomainProp);
+        setStep('auth');
+        return;
+      }
+
       if (!assetIssuer) {
         setError('Asset issuer required for SEP-24 flow');
         setStep('error');
         return;
       }
 
-      // For demo, use a known anchor or require user input
-      // In production, fetch from directory or let user choose
-      setAnchorDomain('example-anchor.com'); // Placeholder
+      // Discover the anchor domain from the issuer account's stellar.toml.
+      const discovered = await discoverAnchorDomainFromIssuer(assetIssuer);
+      if (discovered) {
+        setAnchorDomain(discovered);
+      }
+      // Always allow the user to review/override the domain on the auth step.
       setStep('auth');
     } catch (e) {
       setError(e.message);
@@ -61,20 +113,22 @@ export function SEP24Flow({ assetCode, assetIssuer, publicKey, type = 'deposit',
 
       setAnchorDomain(domain);
 
-      // Request SEP-10 token from backend
+      // Request SEP-10 token from backend (backend performs SEP-10 auth).
       const response = await apiClient.post('/api/sep24/authenticate', {
         domain,
         publicKey,
-        secretKey: localStorage.getItem('secretKey'),
+        assetCode,
+        assetIssuer,
       });
 
       setToken(response.data.token);
 
-      // Initiate deposit/withdrawal
+      // Initiate deposit/withdrawal via the backend SEP-24 bridge.
       const flowResponse = await apiClient.post('/api/sep24/initiate', {
         domain,
         type,
         assetCode,
+        assetIssuer,
         token: response.data.token,
       });
 
@@ -92,8 +146,8 @@ export function SEP24Flow({ assetCode, assetIssuer, publicKey, type = 'deposit',
       setStep('polling');
       setError('');
 
-      // Poll for transaction completion
-      const status = await apiClient.post('/api/sep24/poll-status', {
+      // Poll for transaction completion via the backend SEP-24 bridge.
+      const status = await apiClient.post('/api/sep24/transaction', {
         domain: anchorDomain,
         transactionId,
         token,
