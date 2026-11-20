@@ -4,6 +4,7 @@ import apiClient from '../api/client.js';
 import { useMessages } from '../hooks/useMessages';
 import { CopyButton } from './CopyButton';
 import { FeeDisplay } from './FeeDisplay';
+import { signWithFreighter } from '../utils/freighter.js';
 
 const ITEMS_PER_PAGE = 10;
 
@@ -40,8 +41,19 @@ export function ClaimableBalances({ publicKey }) {
   const handleClaim = async (balanceId) => {
     setClaimingId(balanceId);
     try {
+      // Build the unsigned claim transaction server-side, sign it in the
+      // user's wallet (Freighter), then submit only the signed XDR.
+      const { data: buildData } = await apiClient.post(
+        '/api/stellar/claimable-balance/build-claim',
+        { balanceId, claimant: publicKey }
+      );
+      const unsignedXdr = buildData?.xdr ?? buildData?.transactionXdr;
+      if (!unsignedXdr) {
+        throw new Error(t('claimableBalances.buildFailed'));
+      }
+      const signedXdr = await signWithFreighter(unsignedXdr, publicKey);
       await apiClient.post('/api/stellar/claimable-balance/claim', {
-        sourceSecret: localStorage.getItem('secretKey'),
+        signedXdr,
         balanceId,
       });
       msg.success(t('claimableBalances.claimedSuccess'));
@@ -54,15 +66,41 @@ export function ClaimableBalances({ publicKey }) {
     }
   };
 
-  const isExpired = (balance) => {
-    if (!balance.clawback_claimants_v0) return false;
-    const claimant = balance.clawback_claimants_v0.find(c => c.destination === publicKey);
-    if (!claimant || !claimant.predicate) return false;
-    if (claimant.predicate.unconditional) return false;
-    if (claimant.predicate.predicate_type === 'predicate_before_absolute_time') {
-      return new Date(parseInt(claimant.predicate.timestamp) * 1000) < new Date();
+  // Evaluate a SEP-0023 predicate tree against the current time.
+  // Returns true when the predicate is currently satisfiable.
+  const evaluatePredicate = (predicate, now) => {
+    if (!predicate) return true;
+    if (predicate.unconditional) return true;
+
+    const type = predicate.predicate_type;
+
+    if (type === 'predicate_not') {
+      return !evaluatePredicate(predicate.not, now);
     }
-    return false;
+    if (type === 'predicate_and') {
+      return (predicate.and || []).every((p) => evaluatePredicate(p, now));
+    }
+    if (type === 'predicate_or') {
+      return (predicate.or || []).some((p) => evaluatePredicate(p, now));
+    }
+    if (type === 'predicate_before_absolute_time') {
+      return now < new Date(parseInt(predicate.timestamp, 10) * 1000);
+    }
+    if (type === 'predicate_before_relative_time') {
+      // Relative predicates are evaluated from the balance's creation time.
+      const created = predicate.created_at ? new Date(predicate.created_at) : null;
+      if (!created || Number.isNaN(created.getTime())) return true;
+      return now < new Date(created.getTime() + parseInt(predicate.timestamp, 10) * 1000);
+    }
+    // Unknown predicate types are treated as satisfiable.
+    return true;
+  };
+
+  const isExpired = (balance) => {
+    const claimants = Array.isArray(balance.claimants) ? balance.claimants : [];
+    const claimant = claimants.find((c) => c.destination === publicKey);
+    if (!claimant || !claimant.predicate) return false;
+    return !evaluatePredicate(claimant.predicate, new Date());
   };
 
   const paginatedBalances = balances.slice((page - 1) * ITEMS_PER_PAGE, page * ITEMS_PER_PAGE);

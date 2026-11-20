@@ -3,6 +3,16 @@ import apiClient from '../api/client.js';
 import { useMessages } from '../hooks/useMessages';
 import { FeeDisplay } from './FeeDisplay';
 
+const FREIGHTER_UNAVAILABLE_MESSAGE =
+  'Freighter wallet is not available. Please install the Freighter extension and connect your wallet to create claimable balances.';
+
+async function getFreighter() {
+  if (typeof window === 'undefined') return null;
+  const freighter = window.freighterApi || window.freighter;
+  if (!freighter || typeof freighter.requestAccess !== 'function') return null;
+  return freighter;
+}
+
 export function CreateClaimableBalance({ onSuccess }) {
   const [formData, setFormData] = useState({
     asset: 'native',
@@ -48,8 +58,32 @@ export function CreateClaimableBalance({ onSuccess }) {
 
     setLoading(true);
     try {
-      const payload = {
-        sourceSecret: localStorage.getItem('secretKey'),
+      const freighter = await getFreighter();
+      if (!freighter) {
+        setError(FREIGHTER_UNAVAILABLE_MESSAGE);
+        msg.error(FREIGHTER_UNAVAILABLE_MESSAGE);
+        return;
+      }
+
+      let sourcePublicKey;
+      try {
+        const access = await freighter.requestAccess();
+        sourcePublicKey = typeof access === 'string' ? access : access?.address;
+      } catch {
+        sourcePublicKey = null;
+      }
+      if (!sourcePublicKey && typeof freighter.getPublicKey === 'function') {
+        sourcePublicKey = await freighter.getPublicKey();
+      }
+      if (!sourcePublicKey) {
+        const connectMsg = 'Unable to retrieve your public key from Freighter. Please connect your wallet and try again.';
+        setError(connectMsg);
+        msg.error(connectMsg);
+        return;
+      }
+
+      const unsignedPayload = {
+        sourcePublicKey,
         asset: formData.asset === 'native' ? 'native' : formData.assetCode || formData.asset,
         amount: formData.amount,
         claimant: formData.claimant,
@@ -57,7 +91,30 @@ export function CreateClaimableBalance({ onSuccess }) {
         minClaimTime: formData.minClaimTime ? Math.floor(new Date(formData.minClaimTime).getTime() / 1000) : undefined,
       };
 
-      const response = await apiClient.post('/api/stellar/claimable-balance/create', payload);
+      // Build the unsigned transaction server-side; no secret key ever leaves the browser.
+      const buildResponse = await apiClient.post(
+        '/api/stellar/claimable-balance/build',
+        unsignedPayload,
+      );
+      const unsignedXdr = buildResponse.data?.xdr;
+      if (!unsignedXdr) {
+        throw new Error('Failed to build claimable balance transaction');
+      }
+
+      // Sign in the user's secure wallet context (Freighter).
+      const signedXdr = await freighter.signTransaction(unsignedXdr, {
+        network: buildResponse.data?.networkPassphrase,
+        networkPassphrase: buildResponse.data?.networkPassphrase,
+        accountToSign: sourcePublicKey,
+      });
+      if (!signedXdr) {
+        throw new Error('Transaction signing was rejected in Freighter');
+      }
+
+      // Submit only the signed XDR; the private key never crosses the network.
+      const response = await apiClient.post('/api/stellar/claimable-balance/create', {
+        signedXdr,
+      });
       setTxResult(response.data);
       msg.success('Claimable balance created successfully!');
 

@@ -19,13 +19,8 @@ export function ManageOfferOperationForm({ onAdd, type }) {
     e.preventDefault();
     setError('');
 
-    if (offerId && offerId !== '0') {
-      // Deleting or updating an offer
-      if (!offerId || isNaN(offerId)) {
-        setError(t('manageOfferForm.validOfferIdRequired'));
-        return;
-      }
-
+    if (offerId === '0') {
+      // Deleting an offer: amount '0' cancels the offer
       onAdd({
         selling: sellingCode === 'XLM' ? { code: 'XLM' } : { code: sellingCode, issuer: sellingIssuer },
         buying: buyingCode === 'XLM' ? { code: 'XLM' } : { code: buyingCode, issuer: buyingIssuer },
@@ -33,7 +28,32 @@ export function ManageOfferOperationForm({ onAdd, type }) {
         price: '1',
         offerId,
       });
+    } else if (offerId) {
+      // Updating an existing offer: preserve it with the edited amount and price
+      if (isNaN(offerId)) {
+        setError(t('manageOfferForm.validOfferIdRequired'));
+        return;
+      }
+
+      if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
+        setError(t('manageOfferForm.validAmountRequired'));
+        return;
+      }
+
+      if (!price || isNaN(price) || parseFloat(price) <= 0) {
+        setError(t('manageOfferForm.validPriceRequired'));
+        return;
+      }
+
+      onAdd({
+        selling: sellingCode === 'XLM' ? { code: 'XLM' } : { code: sellingCode, issuer: sellingIssuer },
+        buying: buyingCode === 'XLM' ? { code: 'XLM' } : { code: buyingCode, issuer: buyingIssuer },
+        amount: parseFloat(amount).toString(),
+        price: parseFloat(price).toString(),
+        offerId,
+      });
     } else {
+=======
       // Creating a new offer
       if (!amount || isNaN(amount) || parseFloat(amount) <= 0) {
         setError(t('manageOfferForm.validAmountRequired'));
@@ -110,7 +130,7 @@ export function ManageOfferOperationForm({ onAdd, type }) {
         </div>
       )}
 
-      {offerId === '' && (
+      {offerId !== '0' && (
         <>
           <div style={{ marginBottom: 8, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             <div>

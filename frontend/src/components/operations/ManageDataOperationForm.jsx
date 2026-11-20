@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+const MAX_DATA_BYTES = 64;
+
+const byteLength = (value) => new TextEncoder().encode(value).length;
+
 export function ManageDataOperationForm({ onAdd }) {
   const { t } = useTranslation();
   const [dataKey, setDataKey] = useState('');
@@ -12,12 +16,12 @@ export function ManageDataOperationForm({ onAdd }) {
     e.preventDefault();
     setError('');
 
-    if (!dataKey || dataKey.length === 0 || dataKey.length > 64) {
+    if (!dataKey || byteLength(dataKey) > MAX_DATA_BYTES) {
       setError(t('manageDataForm.keyRequired'));
       return;
     }
 
-    if (!deleteMode && (!dataValue || dataValue.length > 64)) {
+    if (!deleteMode && (!dataValue || byteLength(dataValue) > MAX_DATA_BYTES)) {
       setError(t('manageDataForm.valueRequired'));
       return;
     }
@@ -50,11 +54,10 @@ export function ManageDataOperationForm({ onAdd }) {
           value={dataKey}
           onChange={(e) => setDataKey(e.target.value)}
           placeholder="kyc_status"
-          maxLength="64"
           style={{ width: '100%' }}
         />
         <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-          {t('manageDataForm.currentBytes', { count: dataKey.length })}
+          {t('manageDataForm.currentBytes', { count: byteLength(dataKey) })}
         </p>
       </div>
 
@@ -81,12 +84,11 @@ export function ManageDataOperationForm({ onAdd }) {
             value={dataValue}
             onChange={(e) => setDataValue(e.target.value)}
             placeholder={t('manageDataForm.valuePlaceholder')}
-            maxLength="64"
             rows="3"
             style={{ width: '100%' }}
           />
           <p style={{ margin: '4px 0 0', fontSize: '0.75rem', color: '#64748b' }}>
-            {t('manageDataForm.currentBytes', { count: dataValue.length })}
+            {t('manageDataForm.currentBytes', { count: byteLength(dataValue) })}
           </p>
         </div>
       )}
