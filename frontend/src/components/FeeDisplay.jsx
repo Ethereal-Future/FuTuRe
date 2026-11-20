@@ -6,7 +6,7 @@ const TOOLTIP = `Stellar charges a small network fee per transaction (base fee Ã
   + `The fee is burned and not collected by any party. `
   + `It protects the network from spam.`;
 
-export function FeeDisplay({ amount, visible }) {
+export function FeeDisplay({ amount, visible, assetCode }) {
   const [fee, setFee] = useState(null);
   const [showTip, setShowTip] = useState(false);
   const cache = useRef(null);
@@ -23,9 +23,13 @@ export function FeeDisplay({ amount, visible }) {
 
   const amtNum = parseFloat(amount) || 0;
   const feeXLM = parseFloat(fee.feeXLM);
-  const total = formatAssetAmount(amtNum + feeXLM);
+  const isNativeAsset = !assetCode || assetCode === 'XLM';
+  
+  // Only add amounts together if both are in XLM
+  const total = isNativeAsset ? formatAssetAmount(amtNum + feeXLM) : null;
+  
   const xlmUsd = fee.xlmUsd ? parseFloat(fee.xlmUsd) : null;
-  const totalUsd = xlmUsd ? formatAmount((amtNum + feeXLM) * xlmUsd, 'USD') : null;
+  const totalUsd = xlmUsd && isNativeAsset ? formatAmount((amtNum + feeXLM) * xlmUsd, 'USD') : null;
   const savingsUsd = fee.feeUsd
     ? formatAmount(fee.traditionalFeeUsd - parseFloat(fee.feeUsd), 'USD')
     : null;
@@ -52,7 +56,16 @@ export function FeeDisplay({ amount, visible }) {
         </span>
       </div>
 
-      {amtNum > 0 && (
+      {amtNum > 0 && !isNativeAsset && (
+        <div className="fee-row">
+          <span className="fee-label">Amount</span>
+          <span className="fee-val">
+            {formatAssetAmount(amtNum)} {assetCode}
+          </span>
+        </div>
+      )}
+
+      {amtNum > 0 && isNativeAsset && (
         <div className="fee-row fee-total">
           <span className="fee-label">Total (amount + fee)</span>
           <span className="fee-val">

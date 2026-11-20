@@ -17,6 +17,9 @@ export function FeeHistoryChart() {
   const [lastUpdate, setLastUpdate]           = useState(null);
   const [insufficientHistory, setInsufficient] = useState(false);
   const [snapshotCount, setSnapshotCount]     = useState(0);
+  const [showDataTable, setShowDataTable]     = useState(false);
+
+  const userLocale = navigator.language || 'en-US';
 
   const fetchFeeHistory = async () => {
     try {
@@ -80,7 +83,7 @@ export function FeeHistoryChart() {
 
   // Transform data for chart
   const chartData = feeHistory.map((point) => ({
-    time: new Date(point.timestamp).toLocaleTimeString('en-US', {
+    time: new Date(point.timestamp).toLocaleTimeString(userLocale, {
       hour: '2-digit',
       minute: '2-digit',
       hour12: false,
@@ -111,7 +114,7 @@ export function FeeHistoryChart() {
         <h2>Stellar Base Fee ({windowLabel})</h2>
         {lastUpdate && (
           <span className="last-update">
-            Updated: {lastUpdate.toLocaleTimeString()}
+            Updated: {lastUpdate.toLocaleTimeString(userLocale)}
           </span>
         )}
       </div>
@@ -172,6 +175,45 @@ export function FeeHistoryChart() {
       {chartData.length > 0 && (
         <div className="fee-chart-container">
           <Charts data={chartData} />
+          <button
+            onClick={() => setShowDataTable(!showDataTable)}
+            style={{ marginTop: '8px', fontSize: '0.85rem' }}
+            aria-expanded={showDataTable}
+            aria-controls="fee-data-table"
+          >
+            {showDataTable ? 'Hide' : 'Show'} Data Table
+          </button>
+        </div>
+      )}
+
+      {/* Accessible data table alternative */}
+      {showDataTable && (
+        <div id="fee-data-table" className="fee-data-table" style={{ marginTop: '16px' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <caption className="sr-only">Fee history data table</caption>
+            <thead>
+              <tr>
+                <th style={{ textAlign: 'left', padding: '8px', borderBottom: '2px solid #ddd' }}>Time</th>
+                <th style={{ textAlign: 'right', padding: '8px', borderBottom: '2px solid #ddd' }}>Base Fee (stroops)</th>
+                <th style={{ textAlign: 'right', padding: '8px', borderBottom: '2px solid #ddd' }}>Base Fee (XLM)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {feeHistory.map((point, index) => (
+                <tr key={index}>
+                  <td style={{ padding: '8px', borderBottom: '1px solid #ddd' }}>
+                    {new Date(point.timestamp).toLocaleString(userLocale)}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>
+                    {formatAssetAmount(point.baseFee, { maximumFractionDigits: 0 })}
+                  </td>
+                  <td style={{ textAlign: 'right', padding: '8px', borderBottom: '1px solid #ddd' }}>
+                    {formatAssetAmount(point.baseFee / 10000000)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
