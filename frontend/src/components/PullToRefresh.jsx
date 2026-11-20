@@ -14,12 +14,34 @@ const DRAG_RESISTANCE = 0.5;
  */
 export function PullToRefresh({ onRefresh, disabled = false, children }) {
   const { t } = useTranslation();
+  const containerRef = useRef(null);
   const startYRef = useRef(null);
   const pullingRef = useRef(false);
   const [pullDistance, setPullDistance] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
 
-  const atTop = () => (window.scrollY ?? document.documentElement.scrollTop ?? 0) <= 0;
+  // Walk up from the wrapper to find the nearest scrollable ancestor so the
+  // gesture works inside overflow containers (modals, panels), not only when
+  // the window itself scrolls.
+  const getScrollParent = (node) => {
+    let el = node?.parentElement;
+    while (el && el !== document.body && el !== document.documentElement) {
+      const { overflowY } = window.getComputedStyle(el);
+      if ((overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return null;
+  };
+
+  const atTop = () => {
+    const container = containerRef.current;
+    if (container && container.scrollTop > 0) return false;
+    const scrollParent = getScrollParent(container);
+    if (scrollParent) return scrollParent.scrollTop <= 0;
+    return (window.scrollY ?? document.documentElement.scrollTop ?? 0) <= 0;
+  };
 
   const handleTouchStart = useCallback((e) => {
     if (disabled || refreshing || !atTop()) return;
@@ -59,6 +81,7 @@ export function PullToRefresh({ onRefresh, disabled = false, children }) {
 
   return (
     <div
+      ref={containerRef}
       onTouchStart={handleTouchStart}
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}

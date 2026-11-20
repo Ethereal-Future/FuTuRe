@@ -9,12 +9,12 @@ import { InstallBanner } from '../src/components/InstallBanner';
 describe('InstallBanner', () => {
   it('renders the install banner', () => {
     render(<InstallBanner onInstall={vi.fn()} onDismiss={vi.fn()} />);
-    expect(screen.getByRole('banner', { name: /install app/i })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: /install app/i })).toBeInTheDocument();
   });
 
   it('shows an Install button', () => {
     render(<InstallBanner onInstall={vi.fn()} onDismiss={vi.fn()} />);
-    expect(screen.getByRole('button', { name: /install app/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^install$/i })).toBeInTheDocument();
   });
 
   it('shows a dismiss button', () => {
@@ -25,7 +25,7 @@ describe('InstallBanner', () => {
   it('calls onInstall when Install is clicked', () => {
     const onInstall = vi.fn();
     render(<InstallBanner onInstall={onInstall} onDismiss={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: /install app/i }));
+    fireEvent.click(screen.getByRole('button', { name: /^install$/i }));
     expect(onInstall).toHaveBeenCalledOnce();
   });
 

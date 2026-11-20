@@ -31,7 +31,12 @@ export function AutoComplete({ value, onChange, suggestions = [], placeholder, o
     if (!open || !filtered.length) return;
     if (e.key === 'ArrowDown') { e.preventDefault(); setActiveIdx(i => Math.min(i + 1, filtered.length - 1)); }
     if (e.key === 'ArrowUp')   { e.preventDefault(); setActiveIdx(i => Math.max(i - 1, 0)); }
-    if (e.key === 'Enter' && activeIdx >= 0) pick(filtered[activeIdx]);
+    if (e.key === 'Enter' && activeIdx >= 0) {
+      // Keep the selection from bubbling up and submitting an enclosing form.
+      e.preventDefault();
+      e.stopPropagation();
+      pick(filtered[activeIdx]);
+    }
     if (e.key === 'Escape') setOpen(false);
   };
 

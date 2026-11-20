@@ -1,17 +1,28 @@
 import { useEffect, useState, useCallback } from 'react';
 import { subscribePushNotification } from '../api/stellar.js';
+import apiClient from '../api/client.js';
 
-const API_BASE = import.meta.env.VITE_API_URL || '';
-
+/**
+ * POST to a WebAuthn endpoint through the shared apiClient so the request
+ * carries the configured auth headers, credentials and correlation ID.
+ */
 async function webAuthnPost(path, body) {
-  const res = await fetch(`${API_BASE}/api/mobile/auth/webauthn/${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'WebAuthn request failed');
-  return data;
+  try {
+    const { data } = await apiClient.post(`/api/mobile/auth/webauthn/${path}`, body);
+    return data;
+  } catch (err) {
+    throw new Error(err.response?.data?.error || err.message || 'WebAuthn request failed');
+  }
+}
+
+/**
+ * Decode a base64url string (padded or unpadded) into a Uint8Array.
+ * `atob` rejects unpadded input, so restore the `=` padding first.
+ */
+function base64UrlToUint8Array(base64Url) {
+  const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+  const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+  return Uint8Array.from(atob(padded), (c) => c.charCodeAt(0));
 }
 
 /**
@@ -38,14 +49,8 @@ export function useWebAuthn(userId) {
         const options = await webAuthnPost('register', { userId, deviceName });
 
         // Convert base64url challenge to ArrayBuffer for the browser API
-        const challengeBuffer = Uint8Array.from(
-          atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-          (c) => c.charCodeAt(0),
-        );
-        const userIdBuffer = Uint8Array.from(
-          atob(options.user.id.replace(/-/g, '+').replace(/_/g, '/')),
-          (c) => c.charCodeAt(0),
-        );
+        const challengeBuffer = base64UrlToUint8Array(options.challenge);
+        const userIdBuffer = base64UrlToUint8Array(options.user.id);
 
         const credential = await navigator.credentials.create({
           publicKey: {
@@ -84,15 +89,10 @@ export function useWebAuthn(userId) {
       // Phase 1: get authentication options from server
       const options = await webAuthnPost('authenticate', { userId });
 
-      const challengeBuffer = Uint8Array.from(
-        atob(options.challenge.replace(/-/g, '+').replace(/_/g, '/')),
-        (c) => c.charCodeAt(0),
-      );
+      const challengeBuffer = base64UrlToUint8Array(options.challenge);
       const allowCredentials = (options.allowCredentials || []).map((c) => ({
         ...c,
-        id: Uint8Array.from(atob(c.id.replace(/-/g, '+').replace(/_/g, '/')), (ch) =>
-          ch.charCodeAt(0),
-        ),
+        id: base64UrlToUint8Array(c.id),
       }));
 
       const assertion = await navigator.credentials.get({
@@ -229,7 +229,7 @@ export function usePWA() {
         const subscription = await swReg.pushManager.subscribe({
           userVisibleOnly: true,
           // In production, replace with your VAPID public key
-          applicationServerKey: urlBase64ToUint8Array(
+          applicationServerKey: base64UrlToUint8Array(
             import.meta.env.VITE_VAPID_PUBLIC_KEY ||
               'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U',
           ),
@@ -256,9 +256,3 @@ export function usePWA() {
   };
 }
 
-function urlBase64ToUint8Array(base64String) {
-  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
-  const rawData = atob(base64);
-  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
-}

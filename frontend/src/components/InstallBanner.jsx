@@ -11,7 +11,7 @@ export function InstallBanner({ onInstall, onDismiss }) {
   return (
     <motion.div
       className="pwa-banner pwa-banner--install"
-      role="banner"
+      role="region"
       aria-label={t('installBanner.ariaLabel')}
       initial={{ opacity: 0, y: -8 }}
       animate={{ opacity: 1, y: 0 }}
@@ -26,7 +26,6 @@ export function InstallBanner({ onInstall, onDismiss }) {
           type="button"
           className="pwa-banner__btn"
           onClick={onInstall}
-          aria-label={t('installBanner.ariaLabel')}
         >
           {t('installBanner.install')}
         </button>
