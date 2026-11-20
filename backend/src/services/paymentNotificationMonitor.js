@@ -14,6 +14,13 @@ import logger from '../config/logger.js';
 // Track active payment stream monitors per account
 const activeMonitors = new Map();
 
+// Reconnect backoff state per account (exponential with jitter + circuit breaker)
+const RECONNECT_BASE_MS = 1000;
+const RECONNECT_MAX_MS = 60000;
+const CIRCUIT_FAILURE_THRESHOLD = 10;
+const CIRCUIT_COOLDOWN_MS = 5 * 60 * 1000;
+const reconnectState = new Map();
+
 /**
  * Start monitoring a Stellar account for incoming payments
  * @param {string} publicKey - Stellar public key to monitor
@@ -39,7 +46,10 @@ export function startPaymentMonitoring(publicKey) {
     .forAccount(publicKey)
     .cursor('now')
     .stream({
-      onmessage: (payment) => handleIncomingPayment(payment, publicKey),
+      onmessage: (payment) => {
+        reconnectState.delete(publicKey); // healthy stream resets backoff
+        handleIncomingPayment(payment, publicKey);
+      },
       onerror: (err) => handleStreamError(err, publicKey, stream),
     });
 
@@ -61,6 +71,9 @@ export function stopPaymentMonitoring(publicKey) {
   }
   monitor.closed = true;
   activeMonitors.delete(publicKey);
+  const state = reconnectState.get(publicKey);
+  if (state?.timer) clearTimeout(state.timer);
+  reconnectState.delete(publicKey);
   logger.info('paymentNotificationMonitor.stop', { publicKey });
 }
 
@@ -165,12 +178,18 @@ async function sendPaymentNotification(subscription, details) {
 async function getNotificationPreferences(publicKey) {
   try {
     // Check if user has disabled notifications
-    const settings = await prisma.userSettings.findUnique({
+    const user = await prisma.user.findUnique({
       where: { publicKey },
-      select: { incomingPaymentsEnabled: true },
+      select: { id: true },
+    });
+    if (!user) return { incomingPaymentsEnabled: true };
+
+    const settings = await prisma.setting.findUnique({
+      where: { userId: user.id },
+      select: { notificationsOn: true },
     });
 
-    return settings || { incomingPaymentsEnabled: true };
+    return { incomingPaymentsEnabled: settings?.notificationsOn ?? true };
   } catch (err) {
     logger.error('paymentNotificationMonitor.preferences_error', {
       error: err.message,
@@ -184,20 +203,43 @@ async function getNotificationPreferences(publicKey) {
  * Handle stream errors and attempt to reconnect
  */
 function handleStreamError(err, publicKey, stream) {
-  logger.error('paymentNotificationMonitor.stream_error', {
-    error: err.message,
-    publicKey,
-  });
-
   // Close the stream
   stream?.close?.();
   activeMonitors.delete(publicKey);
 
-  // Attempt reconnect after 5 seconds
-  setTimeout(() => {
-    logger.info('paymentNotificationMonitor.reconnecting', { publicKey });
+  const state = reconnectState.get(publicKey) || { attempts: 0, timer: null };
+  if (state.timer) return; // reconnect already scheduled
+  state.attempts += 1;
+
+  let delay;
+  if (state.attempts > CIRCUIT_FAILURE_THRESHOLD) {
+    // Circuit open: pause before trying again, then half-open with a single attempt
+    delay = CIRCUIT_COOLDOWN_MS;
+    if (state.attempts === CIRCUIT_FAILURE_THRESHOLD + 1) {
+      logger.error('paymentNotificationMonitor.circuit_open', { publicKey, cooldownMs: delay });
+    }
+    state.attempts = CIRCUIT_FAILURE_THRESHOLD;
+  } else {
+    const exp = Math.min(RECONNECT_MAX_MS, RECONNECT_BASE_MS * 2 ** (state.attempts - 1));
+    delay = Math.floor(exp / 2 + Math.random() * (exp / 2)); // jitter
+    // Log only on first failure and at power-of-two attempts to avoid log spam
+    if ((state.attempts & (state.attempts - 1)) === 0) {
+      logger.error('paymentNotificationMonitor.stream_error', {
+        error: err?.message,
+        publicKey,
+        attempt: state.attempts,
+        retryInMs: delay,
+      });
+    }
+  }
+
+  state.timer = setTimeout(() => {
+    state.timer = null;
+    logger.debug('paymentNotificationMonitor.reconnecting', { publicKey, attempt: state.attempts });
     startPaymentMonitoring(publicKey);
-  }, 5000);
+  }, delay);
+  state.timer.unref?.();
+  reconnectState.set(publicKey, state);
 }
 
 /**
