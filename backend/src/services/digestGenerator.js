@@ -60,8 +60,8 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
     }
 
     // Analyze payment operations within date range
-    let totalReceived = 0;
-    let totalSent = 0;
+    // Totals are grouped per asset — summing amounts across assets is meaningless.
+    const totalsByAsset = {};
     const transactionDetails = [];
     const seenHashes = new Set();
 
@@ -75,11 +75,13 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
       seenHashes.add(payment.transaction_hash);
 
       const amount = parseFloat(payment.amount);
+      const asset = payment.asset_type === 'native' ? 'XLM' : (payment.asset_code || 'XLM');
+      const totals = (totalsByAsset[asset] ??= { sent: 0, received: 0 });
 
       if (payment.from === publicKey && payment.to !== publicKey) {
-        totalSent += amount;
+        totals.sent += amount;
       } else if (payment.to === publicKey && payment.from !== publicKey) {
-        totalReceived += amount;
+        totals.received += amount;
       }
 
       transactionDetails.push({
@@ -88,7 +90,7 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
         type: payment.from === publicKey ? 'sent' : 'received',
         amount,
         counterparty: payment.from === publicKey ? payment.to : payment.from,
-        asset: payment.asset_code || 'XLM',
+        asset,
       });
     }
 
@@ -107,10 +109,16 @@ async function getTransactionSummary(publicKey, days = DIGEST_LOOKBACK_DAYS) {
       .sort((a, b) => b.amount - a.amount)
       .slice(0, TOP_TRANSACTIONS_COUNT);
 
+    const formattedTotals = Object.fromEntries(
+      Object.entries(totalsByAsset).map(([code, t]) => [
+        code,
+        { sent: t.sent.toFixed(7), received: t.received.toFixed(7) },
+      ]),
+    );
+
     return {
       transactionCount: seenHashes.size,
-      totalSent: totalSent.toFixed(7),
-      totalReceived: totalReceived.toFixed(7),
+      totalsByAsset: formattedTotals,
       balance: balance.toFixed(7),
       topTransactions,
       startDate: startDate.toISOString(),
@@ -154,8 +162,10 @@ export async function sendWeeklyDigest(userId) {
     // Prepare notification data
     const notificationData = {
       transactionCount: summary.transactionCount,
-      totalSent: summary.totalSent,
-      totalReceived: summary.totalReceived,
+      totalsByAsset: summary.totalsByAsset,
+      totalsSummary: Object.entries(summary.totalsByAsset)
+        .map(([code, t]) => `${code}: sent ${t.sent}, received ${t.received}`)
+        .join('\n') || 'No activity',
       balance: summary.balance,
       transactionList: transactionList || 'No significant transactions',
       startDate: summary.startDate,

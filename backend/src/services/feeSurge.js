@@ -1,7 +1,59 @@
+import { createRedisBackend } from '../cache/redis.js';
+
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+const REDIS_KEY = 'fee:samples';
 export const SURGE_THRESHOLD = 5;
 
+// In-memory window (time-ordered) backed by a Redis sorted set so history
+// survives restarts. Redis is optional; without it we fall back to memory only.
 let feeSamples = [];
+let redis = null;
+if (process.env.NODE_ENV !== 'test') {
+  try {
+    const backend = createRedisBackend();
+    if (backend.isConfigured()) redis = backend.client;
+  } catch { /* Redis unavailable — memory only */ }
+}
+
+/** Drop samples older than the cutoff. Samples are time-ordered, so only the head is scanned. */
+function pruneExpired(cutoff) {
+  let i = 0;
+  while (i < feeSamples.length && feeSamples[i].timestamp <= cutoff) i++;
+  if (i > 0) feeSamples.splice(0, i);
+}
+
+/**
+ * Load persisted fee samples from Redis into memory.
+ * @returns {Promise<void>}
+ */
+export async function hydrateFeeHistory() {
+  if (!redis) return;
+  try {
+    const cutoff = Date.now() - SEVEN_DAYS_MS;
+    await redis.zremrangebyscore(REDIS_KEY, '-inf', cutoff);
+    const raw = await redis.zrangebyscore(REDIS_KEY, cutoff, '+inf', 'WITHSCORES');
+    const loaded = [];
+    for (let i = 0; i < raw.length; i += 2) {
+      loaded.push({ fee: Number(raw[i].split(':')[0]), timestamp: Number(raw[i + 1]) });
+    }
+    const merged = [...loaded, ...feeSamples].sort((a, b) => a.timestamp - b.timestamp);
+    feeSamples = merged;
+  } catch { /* fall back to in-memory only */ }
+}
+
+function persistSample(feeStroops, now) {
+  if (!redis) return;
+  const cutoff = now - SEVEN_DAYS_MS;
+  redis
+    .multi()
+    .zadd(REDIS_KEY, now, `${feeStroops}:${now}:${Math.random().toString(36).slice(2, 8)}`)
+    .zremrangebyscore(REDIS_KEY, '-inf', cutoff)
+    .pexpire(REDIS_KEY, SEVEN_DAYS_MS)
+    .exec()
+    .catch(() => {});
+}
+
+hydrateFeeHistory();
 
 /**
  * Record an observed network fee sample for rolling surge detection.
@@ -12,8 +64,8 @@ let feeSamples = [];
 export function recordFeeSample(feeStroops) {
   const now = Date.now();
   feeSamples.push({ fee: feeStroops, timestamp: now });
-  const cutoff = now - SEVEN_DAYS_MS;
-  feeSamples = feeSamples.filter((s) => s.timestamp > cutoff);
+  pruneExpired(now - SEVEN_DAYS_MS);
+  persistSample(feeStroops, now);
 }
 
 /**
@@ -21,10 +73,11 @@ export function recordFeeSample(feeStroops) {
  * @returns {number|null} Average fee in stroops, or null if no samples are in range
  */
 export function getSevenDayAverageFee() {
-  const cutoff = Date.now() - SEVEN_DAYS_MS;
-  const samples = feeSamples.filter((s) => s.timestamp > cutoff);
-  if (samples.length === 0) return null;
-  return samples.reduce((sum, s) => sum + s.fee, 0) / samples.length;
+  pruneExpired(Date.now() - SEVEN_DAYS_MS);
+  if (feeSamples.length === 0) return null;
+  let sum = 0;
+  for (const s of feeSamples) sum += s.fee;
+  return sum / feeSamples.length;
 }
 
 /**
@@ -52,6 +105,7 @@ export function detectFeeSurge(currentFee, averageFee, threshold = SURGE_THRESHO
  */
 export function resetFeeHistory() {
   feeSamples = [];
+  redis?.del(REDIS_KEY).catch(() => {});
 }
 
 /**
@@ -60,5 +114,5 @@ export function resetFeeHistory() {
  * @returns {void}
  */
 export function setFeeHistory(samples) {
-  feeSamples = [...samples];
+  feeSamples = [...samples].sort((a, b) => a.timestamp - b.timestamp);
 }
