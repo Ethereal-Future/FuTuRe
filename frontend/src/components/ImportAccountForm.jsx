@@ -1,20 +1,39 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
+import StellarSdk from '@stellar/stellar-sdk';
 
-const STELLAR_SECRET_KEY = /^S[A-Z2-7]{55}$/;
+const isValidSecretSeed = (key) => {
+  try {
+    return StellarSdk.StrKey.isValidEd25519SecretSeed(key);
+  } catch {
+    return false;
+  }
+};
+
+const isValidPublicKey = (key) => {
+  try {
+    return StellarSdk.StrKey.isValidEd25519PublicKey(key);
+  } catch {
+    return false;
+  }
+};
 
 export function ImportAccountForm({ onImport, loading }) {
   const { t } = useTranslation();
   const [secretKey, setSecretKey] = useState('');
   const [touched, setTouched] = useState(false);
 
-  const isValid = STELLAR_SECRET_KEY.test(secretKey.trim());
+  const trimmedKey = secretKey.trim();
+  const isValid = isValidSecretSeed(trimmedKey) || isValidPublicKey(trimmedKey);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!isValid) return;
-    onImport(secretKey.trim());
+    if (!isValid) {
+      setTouched(true);
+      return;
+    }
+    onImport(trimmedKey);
     setSecretKey('');
     setTouched(false);
   };

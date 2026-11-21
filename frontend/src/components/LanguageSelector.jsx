@@ -1,6 +1,22 @@
 import { useTranslation } from 'react-i18next';
+import { useLocation } from 'react-router-dom';
 import { SUPPORTED_LANGUAGES, RTL_LANGUAGES } from '../i18n';
 import { storeLanguage } from '../utils/detectLanguage';
+
+/**
+ * Maps the active route pathname to the i18n key used for the page title.
+ * Falls back to the dashboard title for unknown routes.
+ */
+function getPageTitleKey(pathname = '/') {
+  const path = pathname.toLowerCase();
+
+  if (path.startsWith('/settings')) return 'page.settings';
+  if (path.startsWith('/transactions') || path.startsWith('/history')) return 'page.transactions';
+  if (path.startsWith('/liquidity') || path.startsWith('/pools')) return 'page.liquidityPools';
+  if (path.startsWith('/dashboard') || path === '/' || path === '') return 'page.dashboard';
+
+  return 'page.dashboard';
+}
 
 /**
  * LanguageSelector — dropdown to switch the active language.
@@ -8,6 +24,7 @@ import { storeLanguage } from '../utils/detectLanguage';
  */
 export function LanguageSelector({ className = '' }) {
   const { i18n, t } = useTranslation();
+  const location = useLocation();
 
   const handleChange = (e) => {
     const lang = e.target.value;
@@ -16,7 +33,8 @@ export function LanguageSelector({ className = '' }) {
       const htmlRoot = document.documentElement;
       htmlRoot.lang = lang;
       htmlRoot.dir = RTL_LANGUAGES.has(lang) ? 'rtl' : 'ltr';
-      document.title = i18n.t('page.dashboard');
+      const titleKey = getPageTitleKey(location?.pathname);
+      document.title = i18n.t(titleKey);
       const metaDesc = document.querySelector('meta[name="description"]');
       if (metaDesc) metaDesc.setAttribute('content', i18n.t('app.description'));
     });
