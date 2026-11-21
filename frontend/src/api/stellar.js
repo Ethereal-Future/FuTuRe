@@ -209,32 +209,35 @@ export async function initiateRecovery(requestId, payload, options = {}) {
 }
 
 export async function getMultisigAccount(publicKey, options = {}) {
-  const response = await apiClient.get(`/api/multisig/account/${publicKey}`, options);
+  const response = await apiClient.get(`/api/v1/multisig/account/${publicKey}`, options);
   return response.data;
 }
 
 export async function getPendingMultisigTransactions(publicKey, options = {}) {
-  const response = await apiClient.get(`/api/multisig/transaction/pending/${publicKey}`, options);
+  const response = await apiClient.get(
+    `/api/v1/multisig/transaction/pending/${publicKey}`,
+    options,
+  );
   return response.data;
 }
 
 export async function createMultisigAccount(payload, options = {}) {
-  const response = await apiClient.post('/api/multisig/account/create', payload, options);
+  const response = await apiClient.post('/api/v1/multisig/account/create', payload, options);
   return response.data;
 }
 
 export async function buildMultisigTransaction(payload, options = {}) {
-  const response = await apiClient.post('/api/multisig/transaction/build', payload, options);
+  const response = await apiClient.post('/api/v1/multisig/transaction/build', payload, options);
   return response.data;
 }
 
 export async function signMultisigTransaction(payload, options = {}) {
-  const response = await apiClient.post('/api/multisig/transaction/sign', payload, options);
+  const response = await apiClient.post('/api/v1/multisig/transaction/sign', payload, options);
   return response.data;
 }
 
 export async function submitMultisigTransaction(payload, options = {}) {
-  const response = await apiClient.post('/api/multisig/transaction/submit', payload, options);
+  const response = await apiClient.post('/api/v1/multisig/transaction/submit', payload, options);
   return response.data;
 }
 

@@ -20,11 +20,11 @@ function truncate(addr) {
  * @param {string}     recipient
  * @param {string}     amount
  * @param {string}     asset
- * @param {string}     sourceSecret
+ * @param {string}     sourcePublicKey
  * @param {string}     memo
  * @param {string}     memoType
  */
-export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount, asset = 'XLM', sourceSecret, memo, memoType }) {
+export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount, asset = 'XLM', sourcePublicKey, memo, memoType }) {
   const [fee, setFee] = useState(null);
   const [usdRate, setUsdRate] = useState(null);
   const [showXdrExport, setShowXdrExport] = useState(false);
@@ -56,7 +56,8 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
   const feeXLM = fee ? parseFloat(fee.feeXLM) : null;
   const baseFeeXLM = fee ? parseFloat(fee.baseFeeXLM) : null;
   const surgeMultiplier = fee ? parseFloat(fee.surgeMultiplier) : null;
-  const totalXLM = feeXLM !== null ? formatAssetAmount(amtNum + feeXLM) : null;
+  const isXlm = asset === 'XLM';
+  const totalXLM = isXlm && feeXLM !== null ? formatAssetAmount(amtNum + feeXLM) : null;
   const amtUsd = usdRate ? formatAmount(amtNum * usdRate, 'USD') : null;
 
   const handleExportXdr = async () => {
@@ -68,7 +69,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
     setBuildingXdr(true);
     try {
       const { data } = await apiClient.post('/api/stellar/transaction/build-unsigned-xdr', {
-        sourceSecret,
+        sourcePublicKey,
         destination: recipient,
         amount,
         assetCode: asset,
@@ -95,7 +96,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
           <dt>Amount</dt>
           <dd>
             {amount} {asset}
-            {asset === 'XLM' && <XLMInfoIcon />}
+            {isXlm && <XLMInfoIcon />}
             {amtUsd && <span className="confirm-dialog__usd"> ≈ {amtUsd}</span>}
           </dd>
         </div>
@@ -112,7 +113,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
           </div>
         )}
         <div className="confirm-dialog__row">
-          <dt>Transaction fee</dt>
+          <dt>Network fee</dt>
           <dd>
             {feeXLM !== null
               ? <>{feeXLM} XLM<XLMInfoIcon />{fee?.feeUsd && <span className="confirm-dialog__usd"> ≈ ${fee.feeUsd} USD</span>}</>
@@ -122,7 +123,7 @@ export function ConfirmSendDialog({ open, onConfirm, onCancel, recipient, amount
         {totalXLM && (
           <div className="confirm-dialog__row confirm-dialog__row--total">
             <dt>Total deducted</dt>
-            <dd>{totalXLM} {asset}{asset === 'XLM' && <XLMInfoIcon />}</dd>
+            <dd>{totalXLM} XLM<XLMInfoIcon /></dd>
           </div>
         )}
       </dl>
