@@ -12,6 +12,37 @@ export function NetworkWarning({ networkStatus }) {
   const isTestnet = networkStatus.network === 'testnet';
   const online = networkStatus.online;
 
+  if (!online) {
+    return (
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        style={{
+          background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
+          border: '2px solid #ef4444',
+          borderRadius: 8,
+          padding: 14,
+          marginBottom: 14,
+          display: 'flex',
+          gap: 12,
+        }}
+        role="alert"
+        aria-live="assertive"
+      >
+        <span style={{ fontSize: 22, flexShrink: 0 }} aria-hidden="true">🌐</span>
+        <div style={{ flex: 1 }}>
+          <h3 style={{ margin: '0 0 4px 0', color: '#991b1b', fontSize: 14, fontWeight: 600 }}>
+            Network Offline
+          </h3>
+          <p style={{ margin: 0, fontSize: 13, color: '#7f1d1d' }}>
+            Cannot connect to Stellar network. Check your internet connection and try again.
+            Transactions are disabled until the network is available.
+          </p>
+        </div>
+      </motion.div>
+    );
+  }
+
   if (isTestnet) {
     return (
       <motion.div
@@ -38,37 +69,6 @@ export function NetworkWarning({ networkStatus }) {
           <p style={{ margin: 0, fontSize: 13, color: '#0c4a6e' }}>
             You are using Stellar <strong>Testnet</strong>. Funds have <strong>no real value</strong> here.
             This is suitable for testing and development only. For real transactions, switch to Mainnet.
-          </p>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (!online) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        style={{
-          background: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)',
-          border: '2px solid #ef4444',
-          borderRadius: 8,
-          padding: 14,
-          marginBottom: 14,
-          display: 'flex',
-          gap: 12,
-        }}
-        role="alert"
-        aria-live="assertive"
-      >
-        <span style={{ fontSize: 22, flexShrink: 0 }} aria-hidden="true">🌐</span>
-        <div style={{ flex: 1 }}>
-          <h3 style={{ margin: '0 0 4px 0', color: '#991b1b', fontSize: 14, fontWeight: 600 }}>
-            Network Offline
-          </h3>
-          <p style={{ margin: 0, fontSize: 13, color: '#7f1d1d' }}>
-            Cannot connect to Stellar network. Check your internet connection and try again.
-            Transactions are disabled until the network is available.
           </p>
         </div>
       </motion.div>
@@ -221,30 +221,15 @@ export function NetworkStatus({ networkStatus, compact = false }) {
         alignItems: 'center',
         gap: 6,
         padding: '6px 10px',
-        background: isTestnet ? '#dbeafe' : (online ? '#fee2e2' : '#fef2f2'),
-        border: `1px solid ${isTestnet ? '#0284c7' : (online ? '#dc2626' : '#ef4444')}`,
+        background: !online ? '#fef2f2' : (isTestnet ? '#dbeafe' : '#fee2e2'),
+        border: `1px solid ${!online ? '#ef4444' : (isTestnet ? '#0284c7' : '#dc2626')}`,
         borderRadius: 4,
         fontSize: 12,
-        color: isTestnet ? '#0c4a6e' : (online ? '#7f1d1d' : '#991b1b'),
+        color: !online ? '#991b1b' : (isTestnet ? '#0c4a6e' : '#7f1d1d'),
         fontWeight: 500,
       }}>
-        <span>{isTestnet ? '🧪' : (online ? '⚠️' : '❌')}</span>
-        <span>{isTestnet ? 'Testnet' : (online ? 'Mainnet • Real Funds' : 'Offline')}</span>
-      </div>
-    );
-  }
-
-  if (isTestnet) {
-    return (
-      <div style={{
-        padding: 10,
-        background: '#dbeafe',
-        border: '1px solid #0284c7',
-        borderRadius: 6,
-        fontSize: 12,
-        color: '#0c4a6e',
-      }}>
-        🧪 Testnet — Test funds only, no real value
+        <span>{!online ? '❌' : (isTestnet ? '🧪' : '⚠️')}</span>
+        <span>{!online ? 'Offline' : (isTestnet ? 'Testnet' : 'Mainnet • Real Funds')}</span>
       </div>
     );
   }
@@ -260,6 +245,21 @@ export function NetworkStatus({ networkStatus, compact = false }) {
         color: '#991b1b',
       }}>
         ❌ Network Offline — Cannot process transactions
+      </div>
+    );
+  }
+
+  if (isTestnet) {
+    return (
+      <div style={{
+        padding: 10,
+        background: '#dbeafe',
+        border: '1px solid #0284c7',
+        borderRadius: 6,
+        fontSize: 12,
+        color: '#0c4a6e',
+      }}>
+        🧪 Testnet — Test funds only, no real value
       </div>
     );
   }
