@@ -2,33 +2,64 @@ import axios from 'axios';
 
 const HORIZON_URL = 'https://horizon.stellar.org';
 
+function parseToml(toml) {
+  const lines = toml.split('\n');
+  const config = {};
+
+  for (const line of lines) {
+    if (line.startsWith('[') || line.startsWith('#') || !line.trim()) continue;
+
+    const [key, value] = line.split('=').map((s) => s.trim());
+    if (key && value) {
+      config[key] = value.replace(/"/g, '');
+    }
+  }
+
+  return config;
+}
+
 export async function discoverAnchor(domain) {
   try {
     const response = await axios.get(`https://${domain}/.well-known/stellar.toml`);
-    const toml = response.data;
-
-    const lines = toml.split('\n');
-    const config = {};
-
-    for (const line of lines) {
-      if (line.startsWith('[') || line.startsWith('#') || !line.trim()) continue;
-
-      const [key, value] = line.split('=').map((s) => s.trim());
-      if (key && value) {
-        config[key] = value.replace(/"/g, '');
-      }
-    }
+    const config = parseToml(response.data);
 
     return {
       name: config.ANCHOR_NAME || domain,
       domain,
       sep24Enabled: !!config.TRANSFER_SERVER_SEP0024,
       transferServer: config.TRANSFER_SERVER_SEP0024 || config.TRANSFER_SERVER,
+      webAuthEndpoint: config.WEB_AUTH_ENDPOINT,
       signingKey: config.SIGNING_KEY,
     };
   } catch (error) {
     throw new Error(`Failed to discover anchor at ${domain}: ${error.message}`);
   }
+}
+
+export async function getIssuerHomeDomain(issuerAccount) {
+  try {
+    const response = await axios.get(`${HORIZON_URL}/accounts/${issuerAccount}`);
+    const homeDomain = response.data.home_domain;
+
+    if (!homeDomain) {
+      throw new Error(`Issuer account ${issuerAccount} has no home_domain set`);
+    }
+
+    return homeDomain;
+  } catch (error) {
+    throw new Error(`Failed to fetch home domain for issuer ${issuerAccount}: ${error.message}`);
+  }
+}
+
+export async function discoverAnchorFromAsset(issuerAccount) {
+  const domain = await getIssuerHomeDomain(issuerAccount);
+  const anchor = await discoverAnchor(domain);
+
+  if (!anchor.transferServer) {
+    throw new Error(`Anchor at ${domain} does not advertise a SEP-24 transfer server`);
+  }
+
+  return anchor;
 }
 
 export async function getAnchorInfo(transferServer) {
@@ -40,10 +71,11 @@ export async function getAnchorInfo(transferServer) {
   }
 }
 
-export async function authenticateWithSEP10(transferServer, publicKey, secretKey) {
+export async function authenticateWithSEP10(transferServer, publicKey, secretKey, webAuthEndpoint) {
   try {
     // Step 1: Get challenge transaction from auth server
-    const challengeResponse = await axios.get(`${transferServer.replace('/transfer', '/auth')}/challenge`, {
+    const authEndpoint = webAuthEndpoint || transferServer.replace('/transfer', '/auth');
+    const challengeResponse = await axios.get(`${authEndpoint}/challenge`, {
       params: { account: publicKey },
     });
 
@@ -60,12 +92,17 @@ export async function authenticateWithSEP10(transferServer, publicKey, secretKey
   }
 }
 
-export async function initiateDeposit(transferServer, token, assetCode) {
+export async function initiateDeposit(transferServer, token, assetCode, assetIssuer) {
   try {
+    if (!transferServer) {
+      throw new Error('Missing SEP-24 transfer server URL');
+    }
+
     const response = await axios.post(
       `${transferServer}/transactions/deposit/interactive`,
       {
         asset_code: assetCode,
+        ...(assetIssuer ? { asset_issuer: assetIssuer } : {}),
       },
       {
         headers: {
@@ -84,12 +121,17 @@ export async function initiateDeposit(transferServer, token, assetCode) {
   }
 }
 
-export async function initiateWithdrawal(transferServer, token, assetCode) {
+export async function initiateWithdrawal(transferServer, token, assetCode, assetIssuer) {
   try {
+    if (!transferServer) {
+      throw new Error('Missing SEP-24 transfer server URL');
+    }
+
     const response = await axios.post(
       `${transferServer}/transactions/withdraw/interactive`,
       {
         asset_code: assetCode,
+        ...(assetIssuer ? { asset_issuer: assetIssuer } : {}),
       },
       {
         headers: {
