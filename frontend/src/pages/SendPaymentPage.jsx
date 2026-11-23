@@ -81,6 +81,16 @@ export function SendPaymentPage() {
     ? Math.max(0, parseFloat(xlmBalance) - 1 - 0.00001).toFixed(7).replace(/\.?0+$/, '')
     : null;
 
+  // Reset submission state when the component unmounts (e.g. the user navigates
+  // away while the wallet signature prompt is open). Without this cleanup the
+  // component re-mounts with a stale `loading === 'send'` value, which keeps
+  // every input permanently disabled.
+  useEffect(() => {
+    return () => {
+      dispatch({ type: A.SET_LOADING, payload: '' });
+    };
+  }, [dispatch]);
+
   const sendPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (largeTransactionBlocked) {
@@ -88,21 +98,33 @@ export function SendPaymentPage() {
       return;
     }
 
+    // Create an AbortController so the in-flight request can be cancelled if
+    // the user navigates away before the signature completes.
+    const controller = new AbortController();
+
     dispatch({ type: A.SET_LOADING, payload: 'send' });
     try {
-      const { data } = await apiClient.post('/api/stellar/payment/send', {
-        sourceSecret: account.secretKey,
-        destination: recipient,
-        amount,
-        assetCode: 'XLM',
-        memo: memo || undefined,
-        memoType: memoType || undefined,
-      });
+      const { data } = await apiClient.post(
+        '/api/stellar/payment/send',
+        {
+          sourceSecret: account.secretKey,
+          destination: recipient,
+          amount,
+          assetCode: 'XLM',
+          memo: memo || undefined,
+          memoType: memoType || undefined,
+        },
+        { signal: controller.signal },
+      );
 
       msg.success(t('sendPayment.sentSuccess', { hash: data.hash?.slice(0, 8) }));
       dispatch({ type: A.RESET_FORM });
       setShowPaymentConfirmation(false);
     } catch (error) {
+      if (error?.name === 'AbortError' || error?.name === 'CanceledError') {
+        // Request was aborted because the page was unmounted; suppress the error.
+        return;
+      }
       logError(error, { context: 'sendPayment' });
       msg.error(getFriendlyError(error));
     } finally {

@@ -80,18 +80,43 @@ export async function validateCSRFToken(token) {
 }
 
 /**
+ * Build CSRF cookie options.
+ *
+ * In production the cookie uses `SameSite=Lax` with an explicit `domain` set
+ * to the root domain so that requests from first-party sub-domains (e.g.
+ * app.example.com calling api.example.com) are accepted. `SameSite=Strict`
+ * rejects those requests because the browser treats them as cross-site
+ * navigations, breaking legitimate authenticated flows.
+ *
+ * In non-production environments no `domain` override is set, keeping the
+ * behaviour compatible with localhost development.
+ *
+ * Cross-origin POST requests without a valid CSRF header are still blocked by
+ * `validateCSRFMiddleware` and `validateOriginMiddleware`.
+ *
+ * @returns {import('express').CookieOptions}
+ */
+function csrfCookieOptions() {
+  const isProduction = process.env.NODE_ENV === 'production';
+  const cookieDomain = process.env.CSRF_COOKIE_DOMAIN || undefined;
+
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+    ...(isProduction && cookieDomain ? { domain: cookieDomain } : {}),
+  };
+}
+
+/**
  * Middleware to issue CSRF token on GET requests
  */
 export async function csrfTokenMiddleware(req, res, next) {
   if (req.method === 'GET') {
     try {
       const token = await generateCSRFToken();
-      res.cookie(CSRF_COOKIE, token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'strict',
-        maxAge: 24 * 60 * 60 * 1000
-      });
+      res.cookie(CSRF_COOKIE, token, csrfCookieOptions());
       res.locals.csrfToken = token;
     } catch (err) {
       logger.warn('CSRF token generation failed', { error: err.message });
@@ -170,12 +195,7 @@ export function validateOriginMiddleware(req, res, next) {
 export async function csrfTokenEndpoint(req, res) {
   try {
     const token = await generateCSRFToken();
-    res.cookie(CSRF_COOKIE, token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 24 * 60 * 60 * 1000
-    });
+    res.cookie(CSRF_COOKIE, token, csrfCookieOptions());
     res.json({ csrfToken: token });
   } catch (err) {
     logger.error('CSRF token endpoint error', { error: err.message });
