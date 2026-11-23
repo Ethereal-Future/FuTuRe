@@ -149,6 +149,7 @@ function App() {
     showReplayPrompt, setShowReplayPrompt,
     deepLinkHash, setDeepLinkHash,
     recoveryCode, setRecoveryCode,
+    withSubmitLock,
   } = usePaymentForm();
 
   // ── KYC state ──────────────────────────────────────────────────────────────
@@ -502,7 +503,9 @@ function App() {
     setShowPaymentConfirmation(true);
   };
 
-  const confirmPayment = async () => {
+  // Wrapped in withSubmitLock (#1698) so rapid double-clicks / repeated Enter
+  // presses cannot fire concurrent signing + submission requests.
+  const confirmPayment = withSubmitLock(async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (
       assetCode === 'XLM' &&
@@ -572,7 +575,7 @@ function App() {
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
-  };
+  });
 
   const handleCreateTrustline = async () => {
     if (!account || !trustlineAsset) return;

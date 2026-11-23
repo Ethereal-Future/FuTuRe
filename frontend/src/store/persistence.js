@@ -1,59 +1,156 @@
 import { initialState, STATE_VERSION } from './reducer.js';
 
-// Bump this key whenever the persisted shape changes to evict stale data.
-const STORAGE_KEY = 'app_state_v2';
+// Legacy single-blob key. Kept only so existing data can be migrated.
+const LEGACY_STORAGE_KEY = 'app_state_v2';
 
-/**
- * Build the subset of state that is safe to persist.
- * Only publicKey is kept from the account object — secretKey must never
- * be written to browser storage.
- */
-function sanitize(state) {
-  return {
-    // Allowlist: only publicKey — never secretKey
-    account: state.account?.publicKey
-      ? { publicKey: state.account.publicKey }
-      : null,
-    accountLabel: state.accountLabel || '',
-  };
-}
+// Each persisted slice lives under its own key so that corruption in one
+// slice can never take down unrelated slices (#1699).
+const KEY_PREFIX = 'app_state_v3:';
+const VERSION_KEY = `${KEY_PREFIX}_version`;
 
 /**
  * Re-apply the account allowlist to ensure only publicKey is present.
- * Used on read to defend against localStorage corruption or injection.
+ * Used on both read and write to defend against localStorage corruption or
+ * injection — secretKey must never be written to browser storage.
  */
 function sanitizeAccount(account) {
-  return account?.publicKey ? { publicKey: account.publicKey } : null;
+  return account?.publicKey && typeof account.publicKey === 'string'
+    ? { publicKey: account.publicKey }
+    : null;
 }
 
-export function loadState() {
+function sanitizeLabel(label) {
+  return typeof label === 'string' ? label : '';
+}
+
+/**
+ * Persisted slices. `serialize` builds the safe-to-store value from app
+ * state; `deserialize` validates a parsed value and returns the slice value
+ * (falling back to the slice's initial state for malformed input).
+ */
+const SLICES = {
+  account: {
+    serialize: (state) => sanitizeAccount(state.account),
+    deserialize: (value) => sanitizeAccount(value),
+  },
+  accountLabel: {
+    serialize: (state) => sanitizeLabel(state.accountLabel),
+    deserialize: (value) => sanitizeLabel(value),
+  },
+};
+
+export const sliceKey = (name) => `${KEY_PREFIX}${name}`;
+
+function safeGet(key) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return initialState;
-    const saved = JSON.parse(raw);
-    if (saved._version !== STATE_VERSION) return initialState;
-    // Re-apply the account allowlist on read to defend against any corruption or injection
-    return {
-      ...initialState,
-      account: sanitizeAccount(saved.account),
-      accountLabel: saved.accountLabel ?? '',
-    };
+    return localStorage.getItem(key);
   } catch {
-    return initialState;
+    return null;
   }
 }
 
-export function saveState(state) {
+function safeSet(key, value) {
   try {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({ _version: STATE_VERSION, ...sanitize(state) })
-    );
+    localStorage.setItem(key, value);
   } catch {
-    // ignore quota errors
+    // ignore quota / access errors
+  }
+}
+
+function safeRemove(key) {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Read and parse one slice. A corrupted value only resets *that* slice:
+ * its key is removed and the slice falls back to its initial value, while
+ * every other slice is left untouched.
+ */
+function loadSlice(name) {
+  const key = sliceKey(name);
+  const raw = safeGet(key);
+  if (raw === null) return { found: false, value: initialState[name] };
+  try {
+    return { found: true, value: SLICES[name].deserialize(JSON.parse(raw)) };
+  } catch {
+    safeRemove(key);
+    return { found: false, value: initialState[name] };
+  }
+}
+
+/**
+ * Migrate data from the legacy single-blob key. Each slice is extracted
+ * independently so a malformed field does not discard the others.
+ */
+function migrateLegacy() {
+  const raw = safeGet(LEGACY_STORAGE_KEY);
+  if (raw === null) return null;
+  let saved;
+  try {
+    saved = JSON.parse(raw);
+  } catch {
+    // The legacy blob is unreadable; drop only that key.
+    safeRemove(LEGACY_STORAGE_KEY);
+    return null;
+  }
+  if (!saved || typeof saved !== 'object' || saved._version !== STATE_VERSION) {
+    safeRemove(LEGACY_STORAGE_KEY);
+    return null;
+  }
+
+  const migrated = {};
+  for (const [name, slice] of Object.entries(SLICES)) {
+    try {
+      migrated[name] = slice.deserialize(saved[name]);
+    } catch {
+      migrated[name] = initialState[name];
+    }
+  }
+  saveState({ ...initialState, ...migrated });
+  safeRemove(LEGACY_STORAGE_KEY);
+  return migrated;
+}
+
+export function loadState() {
+  const version = safeGet(VERSION_KEY);
+
+  if (version === null) {
+    const migrated = migrateLegacy();
+    return migrated ? { ...initialState, ...migrated } : initialState;
+  }
+
+  if (version !== String(STATE_VERSION)) {
+    // Shape changed between versions — evict stale slices.
+    clearState();
+    return initialState;
+  }
+
+  const result = { ...initialState };
+  for (const name of Object.keys(SLICES)) {
+    result[name] = loadSlice(name).value;
+  }
+  return result;
+}
+
+export function saveState(state) {
+  safeSet(VERSION_KEY, String(STATE_VERSION));
+  for (const [name, slice] of Object.entries(SLICES)) {
+    let value;
+    try {
+      value = JSON.stringify(slice.serialize(state));
+    } catch {
+      continue; // skip only the slice that failed to serialize
+    }
+    safeSet(sliceKey(name), value);
   }
 }
 
 export function clearState() {
-  try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+  safeRemove(LEGACY_STORAGE_KEY);
+  safeRemove(VERSION_KEY);
+  for (const name of Object.keys(SLICES)) safeRemove(sliceKey(name));
 }

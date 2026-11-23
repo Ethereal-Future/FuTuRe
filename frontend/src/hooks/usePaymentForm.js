@@ -6,7 +6,7 @@
  * batchMode, batchRecipients, replaySecret, showReplayPrompt from App.jsx
  * so that each domain only triggers re-renders in its own consumers.
  */
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
 /**
  * @returns {{
@@ -31,6 +31,8 @@ import { useState, useCallback } from 'react';
  *   setDeepLinkHash: Function,
  *   recoveryCode: string,
  *   setRecoveryCode: Function,
+ *   isSubmittingRef: { current: boolean },
+ *   withSubmitLock: (fn: Function) => Function,
  * }}
  */
 export function usePaymentForm() {
@@ -43,6 +45,31 @@ export function usePaymentForm() {
   const [showReplayPrompt, setShowReplayPrompt] = useState(false);
   const [deepLinkHash, setDeepLinkHash] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
+
+  // Fixes #1698: synchronous lock so a rapid double-click cannot dispatch two
+  // concurrent payment submissions before React re-renders the disabled button.
+  // A ref (not state) is used because state updates are async and both clicks
+  // would observe the stale "not submitting" value.
+  const isSubmittingRef = useRef(false);
+
+  /**
+   * Wrap an async submit handler so that only one invocation can be in flight
+   * at a time. Re-entrant calls while a submission is pending are rejected
+   * synchronously and resolve to `undefined` without calling `fn`.
+   */
+  const withSubmitLock = useCallback(
+    (fn) =>
+      async (...args) => {
+        if (isSubmittingRef.current) return undefined;
+        isSubmittingRef.current = true;
+        try {
+          return await fn(...args);
+        } finally {
+          isSubmittingRef.current = false;
+        }
+      },
+    [],
+  );
 
   const showClearConfirm = useCallback(() => setConfirmClear(true), []);
   const hideClearConfirm = useCallback(() => setConfirmClear(false), []);
@@ -77,5 +104,7 @@ export function usePaymentForm() {
     setDeepLinkHash,
     recoveryCode,
     setRecoveryCode,
+    isSubmittingRef,
+    withSubmitLock,
   };
 }

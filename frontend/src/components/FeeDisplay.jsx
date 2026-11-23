@@ -1,6 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client.js';
-import { formatAmount, formatAssetAmount } from '../utils/formatAmount';
+import { formatAmount } from '../utils/formatAmount';
+import {
+  formatStroopsAsXLM,
+  parseStroops,
+  stroopsToXLMNumber,
+  xlmToStroops,
+} from '../utils/stroops';
 
 const TOOLTIP = `Stellar charges a small network fee per transaction (base fee × operations). `
   + `The fee is burned and not collected by any party. `
@@ -21,18 +27,30 @@ export function FeeDisplay({ amount, visible, assetCode }) {
 
   if (!visible || !fee) return null;
 
-  const amtNum = parseFloat(amount) || 0;
-  const feeXLM = parseFloat(fee.feeXLM);
+  // All XLM arithmetic is done in BigInt stroops (#1701) so surge-priced fees
+  // never overflow, lose precision, or render as NaN / exponent notation.
+  const amountStroops = xlmToStroops(amount) ?? 0n;
+  const feeStroops = parseStroops(fee.feeStroops) ?? xlmToStroops(fee.feeXLM);
   const isNativeAsset = !assetCode || assetCode === 'XLM';
-  
+
+  const feeText = feeStroops !== null ? formatStroopsAsXLM(feeStroops) : '—';
+
   // Only add amounts together if both are in XLM
-  const total = isNativeAsset ? formatAssetAmount(amtNum + feeXLM) : null;
-  
-  const xlmUsd = fee.xlmUsd ? parseFloat(fee.xlmUsd) : null;
-  const totalUsd = xlmUsd && isNativeAsset ? formatAmount((amtNum + feeXLM) * xlmUsd, 'USD') : null;
-  const savingsUsd = fee.feeUsd
-    ? formatAmount(fee.traditionalFeeUsd - parseFloat(fee.feeUsd), 'USD')
-    : null;
+  const totalStroops =
+    isNativeAsset && feeStroops !== null ? amountStroops + feeStroops : null;
+  const total = totalStroops !== null ? formatStroopsAsXLM(totalStroops) : '—';
+
+  // Fiat values are display-only; guard every float against NaN / Infinity.
+  const finite = (v) => (v !== null && Number.isFinite(v) ? v : null);
+  const xlmUsd = finite(fee.xlmUsd != null ? parseFloat(fee.xlmUsd) : null);
+  const feeUsdNum = finite(fee.feeUsd != null ? parseFloat(fee.feeUsd) : null);
+  const totalXlmNum = totalStroops !== null ? stroopsToXLMNumber(totalStroops) : null;
+  const totalUsdNum = xlmUsd !== null && totalXlmNum !== null ? finite(totalXlmNum * xlmUsd) : null;
+  const totalUsd = totalUsdNum !== null ? formatAmount(totalUsdNum, 'USD') : null;
+  const traditionalFeeUsd = finite(Number(fee.traditionalFeeUsd));
+  const savingsNum =
+    feeUsdNum !== null && traditionalFeeUsd !== null ? finite(traditionalFeeUsd - feeUsdNum) : null;
+  const savingsUsd = savingsNum !== null && savingsNum > 0 ? formatAmount(savingsNum, 'USD') : null;
 
   return (
     <div className="fee-box">
@@ -51,21 +69,21 @@ export function FeeDisplay({ amount, visible, assetCode }) {
       <div className="fee-row">
         <span className="fee-label">Fee</span>
         <span className="fee-val">
-          {formatAssetAmount(fee.feeXLM)} XLM
-          {fee.feeUsd && <span className="fee-usd"> ≈ {formatAmount(fee.feeUsd, 'USD')}</span>}
+          {feeText} XLM
+          {feeUsdNum !== null && <span className="fee-usd"> ≈ {formatAmount(feeUsdNum, 'USD')}</span>}
         </span>
       </div>
 
-      {amtNum > 0 && !isNativeAsset && (
+      {amountStroops > 0n && !isNativeAsset && (
         <div className="fee-row">
           <span className="fee-label">Amount</span>
           <span className="fee-val">
-            {formatAssetAmount(amtNum)} {assetCode}
+            {formatStroopsAsXLM(amountStroops)} {assetCode}
           </span>
         </div>
       )}
 
-      {amtNum > 0 && isNativeAsset && (
+      {amountStroops > 0n && isNativeAsset && (
         <div className="fee-row fee-total">
           <span className="fee-label">Total (amount + fee)</span>
           <span className="fee-val">
@@ -77,7 +95,7 @@ export function FeeDisplay({ amount, visible, assetCode }) {
 
       {savingsUsd && (
         <div className="fee-row fee-saving">
-          <span>💸 Save ~{savingsUsd} vs. traditional wire (avg {formatAmount(fee.traditionalFeeUsd, 'USD')})</span>
+          <span>💸 Save ~{savingsUsd} vs. traditional wire (avg {formatAmount(traditionalFeeUsd, 'USD')})</span>
         </div>
       )}
     </div>
