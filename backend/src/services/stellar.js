@@ -1088,7 +1088,15 @@ export async function getTransactionRecordByHash(hash, publicKey) {
 export async function getFeeStats() {
   return withSpan('stellar-service', 'stellar.getFeeStats', async () => {
     const stats = await withHorizonRetry(() => getHorizonServer().feeStats());
-    const feeStroops = parseInt(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE);
+    const rawFee = String(stats.fee_charged?.p50 ?? StellarSDK.BASE_FEE).trim();
+    // Exact decimal string of the stroop fee; surge spikes can exceed
+    // Number.MAX_SAFE_INTEGER, so clients should prefer this field (#1701).
+    const feeStroopsExact = /^\d+$/.test(rawFee) ? BigInt(rawFee).toString() : String(StellarSDK.BASE_FEE);
+    const feeStroops = parseInt(feeStroopsExact, 10);
+    const feeXLMExact = (() => {
+      const big = BigInt(feeStroopsExact);
+      return `${big / 10000000n}.${(big % 10000000n).toString().padStart(7, '0')}`;
+    })();
     const feeXLM = feeStroops / 1e7;
 
     let xlmUsd = null;
@@ -1107,7 +1115,8 @@ export async function getFeeStats() {
 
     return {
       feeStroops,
-      feeXLM: feeXLM.toFixed(7),
+      feeStroopsExact,
+      feeXLM: feeXLMExact,
       feeUsd: feeUsd ? feeUsd.toFixed(6) : null,
       xlmUsd: xlmUsd ? xlmUsd.toFixed(4) : null,
       traditionalFeeUsd: 25,

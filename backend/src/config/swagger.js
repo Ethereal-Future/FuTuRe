@@ -392,6 +392,7 @@ const options = {
           type: 'object',
           properties: {
             feeStroops: { type: 'integer', description: 'Median fee in stroops.', example: 100 },
+            feeStroopsExact: { type: 'string', description: 'Median fee in stroops as an exact decimal string (safe beyond 2^53).', example: '100' },
             feeXLM: { type: 'string', description: 'Fee in XLM.', example: '0.0000100' },
             feeUsd: {
               type: 'string',

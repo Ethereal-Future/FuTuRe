@@ -149,6 +149,7 @@ function App() {
     showReplayPrompt, setShowReplayPrompt,
     deepLinkHash, setDeepLinkHash,
     recoveryCode, setRecoveryCode,
+    guardSubmit,
   } = usePaymentForm();
 
   // ── KYC state ──────────────────────────────────────────────────────────────
@@ -502,7 +503,10 @@ function App() {
     setShowPaymentConfirmation(true);
   };
 
-  const confirmPayment = async () => {
+  // Wrapped in guardSubmit (#1698) so rapid double-clicks only submit once.
+  const confirmPayment = () => guardSubmit(submitPayment);
+
+  const submitPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (
       assetCode === 'XLM' &&
