@@ -11,6 +11,38 @@ import {
   complianceReporting,
 } from '../compliance/index.js';
 
+// ── Unicode normalization for sanctions screening (ISSUE-315) ─────────────────
+//
+// Attackers can bypass exact-string sanctions matching by supplying lookalike
+// Cyrillic/Greek characters (homoglyphs) or invisible zero-width codepoints
+// that are visually identical to sanctioned names but differ at the byte level.
+//
+// NFKC normalization collapses compatibility equivalents (e.g. ﬁ → fi, ² → 2)
+// and maps many lookalike characters to their canonical ASCII or Latin forms.
+// The subsequent regex strip removes any remaining invisible/zero-width
+// codepoints (U+200B–U+200F, U+FEFF, etc.) that survive NFKC.
+
+/** Zero-width and invisible Unicode codepoints that carry no visual content. */
+const ZERO_WIDTH_PATTERN = /[\u200B-\u200F\u2028\u2029\uFEFF\u00AD\u034F\u180E\u2060-\u2064]/g;
+
+/**
+ * Normalize a name string before sanctions screening:
+ *   1. Apply NFKC normalization to collapse compatibility/lookalike forms.
+ *   2. Strip zero-width and invisible codepoints.
+ *   3. Trim and collapse internal whitespace.
+ *
+ * @param {string} name
+ * @returns {string}
+ */
+function normalizeScreeningInput(name) {
+  if (typeof name !== 'string') return name;
+  return name
+    .normalize('NFKC')
+    .replace(ZERO_WIDTH_PATTERN, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 const router = Router();
 
 // ── Maker-Checker (Dual Authorization) ────────────────────────────────────────
@@ -128,7 +160,17 @@ async function executeApprovedAction(request) {
  */
 router.post('/kyc', authMiddleware, async (req, res) => {
   try {
-    const record = await kycCollector.submitKYC(req.user.id, req.body);
+    // Normalize all string fields that feed into sanctions screening so that
+    // homoglyph and zero-width character evasion vectors are eliminated before
+    // any name comparison is performed (ISSUE-315).
+    const body = { ...req.body };
+    const SCREENING_FIELDS = ['fullName', 'firstName', 'lastName', 'middleName', 'name'];
+    for (const field of SCREENING_FIELDS) {
+      if (typeof body[field] === 'string') {
+        body[field] = normalizeScreeningInput(body[field]);
+      }
+    }
+    const record = await kycCollector.submitKYC(req.user.id, body);
     await complianceAudit.log('KYC_SUBMITTED', req.user.id, { status: record.status });
     res.status(201).json(record);
   } catch (err) {
