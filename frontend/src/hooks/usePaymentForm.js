@@ -33,6 +33,7 @@ import { useState, useCallback, useRef } from 'react';
  *   setRecoveryCode: Function,
  *   isSubmittingRef: { current: boolean },
  *   withSubmitLock: (fn: Function) => Function,
+ *   guardSubmit: <T>(fn: () => Promise<T>|T) => Promise<T|undefined>,
  * }}
  */
 export function usePaymentForm() {
@@ -70,6 +71,24 @@ export function usePaymentForm() {
       },
     [],
   );
+  // Fixes #1698: synchronous lock so a rapid double-click cannot start two
+  // signing/submission requests before React re-renders the disabled button.
+  const isSubmittingRef = useRef(false);
+
+  /**
+   * Run `fn` only if no other submission is in flight. A second call made
+   * while the first is pending is rejected synchronously and resolves to
+   * `undefined` without invoking `fn`.
+   */
+  const guardSubmit = useCallback(async (fn) => {
+    if (isSubmittingRef.current) return undefined;
+    isSubmittingRef.current = true;
+    try {
+      return await fn();
+    } finally {
+      isSubmittingRef.current = false;
+    }
+  }, []);
 
   const showClearConfirm = useCallback(() => setConfirmClear(true), []);
   const hideClearConfirm = useCallback(() => setConfirmClear(false), []);
@@ -106,5 +125,6 @@ export function usePaymentForm() {
     setRecoveryCode,
     isSubmittingRef,
     withSubmitLock,
+    guardSubmit,
   };
 }

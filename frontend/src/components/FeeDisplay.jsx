@@ -7,6 +7,8 @@ import {
   stroopsToXLMNumber,
   xlmToStroops,
 } from '../utils/stroops';
+import { formatAmount, formatAssetAmount } from '../utils/formatAmount';
+import { toStroops, xlmToStroops, formatStroopsAsXlm, STROOPS_PER_XLM } from '../utils/stroops';
 
 const TOOLTIP = `Stellar charges a small network fee per transaction (base fee × operations). `
   + `The fee is burned and not collected by any party. `
@@ -51,6 +53,29 @@ export function FeeDisplay({ amount, visible, assetCode }) {
   const savingsNum =
     feeUsdNum !== null && traditionalFeeUsd !== null ? finite(traditionalFeeUsd - feeUsdNum) : null;
   const savingsUsd = savingsNum !== null && savingsNum > 0 ? formatAmount(savingsNum, 'USD') : null;
+  const amtNum = parseFloat(amount) || 0;
+  const isNativeAsset = !assetCode || assetCode === 'XLM';
+
+  // #1701: keep fee math in BigInt stroops so surge spikes beyond
+  // Number.MAX_SAFE_INTEGER never overflow or render as NaN.
+  const feeStroops = toStroops(fee.feeStroopsExact) ?? toStroops(fee.feeStroops) ?? xlmToStroops(fee.feeXLM);
+  if (feeStroops === null) return null;
+  const amountStroops = xlmToStroops(amount) ?? 0n;
+  const feeText = formatStroopsAsXlm(feeStroops);
+
+  // Only add amounts together if both are in XLM
+  const totalStroops = isNativeAsset ? amountStroops + feeStroops : null;
+  const total = totalStroops !== null ? formatStroopsAsXlm(totalStroops) : null;
+
+  // USD values are display-only approximations; guard against non-finite.
+  const toXlmNumber = (st) => Number(st / STROOPS_PER_XLM) + Number(st % STROOPS_PER_XLM) / 1e7;
+  const finiteUsd = (n) => (Number.isFinite(n) ? formatAmount(n, 'USD') : null);
+  const xlmUsd = fee.xlmUsd ? parseFloat(fee.xlmUsd) : null;
+  const feeUsd = xlmUsd ? finiteUsd(toXlmNumber(feeStroops) * xlmUsd) : null;
+  const totalUsd = xlmUsd && totalStroops !== null ? finiteUsd(toXlmNumber(totalStroops) * xlmUsd) : null;
+  const savingsUsd = fee.feeUsd && feeUsd
+    ? finiteUsd(fee.traditionalFeeUsd - toXlmNumber(feeStroops) * xlmUsd)
+    : null;
 
   return (
     <div className="fee-box">
@@ -71,6 +96,7 @@ export function FeeDisplay({ amount, visible, assetCode }) {
         <span className="fee-val">
           {feeText} XLM
           {feeUsdNum !== null && <span className="fee-usd"> ≈ {formatAmount(feeUsdNum, 'USD')}</span>}
+          {feeUsd && <span className="fee-usd"> ≈ {feeUsd}</span>}
         </span>
       </div>
 

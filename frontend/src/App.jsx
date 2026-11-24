@@ -150,6 +150,7 @@ function App() {
     deepLinkHash, setDeepLinkHash,
     recoveryCode, setRecoveryCode,
     withSubmitLock,
+    guardSubmit,
   } = usePaymentForm();
 
   // ── KYC state ──────────────────────────────────────────────────────────────
@@ -506,6 +507,10 @@ function App() {
   // Wrapped in withSubmitLock (#1698) so rapid double-clicks / repeated Enter
   // presses cannot fire concurrent signing + submission requests.
   const confirmPayment = withSubmitLock(async () => {
+  // Wrapped in guardSubmit (#1698) so rapid double-clicks only submit once.
+  const confirmPayment = () => guardSubmit(submitPayment);
+
+  const submitPayment = async () => {
     if (!account || !recipientValid || !amountValid) return;
     if (
       assetCode === 'XLM' &&
