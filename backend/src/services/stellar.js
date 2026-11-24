@@ -515,41 +515,6 @@ export async function sendPayment(
       ? StellarSDK.Asset.native()
       : new StellarSDK.Asset(assetCode, getIssuer(assetCode));
 
-  const txBuilder = new StellarSDK.TransactionBuilder(sourceAccount, {
-    fee: StellarSDK.BASE_FEE,
-    networkPassphrase: getNetworkPassphrase(),
-  }).addOperation(
-    StellarSDK.Operation.payment({
-      destination,
-      asset,
-      amount: amount.toString(),
-    }),
-  );
-
-  if (memo) {
-    let stellarMemo;
-    switch (memoType) {
-      case 'id':
-        stellarMemo = StellarSDK.Memo.id(memo);
-        break;
-      case 'hash':
-        stellarMemo = StellarSDK.Memo.hash(memo);
-        break;
-      case 'return':
-        stellarMemo = StellarSDK.Memo.return(memo);
-        break;
-      case 'text':
-      default:
-        stellarMemo = StellarSDK.Memo.text(memo);
-        break;
-    }
-    txBuilder.addMemo(stellarMemo);
-  }
-
-  const transaction = txBuilder.setTimeout(30).build();
-
-  transaction.sign(sourceKeypair);
-
   // Fee bump: wrap if buyer XLM balance is below threshold and platform key is configured
   const platformFeeSecret = process.env.PLATFORM_FEE_ACCOUNT_SECRET;
   const feeBumpThreshold = parseFloat(process.env.FEE_BUMP_THRESHOLD_XLM ?? '2');
@@ -621,8 +586,10 @@ export async function sendPayment(
         }
 
         try {
-          const submissionResult = await withHorizonRetry(() =>
-            getHorizonServer().submitTransaction(txToSubmit),
+          const txHash = txToSubmit.hash().toString('hex');
+          const submissionResult = await withHorizonRetry(
+            () => getHorizonServer().submitTransaction(txToSubmit),
+            txHash,
           );
           return { submissionResult, feeBumpApplied };
         } catch (submitErr) {
@@ -654,21 +621,6 @@ export async function sendPayment(
       });
       throw err;
     }
-  }
-
-  const txHash = typeof txToSubmit?.hash === 'function' ? txToSubmit.hash().toString('hex') : null;
-  try {
-    result = await withHorizonRetry(() => getHorizonServer().submitTransaction(txToSubmit), txHash);
-  } catch (err) {
-    logger.error('stellar.sendPayment.failed', {
-      source: sourcePublicKey,
-      destination,
-      amount,
-      assetCode,
-      error: err.message,
-      correlationId: txCorrelationId,
-    });
-    throw err;
   }
 
   logger.info('stellar.sendPayment.success', {
