@@ -1,5 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import apiClient from '../api/client.js';
+import { formatAmount } from '../utils/formatAmount';
+import {
+  formatStroopsAsXLM,
+  parseStroops,
+  stroopsToXLMNumber,
+  xlmToStroops,
+} from '../utils/stroops';
 import { formatAmount, formatAssetAmount } from '../utils/formatAmount';
 import { toStroops, xlmToStroops, formatStroopsAsXlm, STROOPS_PER_XLM } from '../utils/stroops';
 
@@ -22,6 +29,30 @@ export function FeeDisplay({ amount, visible, assetCode }) {
 
   if (!visible || !fee) return null;
 
+  // All XLM arithmetic is done in BigInt stroops (#1701) so surge-priced fees
+  // never overflow, lose precision, or render as NaN / exponent notation.
+  const amountStroops = xlmToStroops(amount) ?? 0n;
+  const feeStroops = parseStroops(fee.feeStroops) ?? xlmToStroops(fee.feeXLM);
+  const isNativeAsset = !assetCode || assetCode === 'XLM';
+
+  const feeText = feeStroops !== null ? formatStroopsAsXLM(feeStroops) : '—';
+
+  // Only add amounts together if both are in XLM
+  const totalStroops =
+    isNativeAsset && feeStroops !== null ? amountStroops + feeStroops : null;
+  const total = totalStroops !== null ? formatStroopsAsXLM(totalStroops) : '—';
+
+  // Fiat values are display-only; guard every float against NaN / Infinity.
+  const finite = (v) => (v !== null && Number.isFinite(v) ? v : null);
+  const xlmUsd = finite(fee.xlmUsd != null ? parseFloat(fee.xlmUsd) : null);
+  const feeUsdNum = finite(fee.feeUsd != null ? parseFloat(fee.feeUsd) : null);
+  const totalXlmNum = totalStroops !== null ? stroopsToXLMNumber(totalStroops) : null;
+  const totalUsdNum = xlmUsd !== null && totalXlmNum !== null ? finite(totalXlmNum * xlmUsd) : null;
+  const totalUsd = totalUsdNum !== null ? formatAmount(totalUsdNum, 'USD') : null;
+  const traditionalFeeUsd = finite(Number(fee.traditionalFeeUsd));
+  const savingsNum =
+    feeUsdNum !== null && traditionalFeeUsd !== null ? finite(traditionalFeeUsd - feeUsdNum) : null;
+  const savingsUsd = savingsNum !== null && savingsNum > 0 ? formatAmount(savingsNum, 'USD') : null;
   const amtNum = parseFloat(amount) || 0;
   const isNativeAsset = !assetCode || assetCode === 'XLM';
 
@@ -64,20 +95,21 @@ export function FeeDisplay({ amount, visible, assetCode }) {
         <span className="fee-label">Fee</span>
         <span className="fee-val">
           {feeText} XLM
+          {feeUsdNum !== null && <span className="fee-usd"> ≈ {formatAmount(feeUsdNum, 'USD')}</span>}
           {feeUsd && <span className="fee-usd"> ≈ {feeUsd}</span>}
         </span>
       </div>
 
-      {amtNum > 0 && !isNativeAsset && (
+      {amountStroops > 0n && !isNativeAsset && (
         <div className="fee-row">
           <span className="fee-label">Amount</span>
           <span className="fee-val">
-            {formatAssetAmount(amtNum)} {assetCode}
+            {formatStroopsAsXLM(amountStroops)} {assetCode}
           </span>
         </div>
       )}
 
-      {amtNum > 0 && isNativeAsset && (
+      {amountStroops > 0n && isNativeAsset && (
         <div className="fee-row fee-total">
           <span className="fee-label">Total (amount + fee)</span>
           <span className="fee-val">
@@ -89,7 +121,7 @@ export function FeeDisplay({ amount, visible, assetCode }) {
 
       {savingsUsd && (
         <div className="fee-row fee-saving">
-          <span>💸 Save ~{savingsUsd} vs. traditional wire (avg {formatAmount(fee.traditionalFeeUsd, 'USD')})</span>
+          <span>💸 Save ~{savingsUsd} vs. traditional wire (avg {formatAmount(traditionalFeeUsd, 'USD')})</span>
         </div>
       )}
     </div>

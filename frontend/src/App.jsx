@@ -149,6 +149,7 @@ function App() {
     showReplayPrompt, setShowReplayPrompt,
     deepLinkHash, setDeepLinkHash,
     recoveryCode, setRecoveryCode,
+    withSubmitLock,
     guardSubmit,
   } = usePaymentForm();
 
@@ -503,6 +504,9 @@ function App() {
     setShowPaymentConfirmation(true);
   };
 
+  // Wrapped in withSubmitLock (#1698) so rapid double-clicks / repeated Enter
+  // presses cannot fire concurrent signing + submission requests.
+  const confirmPayment = withSubmitLock(async () => {
   // Wrapped in guardSubmit (#1698) so rapid double-clicks only submit once.
   const confirmPayment = () => guardSubmit(submitPayment);
 
@@ -576,7 +580,7 @@ function App() {
     } finally {
       dispatch({ type: A.SET_LOADING, payload: '' });
     }
-  };
+  });
 
   const handleCreateTrustline = async () => {
     if (!account || !trustlineAsset) return;
