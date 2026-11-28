@@ -95,6 +95,9 @@ export function QRScanner({ onScan, onClose }) {
             // parent unmounts synchronously inside the callback.
             cancelAnimationFrame(rafRef.current);
             streamRef.current?.getTracks().forEach(t => t.stop());
+            // Clear srcObject so the browser releases the MediaStream reference
+            // and the camera indicator turns off immediately.
+            if (videoRef.current) videoRef.current.srcObject = null;
             onScan(parseStellarQR(raw));
             return;
           }
@@ -118,6 +121,9 @@ export function QRScanner({ onScan, onClose }) {
       cancelled = true;
       cancelAnimationFrame(rafRef.current);
       streamRef.current?.getTracks().forEach(t => t.stop());
+      // Detach the stream from the video element so the browser can garbage-collect
+      // the MediaStream object and turn off the camera indicator immediately.
+      if (videoRef.current) videoRef.current.srcObject = null;
     };
   }, [onScan]);
 
